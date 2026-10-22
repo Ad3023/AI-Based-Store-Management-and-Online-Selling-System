@@ -7,7 +7,6 @@ import { useAuth } from '../context/AuthContext';
 const AIRecommendationsPage = () => {
   const { user } = useAuth();
   const [personalized, setPersonalized] = useState([]);
-  const [frequentlyBought, setFrequentlyBought] = useState([]);
   const [trending, setTrending] = useState([]);
   const [loading, setLoading] = useState(true);
 

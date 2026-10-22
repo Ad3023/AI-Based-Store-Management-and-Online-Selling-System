@@ -54,6 +54,10 @@ const ProductDetailPage = () => {
   }, [id]);
 
   const handleAddToCart = async () => {
+    if (!user) {
+      navigate(`/login?redirect=${encodeURIComponent(window.location.pathname)}&action=add_to_cart&productId=${product.id}&quantity=${quantity}`);
+      return;
+    }
     if (product.stock === 0) {
       alert("This item is currently out of stock.");
       return;
@@ -71,6 +75,10 @@ const ProductDetailPage = () => {
   };
 
   const handleBuyNow = async () => {
+    if (!user) {
+      navigate(`/login?redirect=${encodeURIComponent(window.location.pathname)}&action=add_to_cart&productId=${product.id}&quantity=${quantity}`);
+      return;
+    }
     if (product.stock === 0) {
       alert("This item is currently out of stock.");
       return;
@@ -130,14 +138,29 @@ const ProductDetailPage = () => {
 
   return (
     <div className="container py-4">
-      {/* Breadcrumb */}
-      <nav aria-label="breadcrumb" className="mb-4 small">
-        <ol className="breadcrumb">
-          <li className="breadcrumb-item"><Link to="/" className="text-decoration-none">Home</Link></li>
-          <li className="breadcrumb-item"><Link to="/shop" className="text-decoration-none">Shop</Link></li>
-          <li className="breadcrumb-item active text-truncate" style={{ maxWidth: '250px' }}>{product.name}</li>
-        </ol>
-      </nav>
+      {/* Navigation Breadcrumb with Safe Back Button */}
+      <div className="d-flex align-items-center mb-4">
+        <button
+          onClick={() => {
+            if (window.history.length > 1) {
+              navigate(-1);
+            } else {
+              navigate('/shop');
+            }
+          }}
+          className="btn btn-sm btn-outline-secondary rounded-pill me-3 d-inline-flex align-items-center gap-1 shadow-sm px-3"
+          aria-label="Go back"
+        >
+          <i className="bi bi-arrow-left"></i> Back
+        </button>
+        <nav aria-label="breadcrumb" className="small flex-grow-1">
+          <ol className="breadcrumb mb-0">
+            <li className="breadcrumb-item"><Link to="/" className="text-decoration-none">Home</Link></li>
+            <li className="breadcrumb-item"><Link to="/shop" className="text-decoration-none">Shop</Link></li>
+            <li className="breadcrumb-item active text-truncate" style={{ maxWidth: '250px' }}>{product.name}</li>
+          </ol>
+        </nav>
+      </div>
 
       {/* Main Showcase */}
       <div className="card border-0 shadow-sm rounded-4 p-4 p-md-5 mb-5">
@@ -167,36 +190,80 @@ const ProductDetailPage = () => {
             <h2 className="fw-bolder mb-2 text-dark">{product.name}</h2>
             <div className="text-muted small mb-3">SKU: <code className="text-dark">{product.sku}</code></div>
 
-            {/* Rating Stars */}
+            {/* Rating Stars - Only when real data exists */}
             <div className="d-flex align-items-center gap-2 mb-3">
-              <div className="text-warning">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <i
-                    key={star}
-                    className={`bi ${
-                      star <= Math.round(product.rating_average || 5) ? 'bi-star-fill' : 'bi-star'
-                    } me-1`}
-                  ></i>
-                ))}
-              </div>
-              <span className="fw-bold text-dark">{product.rating_average || '5.0'}</span>
-              <span className="text-muted small">({product.rating_count || 0} Customer Reviews)</span>
+              {Number(product.rating_count) > 0 ? (
+                <>
+                  <div className="text-warning">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <i
+                        key={star}
+                        className={`bi ${
+                          star <= Math.round(Number(product.rating_average)) ? 'bi-star-fill' : 'bi-star'
+                        } me-1`}
+                      ></i>
+                    ))}
+                  </div>
+                  <span className="fw-bold text-dark">{Number(product.rating_average).toFixed(1)}</span>
+                  <span className="text-muted small">({product.rating_count} Verified Customer Reviews)</span>
+                </>
+              ) : (
+                <span className="badge bg-slate-100 text-slate-600 rounded-pill px-3 py-1.5 text-xs font-semibold">
+                  <i className="bi bi-star me-1"></i> No reviews yet
+                </span>
+              )}
             </div>
 
-            {/* Price Area */}
-            <div className="d-flex align-items-baseline gap-3 mb-4 p-3 rounded-3" style={{ background: '#f1f5f9' }}>
-              <span className="display-6 fw-bolder text-primary">{formatETB(product.price)}</span>
-              {product.compare_at_price && (
-                <span className="text-muted text-decoration-line-through fs-5">
-                  {formatETB(product.compare_at_price)}
-                </span>
+            {/* Price Area with Authoritative Promo Calculation */}
+            <div className="d-flex flex-wrap align-items-baseline gap-3 mb-4 p-3 rounded-3" style={{ background: '#f1f5f9' }}>
+              <span className="display-6 fw-bolder text-primary">
+                {formatETB(product.current_price || product.price)}
+              </span>
+              {product.has_promotion && product.current_price && Number(product.current_price) < Number(product.price) && (
+                <>
+                  <span className="text-muted text-decoration-line-through fs-5">
+                    {formatETB(product.price)}
+                  </span>
+                  <span className="badge bg-danger rounded-pill px-3 py-2">
+                    {product.discount_label || `Save ${formatETB(Number(product.price) - Number(product.current_price))}`}
+                  </span>
+                </>
               )}
-              {product.compare_at_price && (
-                <span className="badge bg-danger rounded-pill">
-                  Save {formatETB(product.compare_at_price - product.price)}
-                </span>
+              {!product.has_promotion && product.compare_at_price && Number(product.compare_at_price) > Number(product.price) && (
+                <>
+                  <span className="text-muted text-decoration-line-through fs-5">
+                    {formatETB(product.compare_at_price)}
+                  </span>
+                  <span className="badge bg-danger rounded-pill">
+                    Save {formatETB(product.compare_at_price - product.price)}
+                  </span>
+                </>
               )}
             </div>
+
+            {/* Real Warranty Policy Information */}
+            {product.warranty_info && (
+              <div className="mb-4 p-3 rounded-3 bg-cyan-50 border border-cyan-200">
+                <div className="d-flex align-items-center justify-content-between mb-1">
+                  <div className="d-flex align-items-center gap-2 text-cyan-900 fw-bold small">
+                    <i className="bi bi-shield-check text-cyan-600 fs-5"></i>
+                    <span>{product.warranty_info.name}</span>
+                  </div>
+                  <span className="badge bg-cyan-600 text-white rounded-pill px-2.5 py-1 text-xs">
+                    {product.warranty_info.duration_days} Days Official Coverage
+                  </span>
+                </div>
+                <p className="text-xs text-slate-700 mb-1" style={{ lineHeight: '1.5' }}>
+                  {product.warranty_info.coverage_summary}
+                </p>
+                {product.warranty_info.claim_instructions && (
+                  <div className="text-xs text-muted">
+                    <i className="bi bi-info-circle me-1"></i>
+                    <strong>Claim process:</strong> {product.warranty_info.claim_instructions}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Stock Level Alert */}
             <div className="mb-4">
@@ -291,6 +358,39 @@ const ProductDetailPage = () => {
                 <i className={`bi ${isInWishlist(product.id) ? 'bi-heart-fill' : 'bi-heart'}`}></i>
                 <span className="small fw-semibold">{isInWishlist(product.id) ? 'Wishlisted' : 'Wishlist'}</span>
               </button>
+            </div>
+
+            {/* Delivery & Service Information Highlights */}
+            <div className="mt-4 pt-3 border-top">
+              <div className="row g-2">
+                <div className="col-sm-6">
+                  <div className="p-3 rounded-3 bg-slate-50 border border-slate-200 h-100">
+                    <div className="d-flex align-items-center gap-2 mb-1 text-slate-800 fw-bold small">
+                      <i className="bi bi-truck text-primary fs-5"></i>
+                      <span>Ethiopian Express Delivery</span>
+                    </div>
+                    <ul className="list-unstyled text-xs text-muted mb-0 ps-1" style={{ lineHeight: '1.6' }}>
+                      <li>• <strong>Addis Ababa:</strong> Same-day or 1-2 days (ETB 50-100)</li>
+                      <li>• <strong>Regional:</strong> 2-3 business days (ETB 150)</li>
+                      <li>• Real-time milestone tracking on your dashboard</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="col-sm-6">
+                  <div className="p-3 rounded-3 bg-slate-50 border border-slate-200 h-100">
+                    <div className="d-flex align-items-center gap-2 mb-1 text-slate-800 fw-bold small">
+                      <i className="bi bi-shield-check text-emerald-600 fs-5"></i>
+                      <span>Chapa Verified Checkout</span>
+                    </div>
+                    <ul className="list-unstyled text-xs text-muted mb-0 ps-1" style={{ lineHeight: '1.6' }}>
+                      <li>• Instant online payment via Telebirr, CBEBirr & Cards</li>
+                      <li>• Authoritative price calculation and digital receipt</li>
+                      <li>• Official warranty snapshot recorded with purchase</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

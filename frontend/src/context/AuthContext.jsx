@@ -1,22 +1,35 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import api from '../api';
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('user');
+    const saved = localStorage.getItem('user') || sessionStorage.getItem('user');
     return saved ? JSON.parse(saved) : null;
   });
-  const [token, setToken] = useState(() => localStorage.getItem('token') || null);
+  const [token, setToken] = useState(() => localStorage.getItem('token') || sessionStorage.getItem('token') || null);
   const [loading, setLoading] = useState(true);
+
+  const logout = useCallback(() => {
+    if (token) {
+      api.post('auth/logout/').catch(() => {});
+    }
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
+    setToken(null);
+    setUser(null);
+  }, [token]);
 
   useEffect(() => {
     if (token) {
       api.get('auth/profile/')
         .then((res) => {
           setUser(res.data);
-          localStorage.setItem('user', JSON.stringify(res.data));
+          const storage = localStorage.getItem('token') ? localStorage : sessionStorage;
+          storage.setItem('user', JSON.stringify(res.data));
         })
         .catch(() => {
           logout();
@@ -25,13 +38,24 @@ export const AuthProvider = ({ children }) => {
     } else {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, logout]);
 
-  const login = async (username, password) => {
+  const login = async (username, password, rememberMe = true) => {
     const res = await api.post('auth/login/', { username, password });
     const { token: authToken, user: userData } = res.data;
-    localStorage.setItem('token', authToken);
-    localStorage.setItem('user', JSON.stringify(userData));
+    const storage = rememberMe ? localStorage : sessionStorage;
+    
+    // Clear the opposite storage to prevent desync
+    if (rememberMe) {
+      sessionStorage.removeItem('token');
+      sessionStorage.removeItem('user');
+    } else {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    }
+
+    storage.setItem('token', authToken);
+    storage.setItem('user', JSON.stringify(userData));
     setToken(authToken);
     setUser(userData);
     return userData;
@@ -47,26 +71,18 @@ export const AuthProvider = ({ children }) => {
     return newUser;
   };
 
-  const logout = () => {
-    if (token) {
-      api.post('auth/logout/').catch(() => {});
-    }
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setToken(null);
-    setUser(null);
-  };
-
   const updateProfile = async (data) => {
     const res = await api.put('auth/profile/', data);
     setUser(res.data);
-    localStorage.setItem('user', JSON.stringify(res.data));
+    const storage = localStorage.getItem('token') ? localStorage : sessionStorage;
+    storage.setItem('user', JSON.stringify(res.data));
     return res.data;
   };
 
+  // Derive roles directly from actual backend user object
   const isCustomer = user?.role === 'customer';
-  const isStoreManager = user?.role === 'store_manager' || user?.is_superuser;
-  const isAdmin = user?.role === 'admin' || user?.is_superuser;
+  const isStoreManager = user?.role === 'store_manager' || Boolean(user?.is_superuser);
+  const isAdmin = user?.role === 'admin' || Boolean(user?.is_superuser);
   const isManagerOrAdmin = isStoreManager || isAdmin;
 
   return (

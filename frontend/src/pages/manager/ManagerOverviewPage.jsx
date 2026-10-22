@@ -62,18 +62,18 @@ const ManagerOverviewPage = () => {
 
   const { kpis, monthly_sales, top_selling_products, pending_verifications_queue, recent_orders } = data;
 
-  // Chart config (Screenshot 5: Purchase & Sales Report dual line chart)
-  const chartLabels = monthly_sales.length > 0
+  // Real monthly sales chart from backend database aggregates
+  const chartLabels = monthly_sales && monthly_sales.length > 0
     ? monthly_sales.map((m) => m.month)
-    : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    : ['Current Period'];
 
-  const revenueData = monthly_sales.length > 0
+  const revenueData = monthly_sales && monthly_sales.length > 0
     ? monthly_sales.map((m) => m.revenue)
-    : [28000, 35000, 42000, 39000, 56000, 68000, 72000, 85000, 92000, 110000, 125000, kpis.total_revenue];
+    : [kpis?.total_revenue || 0];
 
-  const orderVolumeData = monthly_sales.length > 0
-    ? monthly_sales.map((m) => m.orders * 1500)
-    : [18000, 24000, 31000, 28000, 41000, 52000, 59000, 68000, 74000, 88000, 99000, 105000];
+  const orderVolumeData = monthly_sales && monthly_sales.length > 0
+    ? monthly_sales.map((m) => m.orders)
+    : [kpis?.total_orders || 0];
 
   const salesReportChart = {
     labels: chartLabels,

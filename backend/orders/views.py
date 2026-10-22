@@ -5,10 +5,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db import transaction
 from django.utils import timezone
-from .models import Cart, CartItem, Order, OrderItem, PaymentEvidence, Receipt
+from .models import Cart, CartItem, Order, OrderItem, PaymentEvidence, Receipt, WarrantyClaim
 from .serializers import (
     CartSerializer, CartItemSerializer,
-    OrderSerializer, PaymentEvidenceSerializer, ReceiptSerializer
+    OrderSerializer, PaymentEvidenceSerializer, ReceiptSerializer,
+    WarrantyClaimSerializer
 )
 from .chapa import ChapaService
 from products.models import Product, StockMovement
@@ -118,14 +119,15 @@ class CheckoutView(APIView):
         if not shipping_phone or not shipping_address:
             return Response({'error': 'Shipping phone and address are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Validate stock for all items
+        # Validate stock for all items and calculate authoritative server price
         subtotal = Decimal('0.00')
         for item in cart_items:
             if item.product.stock < item.quantity:
                 return Response({
                     'error': f"Product '{item.product.name}' only has {item.product.stock} units left in stock."
                 }, status=status.HTTP_400_BAD_REQUEST)
-            subtotal += (Decimal(str(item.product.price)) * item.quantity)
+            unit_price = Decimal(str(item.product.current_price))
+            subtotal += (unit_price * item.quantity)
 
         # Dynamic delivery method calculation
         delivery_method = request.data.get('delivery_method', 'standard')
@@ -138,7 +140,7 @@ class CheckoutView(APIView):
         tax = round(subtotal * Decimal('0.15'), 2)  # Standard 15% VAT
         total_amount = subtotal + shipping_fee + tax
 
-        # Create Order
+        # Create Order - Chapa payment gateway
         order = Order.objects.create(
             customer=request.user,
             subtotal=subtotal,
@@ -150,18 +152,27 @@ class CheckoutView(APIView):
             shipping_address=shipping_address,
             shipping_city=shipping_city,
             notes=notes,
-            payment_method=payment_method,
+            payment_method='CHAPA',
             status=Order.Status.PENDING_PAYMENT
         )
 
-        # Create OrderItems, reduce stock, record movements
+        # Create OrderItems, snapshot warranty policy, reduce stock, record movements
         for item in cart_items:
+            unit_price = Decimal(str(item.product.current_price))
+            policy = getattr(item.product, 'resolved_warranty', None)
+            duration = policy.duration_days if policy else 7
+            coverage = policy.coverage_summary if policy else "Standard 7-Day Guarantee"
+            terms = policy.terms_and_conditions if policy else "Valid from delivery date. Excludes liquid or physical drop damage."
+
             OrderItem.objects.create(
                 order=order,
                 product=item.product,
                 quantity=item.quantity,
-                unit_price=item.product.price,
-                total_price=item.product.price * item.quantity
+                unit_price=unit_price,
+                total_price=unit_price * item.quantity,
+                warranty_duration_days=duration,
+                warranty_coverage=coverage,
+                warranty_terms=terms
             )
             item.product.stock -= item.quantity
             item.product.save()
@@ -562,13 +573,22 @@ class ChapaVerifyPaymentView(APIView):
             order.chapa_tx_ref = resolved_tx_ref
             order.save()
 
+            # Activate warranty for order items from payment verification date
+            import datetime
+            now = timezone.now()
+            for item in order.items.all():
+                if not item.warranty_start_date:
+                    item.warranty_start_date = now
+                    item.warranty_end_date = now + datetime.timedelta(days=item.warranty_duration_days)
+                    item.save()
+
             evidence, _ = PaymentEvidence.objects.update_or_create(
                 order=order,
                 defaults={
                     'payment_method': f"Chapa ({data.get('method', 'Online')})",
                     'transaction_reference': data.get('reference') or resolved_tx_ref,
                     'verification_status': PaymentEvidence.VerificationStatus.APPROVED,
-                    'verified_at': timezone.now(),
+                    'verified_at': now,
                     'rejection_reason': None
                 }
             )
@@ -612,17 +632,122 @@ class ChapaWebhookView(APIView):
         if order.status in [Order.Status.PENDING_PAYMENT, Order.Status.PAYMENT_SUBMITTED]:
             chapa_res = ChapaService.verify_payment(tx_ref)
             if chapa_res.get('status') == 'success' and str(chapa_res.get('data', {}).get('status', '')).lower() == 'success':
+                import datetime
+                now = timezone.now()
                 with transaction.atomic():
                     order.status = Order.Status.PROCESSING
+                    order.payment_method = 'CHAPA'
                     order.save()
+
+                    for item in order.items.all():
+                        if not item.warranty_start_date:
+                            item.warranty_start_date = now
+                            item.warranty_end_date = now + datetime.timedelta(days=item.warranty_duration_days)
+                            item.save()
+
                     PaymentEvidence.objects.update_or_create(
                         order=order,
                         defaults={
                             'payment_method': 'Chapa (Webhook)',
                             'transaction_reference': tx_ref,
                             'verification_status': PaymentEvidence.VerificationStatus.APPROVED,
-                            'verified_at': timezone.now()
+                            'verified_at': now
                         }
                     )
                     Receipt.objects.get_or_create(order=order)
         return Response({'status': 'success'}, status=status.HTTP_200_OK)
+
+
+class WarrantyClaimListCreateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        if user.role in [User.Role.STORE_MANAGER, User.Role.ADMIN] or user.is_superuser:
+            claims = WarrantyClaim.objects.all()
+            status_param = request.query_params.get('status')
+            if status_param:
+                claims = claims.filter(status=status_param)
+            return Response(WarrantyClaimSerializer(claims, many=True).data)
+
+        claims = WarrantyClaim.objects.filter(customer=user)
+        return Response(WarrantyClaimSerializer(claims, many=True).data)
+
+    def post(self, request):
+        order_item_id = request.data.get('order_item_id') or request.data.get('order_item')
+        issue_description = request.data.get('issue_description')
+        evidence_image = request.FILES.get('evidence_image')
+
+        if not order_item_id or not issue_description:
+            return Response({'error': 'Order item ID and issue description are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            order_item = OrderItem.objects.get(id=order_item_id, order__customer=request.user)
+        except OrderItem.DoesNotExist:
+            return Response({'error': 'Purchased order item not found or does not belong to your account.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if order_item.order.status not in [Order.Status.PROCESSING, Order.Status.SHIPPED, Order.Status.DELIVERED]:
+            return Response({'error': 'Warranty claims can only be filed after an order is confirmed or delivered.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        claim = WarrantyClaim.objects.create(
+            order_item=order_item,
+            customer=request.user,
+            issue_description=issue_description,
+            evidence_image=evidence_image,
+            status=WarrantyClaim.ClaimStatus.SUBMITTED
+        )
+
+        return Response(WarrantyClaimSerializer(claim).data, status=status.HTTP_201_CREATED)
+
+
+class WarrantyClaimDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pk):
+        try:
+            claim = WarrantyClaim.objects.get(id=pk)
+        except WarrantyClaim.DoesNotExist:
+            return Response({'error': 'Warranty claim not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        is_staff = request.user.role in [User.Role.STORE_MANAGER, User.Role.ADMIN] or request.user.is_superuser
+        if claim.customer != request.user and not is_staff:
+            return Response({'error': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
+
+        return Response(WarrantyClaimSerializer(claim).data)
+
+    def patch(self, request, pk):
+        if not (request.user.role in [User.Role.STORE_MANAGER, User.Role.ADMIN] or request.user.is_superuser):
+            return Response({'error': 'Permission denied. Staff only.'}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            claim = WarrantyClaim.objects.get(id=pk)
+        except WarrantyClaim.DoesNotExist:
+            return Response({'error': 'Warranty claim not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        new_status = request.data.get('status')
+        admin_notes = request.data.get('admin_notes')
+        rejection_reason = request.data.get('rejection_reason')
+        resolution_details = request.data.get('resolution_details')
+
+        if new_status and new_status in [c[0] for c in WarrantyClaim.ClaimStatus.choices]:
+            claim.status = new_status
+        if admin_notes is not None:
+            claim.admin_notes = admin_notes
+        if rejection_reason is not None:
+            claim.rejection_reason = rejection_reason
+        if resolution_details is not None:
+            claim.resolution_details = resolution_details
+
+        claim.reviewed_by = request.user
+        claim.save()
+
+        Notification.objects.create(
+            user=claim.customer,
+            title=f"Warranty Claim #{claim.claim_number} Status Update",
+            message=f"Your warranty claim for {claim.order_item.product.name} is now: {claim.get_status_display()}.",
+            notification_type=Notification.NotificationType.ORDER_UPDATE,
+            link=f"/orders/{claim.order_item.order.id}"
+        )
+
+        return Response(WarrantyClaimSerializer(claim).data)
+

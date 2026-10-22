@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../../api';
 import { formatETB } from '../../utils/currency';
 
 const ManagerInventoryPage = () => {
+  const [searchParams] = useSearchParams();
   const [inventoryData, setInventoryData] = useState(null);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -54,10 +56,6 @@ const ManagerInventoryPage = () => {
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
   // Open Create Modal
   const handleOpenCreateModal = () => {
     setEditingProduct(null);
@@ -74,6 +72,43 @@ const ManagerInventoryPage = () => {
       is_active: true,
     });
     setShowProductModal(true);
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  useEffect(() => {
+    if (searchParams.get('action') === 'add' && categories.length > 0) {
+      handleOpenCreateModal();
+    }
+  }, [searchParams, categories]);
+
+  // Handle Delete Product with Explicit Confirmation Dialog
+  const handleDeleteProduct = async (product) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to permanently delete "${product.name}" (SKU: ${product.sku})?\n\nThis destructive action cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setSubmitting(true);
+      await api.delete(`products/items/${product.id}/`);
+      setMessage({
+        type: 'success',
+        text: `Product "${product.name}" was permanently removed from the catalog.`,
+      });
+      fetchData();
+    } catch (err) {
+      console.error('Delete product error', err);
+      const errMsg =
+        err.response?.data?.error ||
+        err.response?.data?.detail ||
+        'Failed to delete product. It may be linked to existing order items.';
+      alert(errMsg);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   // Open Edit Modal
@@ -308,6 +343,13 @@ const ManagerInventoryPage = () => {
                         title="Adjust Stock Level"
                       >
                         <i className="bi bi-box-arrow-in-down me-1"></i> Adjust
+                      </button>
+                      <button
+                        className="btn btn-sm btn-outline-danger rounded-pill px-2.5 py-1"
+                        onClick={() => handleDeleteProduct(p)}
+                        title="Permanently Delete Product"
+                      >
+                        <i className="bi bi-trash me-1"></i> Delete
                       </button>
                     </div>
                   </td>

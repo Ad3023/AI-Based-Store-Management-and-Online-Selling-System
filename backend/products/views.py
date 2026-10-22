@@ -148,6 +148,20 @@ class ProductReviewCreateView(APIView):
         except Product.DoesNotExist:
             return Response({'error': 'Product not found.'}, status=status.HTTP_404_NOT_FOUND)
 
+        # Verified customer purchase check
+        from orders.models import OrderItem, Order
+        has_purchased = OrderItem.objects.filter(
+            order__customer=request.user,
+            product=product,
+            order__status__in=[Order.Status.PROCESSING, Order.Status.SHIPPED, Order.Status.DELIVERED]
+        ).exists()
+
+        is_staff = request.user.role in ['store_manager', 'admin'] or request.user.is_superuser
+        if not has_purchased and not is_staff:
+            return Response({
+                'error': 'Verified Customer Purchase Required: You can only submit a product review after purchasing this product.'
+            }, status=status.HTTP_403_FORBIDDEN)
+
         rating = request.data.get('rating')
         comment = request.data.get('comment', '')
 
@@ -167,6 +181,30 @@ class ProductReviewCreateView(APIView):
         product.save()
 
         return Response(ProductReviewSerializer(review).data, status=status.HTTP_201_CREATED)
+
+
+class ProductReviewModerationView(APIView):
+    permission_classes = [IsStoreManagerOrAdmin]
+
+    def patch(self, request, review_id):
+        try:
+            review = ProductReview.objects.get(id=review_id)
+        except ProductReview.DoesNotExist:
+            return Response({'error': 'Review not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        is_approved = request.data.get('is_approved')
+        manager_response = request.data.get('manager_response')
+
+        if is_approved is not None:
+            review.is_approved = is_approved
+        if manager_response is not None:
+            from django.utils import timezone
+            review.manager_response = manager_response
+            review.response_by = request.user
+            review.responded_at = timezone.now()
+
+        review.save()
+        return Response(ProductReviewSerializer(review).data)
 
 
 class InventoryManagementView(APIView):
@@ -217,3 +255,137 @@ class InventoryManagementView(APIView):
             'movement': StockMovementSerializer(movement).data,
             'product': ProductSerializer(product).data
         })
+
+
+class PromotionListCreateView(generics.ListCreateAPIView):
+    from .models import Promotion
+    from .serializers import PromotionSerializer
+    serializer_class = PromotionSerializer
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsStoreManagerOrAdmin()]
+        return [permissions.AllowAny()]
+
+    def get_queryset(self):
+        from .models import Promotion
+        from django.utils import timezone
+        now = timezone.now()
+        active_only = self.request.query_params.get('active_only') == 'true'
+        user = self.request.user
+        is_staff = user.is_authenticated and (getattr(user, 'is_store_manager', lambda: False)() or getattr(user, 'is_admin', lambda: False)())
+
+        if not is_staff or active_only:
+            return Promotion.objects.filter(is_active=True, start_date__lte=now, end_date__gte=now)
+        return Promotion.objects.all()
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+class PromotionDetailView(generics.RetrieveUpdateDestroyAPIView):
+    from .models import Promotion
+    from .serializers import PromotionSerializer
+    queryset = Promotion.objects.all()
+    serializer_class = PromotionSerializer
+    permission_classes = [IsStoreManagerOrAdmin]
+
+
+class ActivePromotionAnnouncementView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        from .models import Promotion
+        from django.utils import timezone
+        now = timezone.now()
+        promo = Promotion.objects.filter(
+            is_active=True,
+            start_date__lte=now,
+            end_date__gte=now
+        ).exclude(banner_announcement__isnull=True).exclude(banner_announcement__exact='').first()
+
+        if not promo:
+            promo = Promotion.objects.filter(
+                is_active=True,
+                start_date__lte=now,
+                end_date__gte=now
+            ).first()
+
+        if promo:
+            return Response({
+                'id': promo.id,
+                'title': promo.title,
+                'banner_announcement': promo.banner_announcement or f"Special Promotion: {promo.title}! Limited time genuine discounts.",
+                'discount_type': promo.discount_type,
+                'discount_value': str(promo.discount_value),
+                'end_date': promo.end_date,
+            })
+        return Response({'banner_announcement': None})
+
+
+class WarrantyPolicyListCreateView(generics.ListCreateAPIView):
+    from .models import WarrantyPolicy
+    from .serializers import WarrantyPolicySerializer
+    queryset = WarrantyPolicy.objects.all()
+    serializer_class = WarrantyPolicySerializer
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsStoreManagerOrAdmin()]
+        return [permissions.AllowAny()]
+
+
+class WarrantyPolicyDetailView(generics.RetrieveUpdateDestroyAPIView):
+    from .models import WarrantyPolicy
+    from .serializers import WarrantyPolicySerializer
+    queryset = WarrantyPolicy.objects.all()
+    serializer_class = WarrantyPolicySerializer
+    permission_classes = [IsStoreManagerOrAdmin]
+
+
+class CustomerFeedbackListCreateView(generics.ListCreateAPIView):
+    from .models import CustomerFeedback
+    from .serializers import CustomerFeedbackSerializer
+    serializer_class = CustomerFeedbackSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        from .models import CustomerFeedback
+        user = self.request.user
+        if user.role in ['store_manager', 'admin'] or user.is_superuser:
+            qs = CustomerFeedback.objects.all()
+            category = self.request.query_params.get('category')
+            status_param = self.request.query_params.get('status')
+            if category:
+                qs = qs.filter(category=category)
+            if status_param:
+                qs = qs.filter(status=status_param)
+            return qs
+        return CustomerFeedback.objects.filter(user=user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class CustomerFeedbackDetailView(generics.RetrieveUpdateDestroyAPIView):
+    from .models import CustomerFeedback
+    from .serializers import CustomerFeedbackSerializer
+    queryset = CustomerFeedback.objects.all()
+    serializer_class = CustomerFeedbackSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def patch(self, request, *args, **kwargs):
+        user = request.user
+        if not (user.role in ['store_manager', 'admin'] or user.is_superuser):
+            return Response({'error': 'Only store managers or administrators can respond to customer feedback.'}, status=status.HTTP_403_FORBIDDEN)
+
+        feedback = self.get_object()
+        admin_response = request.data.get('admin_response')
+        status_val = request.data.get('status', CustomerFeedback.FeedbackStatus.RESOLVED)
+        if admin_response:
+            feedback.admin_response = admin_response
+        feedback.status = status_val
+        feedback.responded_by = user
+        feedback.save()
+        return Response(CustomerFeedbackSerializer(feedback).data)
+

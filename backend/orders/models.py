@@ -32,7 +32,7 @@ class CartItem(models.Model):
 
     @property
     def subtotal(self):
-        return self.product.price * self.quantity
+        return self.product.current_price * self.quantity
 
     def __str__(self):
         return f"{self.quantity}x {self.product.name} in cart"
@@ -89,12 +89,78 @@ class OrderItem(models.Model):
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
     total_price = models.DecimalField(max_digits=10, decimal_places=2)
 
+    # Warranty policy snapshot at purchase time
+    warranty_duration_days = models.PositiveIntegerField(default=7)
+    warranty_coverage = models.TextField(blank=True, default="Standard replacement or repair for hardware defects.")
+    warranty_terms = models.TextField(blank=True, default="Valid from delivery date. Excludes liquid damage or physical drops.")
+    warranty_start_date = models.DateTimeField(null=True, blank=True)
+    warranty_end_date = models.DateTimeField(null=True, blank=True)
+
     def save(self, *args, **kwargs):
         self.total_price = self.unit_price * self.quantity
+        if not self.warranty_duration_days:
+            policy = getattr(self.product, 'resolved_warranty', None)
+            if policy:
+                self.warranty_duration_days = policy.duration_days
+                self.warranty_coverage = policy.coverage_summary
+                self.warranty_terms = policy.terms_and_conditions
         super().save(*args, **kwargs)
+
+    @property
+    def is_warranty_active(self):
+        from django.utils import timezone
+        now = timezone.now()
+        if self.warranty_start_date and self.warranty_end_date:
+            return self.warranty_start_date <= now <= self.warranty_end_date
+        return False
 
     def __str__(self):
         return f"{self.quantity}x {self.product.name} in {self.order.order_number}"
+
+
+class WarrantyClaim(models.Model):
+    class ClaimStatus(models.TextChoices):
+        SUBMITTED = 'SUBMITTED', 'Submitted'
+        UNDER_REVIEW = 'UNDER_REVIEW', 'Under Review'
+        APPROVED = 'APPROVED', 'Approved (Replacement / Repair)'
+        REJECTED = 'REJECTED', 'Rejected'
+        RESOLVED = 'RESOLVED', 'Resolved'
+
+    claim_number = models.CharField(max_length=32, unique=True, editable=False)
+    order_item = models.ForeignKey(OrderItem, on_delete=models.CASCADE, related_name='warranty_claims')
+    customer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='warranty_claims')
+    issue_description = models.TextField()
+    evidence_image = models.ImageField(upload_to='warranty_evidence/', blank=True, null=True)
+    status = models.CharField(
+        max_length=20,
+        choices=ClaimStatus.choices,
+        default=ClaimStatus.SUBMITTED
+    )
+    admin_notes = models.TextField(blank=True, null=True)
+    rejection_reason = models.TextField(blank=True, null=True)
+    resolution_details = models.TextField(blank=True, null=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_warranty_claims'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def save(self, *args, **kwargs):
+        if not self.claim_number:
+            import datetime
+            now_str = datetime.datetime.now().strftime('%Y%m%d')
+            self.claim_number = f"CLM-{now_str}-{uuid.uuid4().hex[:6].upper()}"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Claim {self.claim_number} ({self.status}) for {self.order_item.product.name}"
 
 
 class PaymentEvidence(models.Model):

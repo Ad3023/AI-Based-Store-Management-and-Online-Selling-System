@@ -20,6 +20,10 @@ const ProductCard = ({ product, aiTag, variant = 'light' }) => {
   const handleAddToCart = async (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!user) {
+      navigate(`/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}&action=add_to_cart&productId=${product.id}`);
+      return;
+    }
     if (product.stock === 0) {
       alert("This item is currently out of stock.");
       return;
@@ -39,6 +43,10 @@ const ProductCard = ({ product, aiTag, variant = 'light' }) => {
   const handleBuyNow = async (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!user) {
+      navigate(`/login?redirect=/checkout&action=add_to_cart&productId=${product.id}`);
+      return;
+    }
     if (product.stock === 0) {
       alert("This item is currently out of stock.");
       return;
@@ -156,15 +164,21 @@ const ProductCard = ({ product, aiTag, variant = 'light' }) => {
             <span className={`text-[11px] font-bold uppercase tracking-wider ${isDark ? 'text-cyan-400' : 'text-slate-400'}`}>
               {product.category_name || 'Electronics'}
             </span>
-            <div className="flex items-center text-amber-400 text-xs gap-1">
-              <i className="bi bi-star-fill"></i>
-              <span className={`font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>
-                {product.rating_average || '4.8'}
+            {Number(product.rating_count) > 0 ? (
+              <div className="flex items-center text-amber-400 text-xs gap-1" title={`${product.rating_count} verified reviews`}>
+                <i className="bi bi-star-fill"></i>
+                <span className={`font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>
+                  {Number(product.rating_average).toFixed(1)}
+                </span>
+                <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-400'}`}>
+                  ({product.rating_count})
+                </span>
+              </div>
+            ) : (
+              <span className={`text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                No reviews yet
               </span>
-              <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-400'}`}>
-                ({product.rating_count || 12})
-              </span>
-            </div>
+            )}
           </div>
 
           {/* Title */}
@@ -198,19 +212,43 @@ const ProductCard = ({ product, aiTag, variant = 'light' }) => {
           </div>
         </div>
 
-        {/* Price & Action Buttons (Screenshot 1 Dual Button Layout) */}
+        {/* Price & Action Buttons */}
         <div className={`pt-3 border-t ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
           <div className="flex items-baseline justify-between mb-3">
             <div>
-              <div className={`text-base font-extrabold ${isDark ? 'text-cyan-400' : 'text-blue-600'}`}>
-                {formatETB(product.price)}
-              </div>
-              {product.compare_at_price && (
-                <div className="text-xs text-slate-400 line-through">
-                  {formatETB(product.compare_at_price)}
+              {product.has_promotion || (product.current_price && Number(product.current_price) < Number(product.price)) ? (
+                <div>
+                  <div className={`text-base font-extrabold ${isDark ? 'text-cyan-400' : 'text-blue-600'}`}>
+                    {formatETB(product.current_price)}
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-xs text-slate-400 line-through">
+                      {formatETB(product.price)}
+                    </span>
+                    <span className="badge bg-rose-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold">
+                      {product.discount_label || 'SALE'}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div className={`text-base font-extrabold ${isDark ? 'text-cyan-400' : 'text-blue-600'}`}>
+                    {formatETB(product.price)}
+                  </div>
+                  {product.compare_at_price && (
+                    <div className="text-xs text-slate-400 line-through">
+                      {formatETB(product.compare_at_price)}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
+            {product.warranty_info && (
+              <span className="badge bg-slate-100 text-slate-600 border text-[9px] rounded-pill font-medium">
+                <i className="bi bi-shield-check me-0.5 text-primary"></i>
+                {product.warranty_info.duration_days}D Warranty
+              </span>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-2">

@@ -3,11 +3,49 @@ from django.utils.text import slugify
 from django.conf import settings
 
 
+from django.utils import timezone
+
+
+class WarrantyPolicy(models.Model):
+    name = models.CharField(max_length=150)
+    duration_days = models.PositiveIntegerField(
+        default=7,
+        help_text="Warranty duration in days (e.g. 7, 30, 365)"
+    )
+    coverage_summary = models.TextField(
+        default="Standard replacement or repair for hardware defects and manufacturing faults."
+    )
+    terms_and_conditions = models.TextField(
+        blank=True,
+        default="Warranty is valid from confirmed delivery. Excludes water damage, accidental drops, or unauthorized modifications."
+    )
+    claim_instructions = models.TextField(
+        blank=True,
+        default="Submit a warranty claim from your order details page with description and evidence photo."
+    )
+    is_default = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name_plural = 'Warranty Policies'
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name} ({self.duration_days} Days)"
+
+
 class Category(models.Model):
     name = models.CharField(max_length=120, unique=True)
     slug = models.SlugField(max_length=150, unique=True, blank=True)
     description = models.TextField(blank=True, null=True)
     image = models.ImageField(upload_to='categories/', blank=True, null=True)
+    warranty_policy = models.ForeignKey(
+        WarrantyPolicy,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='categories'
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -24,8 +62,60 @@ class Category(models.Model):
         return self.name
 
 
+class Promotion(models.Model):
+    class DiscountType(models.TextChoices):
+        PERCENTAGE = 'PERCENTAGE', 'Percentage Discount (%)'
+        FIXED = 'FIXED', 'Fixed Amount Discount (ETB)'
+
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True, null=True)
+    discount_type = models.CharField(
+        max_length=20,
+        choices=DiscountType.choices,
+        default=DiscountType.PERCENTAGE
+    )
+    discount_value = models.DecimalField(max_digits=10, decimal_places=2, help_text="e.g. 15 for 15% or 500 for 500 ETB off")
+    start_date = models.DateTimeField()
+    end_date = models.DateTimeField()
+    is_active = models.BooleanField(default=True)
+    products = models.ManyToManyField('Product', blank=True, related_name='promotions')
+    categories = models.ManyToManyField(Category, blank=True, related_name='promotions')
+    banner_announcement = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Short dismissible announcement text for storefront header"
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_promotions'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    @property
+    def is_currently_active(self):
+        now = timezone.now()
+        return self.is_active and self.start_date <= now <= self.end_date
+
+    def __str__(self):
+        return f"{self.title} ({self.get_discount_type_display()} - {self.discount_value})"
+
+
 class Product(models.Model):
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='products')
+    warranty_policy = models.ForeignKey(
+        WarrantyPolicy,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='products'
+    )
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=280, unique=True, blank=True)
     sku = models.CharField(max_length=64, unique=True, blank=True)
@@ -60,6 +150,41 @@ class Product(models.Model):
             self.sku = f"SKU-{uuid.uuid4().hex[:8].upper()}"
         super().save(*args, **kwargs)
 
+    def get_current_promotion(self):
+        now = timezone.now()
+        # Direct product promotion has priority
+        promo = self.promotions.filter(is_active=True, start_date__lte=now, end_date__gte=now).first()
+        if promo:
+            return promo
+        # Category-level promotion
+        return self.category.promotions.filter(is_active=True, start_date__lte=now, end_date__gte=now).first()
+
+    @property
+    def current_price(self):
+        promo = self.get_current_promotion()
+        if not promo:
+            return self.price
+        from decimal import Decimal
+        if promo.discount_type == Promotion.DiscountType.PERCENTAGE:
+            discount = (self.price * promo.discount_value) / Decimal('100.0')
+            return max(self.price - discount, Decimal('0.00')).quantize(Decimal('0.01'))
+        elif promo.discount_type == Promotion.DiscountType.FIXED:
+            return max(self.price - promo.discount_value, Decimal('0.00')).quantize(Decimal('0.01'))
+        return self.price
+
+    @property
+    def has_active_promotion(self):
+        return self.get_current_promotion() is not None
+
+    @property
+    def resolved_warranty(self):
+        if self.warranty_policy:
+            return self.warranty_policy
+        if self.category.warranty_policy:
+            return self.category.warranty_policy
+        default = WarrantyPolicy.objects.filter(is_default=True).first()
+        return default
+
     @property
     def is_in_stock(self):
         return self.stock > 0
@@ -77,6 +202,16 @@ class ProductReview(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='reviews')
     rating = models.PositiveSmallIntegerField(choices=[(i, str(i)) for i in range(1, 6)])
     comment = models.TextField(blank=True, null=True)
+    is_approved = models.BooleanField(default=True)
+    manager_response = models.TextField(blank=True, null=True)
+    response_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='review_responses'
+    )
+    responded_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -85,6 +220,50 @@ class ProductReview(models.Model):
 
     def __str__(self):
         return f"Review by {self.user.username} for {self.product.name} ({self.rating}/5)"
+
+
+class CustomerFeedback(models.Model):
+    class CategoryChoice(models.TextChoices):
+        GENERAL = 'GENERAL', 'General Feedback'
+        SERVICE = 'SERVICE', 'Store Service & Support'
+        DELIVERY = 'DELIVERY', 'Delivery & Logistics'
+        QUALITY = 'QUALITY', 'Product Quality'
+        SUGGESTION = 'SUGGESTION', 'Feature / Stock Suggestion'
+
+    class FeedbackStatus(models.TextChoices):
+        NEW = 'NEW', 'New / Unreviewed'
+        IN_REVIEW = 'IN_REVIEW', 'In Review'
+        RESOLVED = 'RESOLVED', 'Resolved'
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='feedbacks')
+    subject = models.CharField(max_length=200)
+    category = models.CharField(
+        max_length=30,
+        choices=CategoryChoice.choices,
+        default=CategoryChoice.GENERAL
+    )
+    message = models.TextField()
+    status = models.CharField(
+        max_length=20,
+        choices=FeedbackStatus.choices,
+        default=FeedbackStatus.NEW
+    )
+    admin_response = models.TextField(blank=True, null=True)
+    responded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='responded_feedbacks'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"[{self.status}] {self.subject} by {self.user.username}"
 
 
 class StockMovement(models.Model):

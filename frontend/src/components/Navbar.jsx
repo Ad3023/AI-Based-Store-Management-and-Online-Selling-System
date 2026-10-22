@@ -35,21 +35,55 @@ const Navbar = () => {
               <i className="bi bi-cpu-fill me-1"></i> AI POWERED
             </span>
             <span className="d-none d-md-inline text-slate-300">
-              Verified Ethiopian Bank Transfer (CBE, Telebirr, Awash) & Chapa Gateway with Instant Digital Receipts
+              Chapa Online Payment Gateway (Telebirr, CBEBirr, Cards) & Instant Digital Receipts
             </span>
             <span className="d-inline d-md-none text-slate-300">
-              Chapa, Telebirr & CBE Verified Payments
+              Chapa Verified Online Payments
             </span>
           </div>
 
-          <div className="d-flex align-items-center gap-3 text-slate-400">
-            <span className="d-none d-sm-inline">
+          <div className="d-flex align-items-center gap-2.5 text-xs">
+            <span className="d-none d-lg-inline text-slate-300">
               <i className="bi bi-truck me-1 text-cyan-400"></i> Express Addis & Regional Delivery
             </span>
-            <span>&bull;</span>
-            <Link to="/track" className="text-cyan-400 hover:text-white transition">
+            <span className="d-none d-lg-inline text-slate-600">&bull;</span>
+            <Link to="/track" className="text-cyan-400 hover:text-white transition text-decoration-none d-none d-sm-inline">
               Track Order
             </Link>
+
+            <span className="text-slate-600 d-none d-sm-inline">&bull;</span>
+
+            {/* Top-Right Corner Auth Controls */}
+            {!user ? (
+              <div className="d-flex align-items-center gap-2 ms-1">
+                <Link
+                  to="/login"
+                  className="text-white hover:text-cyan-300 transition text-decoration-none px-2.5 py-1 rounded fw-semibold text-xs d-flex align-items-center gap-1"
+                  style={{ background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255, 255, 255, 0.2)' }}
+                >
+                  <i className="bi bi-box-arrow-in-right text-cyan-400"></i> Sign In
+                </Link>
+                <Link
+                  to="/register"
+                  className="btn btn-sm btn-primary-gradient text-white px-3 py-1 rounded-pill fw-bold text-decoration-none text-xs d-flex align-items-center gap-1 shadow-sm"
+                >
+                  <i className="bi bi-person-plus"></i> Sign Up
+                </Link>
+              </div>
+            ) : (
+              <Link
+                to={
+                  user.role === 'admin'
+                    ? '/admin/dashboard'
+                    : user.role === 'store_manager'
+                    ? '/manager/dashboard'
+                    : '/customer/dashboard'
+                }
+                className="text-cyan-300 fw-semibold text-decoration-none d-flex align-items-center gap-1"
+              >
+                <i className="bi bi-person-circle"></i> {displayName}
+              </Link>
+            )}
           </div>
         </div>
       </div>
@@ -81,6 +115,38 @@ const Navbar = () => {
               </span>
             </div>
           </Link>
+
+          {/* Mobile Right Quick Controls: Sign In & Sign Up or Cart */}
+          <div className="d-flex align-items-center gap-1.5 d-lg-none ms-auto me-2">
+            {!user ? (
+              <>
+                <Link
+                  to="/login"
+                  className="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-1 text-xs fw-bold"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  to="/register"
+                  className="btn btn-sm btn-primary-gradient rounded-pill px-2.5 py-1 text-xs fw-bold text-white shadow-sm"
+                >
+                  Sign Up
+                </Link>
+              </>
+            ) : (
+              <Link
+                to="/cart"
+                className="btn btn-sm btn-light rounded-pill px-2.5 py-1 text-xs position-relative border"
+              >
+                <i className="bi bi-cart3 fs-6 text-primary"></i>
+                {cartCount > 0 && (
+                  <span className="position-absolute top-0 start-100 translate-middle badge rounded-full bg-primary text-white text-[9px] px-1">
+                    {cartCount}
+                  </span>
+                )}
+              </Link>
+            )}
+          </div>
 
           {/* Mobile menu toggle */}
           <button
@@ -320,39 +386,49 @@ const Navbar = () => {
                       <small className="text-muted text-xs">{user.email}</small>
                     </li>
                     <li>
-                      <Link className="dropdown-item py-2 rounded-xl text-xs d-flex align-items-center gap-2" to="/profile">
-                        <i className="bi bi-grid text-primary"></i> Customer Dashboard
+                      <Link
+                        className="dropdown-item py-2 rounded-xl text-xs d-flex align-items-center gap-2 fw-semibold"
+                        to={
+                          user.role === 'admin'
+                            ? '/admin/dashboard'
+                            : user.role === 'store_manager'
+                            ? '/manager/dashboard'
+                            : '/customer/dashboard'
+                        }
+                      >
+                        <i className="bi bi-speedometer2 text-primary"></i>{' '}
+                        {user.role === 'admin'
+                          ? 'Administrator Dashboard'
+                          : user.role === 'store_manager'
+                          ? 'Store Manager Dashboard'
+                          : 'Customer Dashboard'}
                       </Link>
                     </li>
                     <li>
-                      <Link className="dropdown-item py-2 rounded-xl text-xs d-flex align-items-center gap-2" to="/orders">
-                        <i className="bi bi-bag-check text-primary"></i> My Orders & Receipts
+                      <Link className="dropdown-item py-2 rounded-xl text-xs d-flex align-items-center gap-2" to="/customer/dashboard?tab=orders">
+                        <i className="bi bi-bag-check text-primary"></i> My Orders & Tracking
                       </Link>
                     </li>
                     <li>
-                      <Link className="dropdown-item py-2 rounded-xl text-xs d-flex align-items-center gap-2" to="/wishlist">
-                        <i className="bi bi-heart text-danger"></i> My Wishlist ({wishlistCount})
+                      <Link className="dropdown-item py-2 rounded-xl text-xs d-flex align-items-center gap-2" to="/customer/dashboard?tab=receipts">
+                        <i className="bi bi-receipt text-primary"></i> Digital Receipts
                       </Link>
                     </li>
                     <li>
-                      <Link className="dropdown-item py-2 rounded-xl text-xs d-flex align-items-center gap-2" to="/recommendations">
-                        <i className="bi bi-stars text-primary"></i> AI Recommendations
+                      <Link className="dropdown-item py-2 rounded-xl text-xs d-flex align-items-center gap-2" to="/customer/dashboard?tab=warranty">
+                        <i className="bi bi-shield-check text-emerald-600"></i> Warranty & Claims
                       </Link>
                     </li>
-                    {isManagerOrAdmin && (
-                      <>
-                        <li><hr className="dropdown-divider my-1" /></li>
-                        <li>
-                          <Link className="dropdown-item py-2 rounded-xl text-xs text-primary fw-semibold d-flex align-items-center gap-2" to="/manager">
-                            <i className="bi bi-speedometer2"></i> Manager Portal
-                          </Link>
-                        </li>
-                      </>
-                    )}
                     <li><hr className="dropdown-divider my-1" /></li>
                     <li>
-                      <button className="dropdown-item py-2 rounded-xl text-xs text-danger d-flex align-items-center gap-2" onClick={logout}>
-                        <i className="bi bi-box-arrow-right"></i> Log Out
+                      <button
+                        className="dropdown-item py-2 rounded-xl text-xs text-danger d-flex align-items-center gap-2"
+                        onClick={() => {
+                          logout();
+                          navigate('/');
+                        }}
+                      >
+                        <i className="bi bi-box-arrow-right"></i> Sign Out
                       </button>
                     </li>
                   </ul>
@@ -361,17 +437,17 @@ const Navbar = () => {
                 <div className="d-flex align-items-center gap-2">
                   <Link
                     to="/login"
-                    className="btn btn-outline-custom btn-sm rounded-full text-xs px-3"
+                    className="btn btn-outline-primary btn-sm rounded-pill text-xs fw-bold px-3 py-1.5 d-flex align-items-center gap-1 shadow-sm"
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    Log In
+                    <i className="bi bi-box-arrow-in-right"></i> Sign In
                   </Link>
                   <Link
                     to="/register"
-                    className="btn btn-primary-gradient btn-sm rounded-full text-xs px-3.5 shadow-sm"
+                    className="btn btn-primary-gradient btn-sm rounded-pill text-xs fw-bold px-3.5 py-1.5 shadow-sm text-white d-flex align-items-center gap-1"
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    Register
+                    <i className="bi bi-person-plus"></i> Sign Up
                   </Link>
                 </div>
               )}

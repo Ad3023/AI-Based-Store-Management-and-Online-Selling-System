@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Cart, CartItem, Order, OrderItem, PaymentEvidence, Receipt
+from .models import Cart, CartItem, Order, OrderItem, PaymentEvidence, Receipt, WarrantyClaim
 from products.serializers import ProductSerializer
 
 
@@ -23,13 +23,45 @@ class CartSerializer(serializers.ModelSerializer):
         fields = ['id', 'items', 'total_price', 'total_items', 'updated_at']
 
 
+class WarrantyClaimSerializer(serializers.ModelSerializer):
+    customer_username = serializers.CharField(source='customer.username', read_only=True)
+    product_name = serializers.CharField(source='order_item.product.name', read_only=True)
+    product_image = serializers.SerializerMethodField()
+    order_number = serializers.CharField(source='order_item.order.order_number', read_only=True)
+    order_id = serializers.IntegerField(source='order_item.order.id', read_only=True)
+    reviewed_by_username = serializers.CharField(source='reviewed_by.username', read_only=True)
+
+    class Meta:
+        model = WarrantyClaim
+        fields = [
+            'id', 'claim_number', 'order_item', 'order_id', 'customer', 'customer_username',
+            'product_name', 'product_image', 'order_number', 'issue_description',
+            'evidence_image', 'status', 'admin_notes', 'rejection_reason',
+            'resolution_details', 'reviewed_by', 'reviewed_by_username',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'claim_number', 'customer', 'reviewed_by', 'created_at', 'updated_at']
+
+    def get_product_image(self, obj):
+        if obj.order_item.product.image:
+            return obj.order_item.product.image.url
+        return None
+
+
 class OrderItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
     product_image = serializers.SerializerMethodField()
+    warranty_claims = WarrantyClaimSerializer(many=True, read_only=True)
+    is_warranty_active = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = OrderItem
-        fields = ['id', 'product', 'product_name', 'product_image', 'quantity', 'unit_price', 'total_price']
+        fields = [
+            'id', 'product', 'product_name', 'product_image', 'quantity',
+            'unit_price', 'total_price', 'warranty_duration_days',
+            'warranty_coverage', 'warranty_terms', 'warranty_start_date',
+            'warranty_end_date', 'is_warranty_active', 'warranty_claims'
+        ]
 
     def get_product_image(self, obj):
         if obj.product.image:
@@ -54,14 +86,24 @@ class ReceiptSerializer(serializers.ModelSerializer):
     verified_by_name = serializers.CharField(source='verified_by.username', read_only=True)
     order_number = serializers.CharField(source='order.order_number', read_only=True)
     total_amount = serializers.DecimalField(source='order.total_amount', max_digits=10, decimal_places=2, read_only=True)
+    subtotal = serializers.DecimalField(source='order.subtotal', max_digits=10, decimal_places=2, read_only=True)
+    tax = serializers.DecimalField(source='order.tax', max_digits=10, decimal_places=2, read_only=True)
+    shipping_fee = serializers.DecimalField(source='order.shipping_fee', max_digits=10, decimal_places=2, read_only=True)
+    payment_method = serializers.CharField(source='order.payment_method', read_only=True)
+    chapa_tx_ref = serializers.CharField(source='order.chapa_tx_ref', read_only=True)
     customer_name = serializers.CharField(source='order.shipping_name', read_only=True)
+    customer_phone = serializers.CharField(source='order.shipping_phone', read_only=True)
+    customer_email = serializers.CharField(source='order.customer.email', read_only=True)
+    shipping_address = serializers.CharField(source='order.shipping_address', read_only=True)
+    items = OrderItemSerializer(source='order.items', many=True, read_only=True)
 
     class Meta:
         model = Receipt
         fields = [
             'id', 'order', 'order_number', 'receipt_number', 'total_amount',
-            'customer_name', 'issued_at', 'verified_by', 'verified_by_name',
-            'download_count'
+            'subtotal', 'tax', 'shipping_fee', 'payment_method', 'chapa_tx_ref',
+            'customer_name', 'customer_phone', 'customer_email', 'shipping_address',
+            'issued_at', 'verified_by', 'verified_by_name', 'download_count', 'items'
         ]
         read_only_fields = ['id', 'receipt_number', 'issued_at']
 
