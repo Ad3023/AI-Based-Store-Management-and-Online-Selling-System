@@ -24,6 +24,30 @@ class UserSerializer(serializers.ModelSerializer):
         # Prevent privilege escalation: customers cannot change their own role or flags
         read_only_fields = ['id', 'created_at', 'role', 'is_staff', 'is_superuser']
 
+    def validate_email(self, value):
+        if not value or not str(value).strip():
+            raise serializers.ValidationError("Email address cannot be empty.")
+        normalized = str(value).strip().lower()
+        qs = User.objects.filter(email__iexact=normalized)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("An account with this email address already exists. Please choose a different email.")
+        return normalized
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        # Check if client attempted to pass 'role' in initial_data to change protected role
+        if hasattr(self, 'initial_data') and 'role' in self.initial_data:
+            submitted_role = self.initial_data.get('role')
+            current_user = request.user if request and request.user else getattr(self, 'instance', None)
+            if current_user and submitted_role != current_user.role:
+                if current_user.role == User.Role.ADMIN or current_user.is_superuser:
+                    raise serializers.ValidationError({
+                        'role': "The Main Administrator's role is protected and cannot be changed."
+                    })
+        return attrs
+
 
 class AdminUserSerializer(serializers.ModelSerializer):
     profile = CustomerProfileSerializer(read_only=True)
@@ -32,10 +56,38 @@ class AdminUserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
-            'role', 'is_active', 'phone_number', 'address', 'city', 'avatar',
+            'role', 'is_active', 'is_staff', 'is_superuser', 'phone_number', 'address', 'city', 'avatar',
             'created_at', 'profile'
         ]
-        read_only_fields = ['id', 'created_at']
+        read_only_fields = ['id', 'created_at', 'is_staff', 'is_superuser']
+
+    def validate_email(self, value):
+        if not value or not str(value).strip():
+            raise serializers.ValidationError("Email address cannot be empty.")
+        normalized = str(value).strip().lower()
+        qs = User.objects.filter(email__iexact=normalized)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("An account with this email address already exists. Please choose a different email.")
+        return normalized
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        instance = getattr(self, 'instance', None)
+        new_role = attrs.get('role')
+        if instance and new_role and new_role != instance.role:
+            # 1. Main administrator role protection
+            if instance.is_superuser or instance.username == 'addisuguche_admin':
+                raise serializers.ValidationError({
+                    'role': "The Main Administrator's role is protected and cannot be changed."
+                })
+            # 2. Prevent any administrator from changing their own role
+            if request and request.user and request.user.id == instance.id and request.user.role == User.Role.ADMIN:
+                raise serializers.ValidationError({
+                    'role': "Administrators cannot change their own role."
+                })
+        return attrs
 
 
 class RegisterSerializer(serializers.ModelSerializer):

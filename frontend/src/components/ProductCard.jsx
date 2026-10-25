@@ -15,12 +15,17 @@ const ProductCard = ({ product, aiTag }) => {
   const [added, setAdded] = useState(false);
 
   const isWishlisted = isInWishlist(product.id);
+  const isAdmin = user?.role === 'admin';
 
   const handleAddToCart = async (e) => {
     e.preventDefault();
     e.stopPropagation();
     if (!user) {
       navigate(`/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}&action=add_to_cart&productId=${product.id}`);
+      return;
+    }
+    if (isAdmin) {
+      alert("Administrators are restricted from personal shopping and adding products to the cart.");
       return;
     }
     if (product.stock === 0) {
@@ -80,21 +85,23 @@ const ProductCard = ({ product, aiTag }) => {
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={toggleWishlist}
-              className="btn btn-sm rounded-circle p-1 d-flex align-items-center justify-content-center shadow-sm"
-              style={{
-                width: '32px',
-                height: '32px',
-                backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                border: '1px solid #e2e8f0',
-                color: isWishlisted ? '#ef4444' : '#94a3b8',
-              }}
-              title={isWishlisted ? 'Remove from Wishlist' : 'Add to Wishlist'}
-            >
-              <i className={`bi ${isWishlisted ? 'bi-heart-fill' : 'bi-heart'} fs-6`}></i>
-            </button>
+            {!isAdmin && (
+              <button
+                type="button"
+                onClick={toggleWishlist}
+                className="btn btn-sm rounded-circle p-1 d-flex align-items-center justify-content-center shadow-sm"
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                  border: '1px solid #e2e8f0',
+                  color: isWishlisted ? '#ef4444' : '#94a3b8',
+                }}
+                title={isWishlisted ? 'Remove from Wishlist' : 'Add to Wishlist'}
+              >
+                <i className={`bi ${isWishlisted ? 'bi-heart-fill' : 'bi-heart'} fs-6`}></i>
+              </button>
+            )}
           </div>
 
           {/* Product Image */}
@@ -178,38 +185,54 @@ const ProductCard = ({ product, aiTag }) => {
               )}
             </div>
 
-            {/* Add to Cart Button */}
-            <button
-              type="button"
-              onClick={handleAddToCart}
-              disabled={isOutOfStock || adding}
-              className="btn btn-sm w-100 fw-bold d-flex align-items-center justify-content-center gap-2 py-2"
-              style={{
-                backgroundColor: added ? '#10b981' : '#1b64da',
-                color: '#ffffff',
-                borderRadius: '0.5rem',
-                border: 'none',
-                fontSize: '0.82rem',
-                transition: 'all 0.2s ease',
-              }}
-            >
-              {adding ? (
-                <>
-                  <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                  Adding...
-                </>
-              ) : added ? (
-                <>
-                  <i className="bi bi-check-circle-fill"></i> Added!
-                </>
-              ) : isOutOfStock ? (
-                'Out of Stock'
-              ) : (
-                <>
-                  <i className="bi bi-cart-plus"></i> Add to Cart
-                </>
-              )}
-            </button>
+            {/* Add to Cart Button or Admin View Badge */}
+            {isAdmin ? (
+              <div
+                className="btn btn-sm w-100 fw-semibold d-flex align-items-center justify-content-center gap-1.5 py-2 text-slate-500"
+                style={{
+                  backgroundColor: '#f1f5f9',
+                  borderRadius: '0.5rem',
+                  fontSize: '0.78rem',
+                  border: '1px solid #e2e8f0',
+                  cursor: 'default',
+                }}
+                title="Personal shopping is disabled for administrator accounts"
+              >
+                <i className="bi bi-shield-lock text-primary"></i> Admin View
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleAddToCart}
+                disabled={isOutOfStock || adding}
+                className="btn btn-sm w-100 fw-bold d-flex align-items-center justify-content-center gap-2 py-2"
+                style={{
+                  backgroundColor: added ? '#10b981' : '#1b64da',
+                  color: '#ffffff',
+                  borderRadius: '0.5rem',
+                  border: 'none',
+                  fontSize: '0.82rem',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                {adding ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    Adding...
+                  </>
+                ) : added ? (
+                  <>
+                    <i className="bi bi-check-circle-fill"></i> Added!
+                  </>
+                ) : isOutOfStock ? (
+                  'Out of Stock'
+                ) : (
+                  <>
+                    <i className="bi bi-cart-plus"></i> Add to Cart
+                  </>
+                )}
+              </button>
+            )}
           </div>
 
         </div>

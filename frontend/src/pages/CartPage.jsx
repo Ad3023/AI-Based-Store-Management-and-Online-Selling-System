@@ -22,6 +22,30 @@ const CartPage = () => {
     );
   }
 
+  if (user?.role === 'admin') {
+    return (
+      <div className="container py-5 text-center">
+        <div className="card ethio-card border-0 shadow-sm rounded-4 p-5 mx-auto" style={{ maxWidth: '520px' }}>
+          <div className="mx-auto rounded-circle d-flex align-items-center justify-content-center mb-3" style={{ width: '80px', height: '80px', background: '#eff6ff' }}>
+            <i className="bi bi-shield-lock-fill fs-1 text-primary"></i>
+          </div>
+          <h4 className="fw-bold text-slate-900">Administrator Cart Restriction</h4>
+          <p className="text-muted small mb-4">
+            Personal shopping carts and checkout are disabled for administrator accounts. You can review customer orders, inventory levels, and system settings in the admin portal.
+          </p>
+          <div className="d-flex justify-content-center gap-2">
+            <Link to="/admin/dashboard" className="btn btn-ethio-primary rounded-pill px-4">
+              <i className="bi bi-speedometer2 me-1"></i> Admin Dashboard
+            </Link>
+            <Link to="/shop" className="btn btn-outline-secondary rounded-pill px-4">
+              Browse Catalog
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const subtotal = Number(cart.total_price || 0);
   const shippingFee = subtotal > 0 ? 50.0 : 0.0;
   const tax = subtotal > 0 ? Math.round(subtotal * 0.15 * 100) / 100 : 0.0;

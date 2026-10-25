@@ -155,7 +155,7 @@ function App() {
                     path="/profile"
                     element={
                       <ProtectedRoute>
-                        <CustomerDashboardPage />
+                        <ProfilePage />
                       </ProtectedRoute>
                     }
                   />

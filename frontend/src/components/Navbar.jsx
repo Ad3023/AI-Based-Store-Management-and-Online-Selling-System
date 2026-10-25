@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useNotifications } from '../context/NotificationContext';
-import { cleanDisplayName, getUserRoleLabel } from '../utils/orderStatus';
+import { cleanDisplayName, getUserRoleLabel, getUserRoleBadgeClass } from '../utils/orderStatus';
 import { getMediaUrl, getDefaultAvatar } from '../utils/imageUrl';
 
 const Navbar = () => {
@@ -14,16 +15,78 @@ const Navbar = () => {
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [categories, setCategories] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    let isMounted = true;
+    api.get('products/categories/')
+      .then((res) => {
+        if (!isMounted) return;
+        const data = res.data.results || res.data || [];
+        setCategories(data);
+      })
+      .catch((err) => {
+        console.error('Navbar categories load error:', err);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Sync category & search input with URL search params when on /shop
+  useEffect(() => {
+    if (location.pathname === '/shop') {
+      const params = new URLSearchParams(location.search);
+      const catParam = params.get('category');
+      const searchParam = params.get('search');
+      setSelectedCategory(catParam || 'All');
+      if (searchParam !== null) {
+        setSearchTerm(searchParam);
+      }
+    }
+  }, [location.pathname, location.search]);
+
+  // Match selectedCategory to an available category object or slug
+  const matchedCategory = categories.find(
+    (c) =>
+      String(c.id) === selectedCategory ||
+      c.slug?.toLowerCase() === selectedCategory.toLowerCase() ||
+      c.name?.toLowerCase() === selectedCategory.toLowerCase() ||
+      c.name?.toLowerCase().includes(selectedCategory.toLowerCase()) ||
+      (c.slug && selectedCategory.toLowerCase().includes(c.slug.toLowerCase()))
+  );
+  const currentSelectValue = matchedCategory
+    ? (matchedCategory.slug || String(matchedCategory.id))
+    : selectedCategory;
+
+  const handleCategoryChange = (e) => {
+    const val = e.target.value;
+    setSelectedCategory(val);
+    const params = new URLSearchParams();
+    if (val && val !== 'All') {
+      params.set('category', val);
+    }
+    if (searchTerm.trim()) {
+      params.set('search', searchTerm.trim());
+    }
+    navigate(`/shop${params.toString() ? `?${params.toString()}` : ''}`);
+  };
 
   const handleSearch = (e) => {
     e.preventDefault();
-    if (searchTerm.trim()) {
-      navigate(`/shop?search=${encodeURIComponent(searchTerm.trim())}${selectedCategory !== 'All' ? `&category=${encodeURIComponent(selectedCategory)}` : ''}`);
-      setMobileMenuOpen(false);
+    const params = new URLSearchParams();
+    if (selectedCategory && selectedCategory !== 'All') {
+      params.set('category', selectedCategory);
     }
+    if (searchTerm.trim()) {
+      params.set('search', searchTerm.trim());
+    }
+    navigate(`/shop${params.toString() ? `?${params.toString()}` : ''}`);
+    setMobileMenuOpen(false);
   };
 
   const handleSignOut = () => {
@@ -33,7 +96,8 @@ const Navbar = () => {
   };
 
   const displayName = cleanDisplayName(user);
-  const roleLabel = getUserRoleLabel(user?.role);
+  const roleLabel = getUserRoleLabel(user);
+  const roleBadgeClass = getUserRoleBadgeClass(user);
   const avatarUrl = user?.avatar ? getMediaUrl(user.avatar) : null;
 
   return (
@@ -76,17 +140,31 @@ const Navbar = () => {
             <div className="input-group shadow-sm" style={{ borderRadius: '0.5rem', overflow: 'hidden' }}>
               <select
                 className="form-select border-0 bg-slate-100 text-slate-700 text-xs fw-semibold px-2.5"
-                style={{ maxWidth: '130px', cursor: 'pointer', backgroundColor: '#e2e8f0' }}
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
+                style={{ maxWidth: '160px', cursor: 'pointer', backgroundColor: '#e2e8f0' }}
+                value={currentSelectValue}
+                onChange={handleCategoryChange}
+                aria-label="Filter by category"
               >
                 <option value="All">All Categories</option>
-                <option value="Laptops">Laptops</option>
-                <option value="Smartphones">Smartphones</option>
-                <option value="Accessories">Accessories</option>
-                <option value="Audio">Audio</option>
-                <option value="Wearables">Wearables</option>
-                <option value="Tablets">Tablets</option>
+                {categories.length > 0 ? (
+                  categories.map((cat) => (
+                    <option key={cat.id} value={cat.slug || cat.id}>
+                      {cat.name}
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="smartphones-tablets">Smartphones & Tablets</option>
+                    <option value="laptops-computers">Laptops & Computers</option>
+                    <option value="audio-headphones">Audio & Headphones</option>
+                    <option value="smart-wearables">Smart Wearables</option>
+                    <option value="accessories-gadgets">Accessories & Gadgets</option>
+                  </>
+                )}
+                {currentSelectValue !== 'All' &&
+                  !categories.some((c) => (c.slug || String(c.id)) === currentSelectValue) && (
+                    <option value={currentSelectValue}>{currentSelectValue}</option>
+                  )}
               </select>
               <input
                 type="text"
@@ -109,36 +187,40 @@ const Navbar = () => {
           {/* Right Header Navigation Controls */}
           <div className="d-flex align-items-center gap-2 gap-sm-3 flex-shrink-0">
             
-            {/* Wishlist Icon */}
-            <Link
-              to="/wishlist"
-              className="text-white text-decoration-none position-relative p-2 rounded-circle hover-bg-navy d-flex align-items-center justify-content-center"
-              style={{ width: '38px', height: '38px', background: 'rgba(255, 255, 255, 0.08)' }}
-              title="My Wishlist"
-            >
-              <i className="bi bi-heart fs-5"></i>
-              {wishlistCount > 0 && (
-                <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style={{ fontSize: '0.65rem' }}>
-                  {wishlistCount}
-                </span>
-              )}
-            </Link>
+            {/* Wishlist Icon (hidden for admins) */}
+            {user?.role !== 'admin' && (
+              <Link
+                to="/wishlist"
+                className="text-white text-decoration-none position-relative p-2 rounded-circle hover-bg-navy d-flex align-items-center justify-content-center"
+                style={{ width: '38px', height: '38px', background: 'rgba(255, 255, 255, 0.08)' }}
+                title="My Wishlist"
+              >
+                <i className="bi bi-heart fs-5"></i>
+                {wishlistCount > 0 && (
+                  <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style={{ fontSize: '0.65rem' }}>
+                    {wishlistCount}
+                  </span>
+                )}
+              </Link>
+            )}
 
-            {/* Shopping Cart Icon with Counter */}
-            <Link
-              to="/cart"
-              className="text-white text-decoration-none position-relative px-2.5 py-1.5 rounded-3 d-flex align-items-center gap-1.5"
-              style={{ background: 'rgba(255, 255, 255, 0.08)' }}
-              title="Shopping Cart"
-            >
-              <i className="bi bi-cart3 fs-5" style={{ color: '#60a5fa' }}></i>
-              <span className="fw-semibold text-xs d-none d-sm-inline">Cart</span>
-              {cartCount > 0 && (
-                <span className="badge rounded-pill text-white" style={{ backgroundColor: '#1b64da', fontSize: '0.7rem' }}>
-                  {cartCount}
-                </span>
-              )}
-            </Link>
+            {/* Shopping Cart Icon with Counter (hidden for admins) */}
+            {user?.role !== 'admin' && (
+              <Link
+                to="/cart"
+                className="text-white text-decoration-none position-relative px-2.5 py-1.5 rounded-3 d-flex align-items-center gap-1.5"
+                style={{ background: 'rgba(255, 255, 255, 0.08)' }}
+                title="Shopping Cart"
+              >
+                <i className="bi bi-cart3 fs-5" style={{ color: '#60a5fa' }}></i>
+                <span className="fw-semibold text-xs d-none d-sm-inline">Cart</span>
+                {cartCount > 0 && (
+                  <span className="badge rounded-pill text-white" style={{ backgroundColor: '#1b64da', fontSize: '0.7rem' }}>
+                    {cartCount}
+                  </span>
+                )}
+              </Link>
+            )}
 
             {/* Notifications Dropdown (If signed in) */}
             {user && (
@@ -240,7 +322,7 @@ const Navbar = () => {
                     <div className="fw-bold text-sm text-slate-900">{displayName}</div>
                     <small className="text-muted text-xs">{user.email}</small>
                     <div className="mt-1">
-                      <span className="badge bg-primary bg-opacity-10 text-primary text-[10px] fw-bold text-uppercase">
+                      <span className={`badge ${roleBadgeClass} text-[10px] fw-bold text-uppercase`}>
                         {roleLabel}
                       </span>
                     </div>
@@ -250,7 +332,7 @@ const Navbar = () => {
                     <Link
                       className="dropdown-item py-2 rounded-2 text-xs d-flex align-items-center gap-2 fw-semibold"
                       to={
-                        user.role === 'admin'
+                        user.role === 'admin' || user.is_superuser
                           ? '/admin/dashboard'
                           : user.role === 'store_manager'
                           ? '/manager/dashboard'
@@ -270,7 +352,7 @@ const Navbar = () => {
                     </Link>
                   </li>
 
-                  {user.role === 'customer' && (
+                  {user.role === 'customer' && !user.is_superuser && (
                     <>
                       <li>
                         <Link className="dropdown-item py-2 rounded-2 text-xs d-flex align-items-center gap-2 fw-semibold" to="/customer/dashboard?tab=orders">
@@ -378,6 +460,20 @@ const Navbar = () => {
           <div className="d-md-none mt-2">
             <form onSubmit={handleSearch}>
               <div className="input-group">
+                <select
+                  className="form-select border-0 bg-slate-100 text-slate-700 text-xs fw-semibold px-2"
+                  style={{ maxWidth: '125px', cursor: 'pointer', backgroundColor: '#e2e8f0' }}
+                  value={currentSelectValue}
+                  onChange={handleCategoryChange}
+                  aria-label="Filter by category mobile"
+                >
+                  <option value="All">All Categories</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.slug || cat.id}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
                 <input
                   type="text"
                   className="form-control form-control-sm"

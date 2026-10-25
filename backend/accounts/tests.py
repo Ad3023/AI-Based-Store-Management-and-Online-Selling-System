@@ -149,3 +149,178 @@ class RoleBasedAuthSecurityTests(TestCase):
         }, format='json')
         self.assertEqual(login_res.status_code, status.HTTP_200_OK)
         self.assertIn('token', login_res.data)
+
+
+class MainAdminSecurityTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+        # Create Main Administrator
+        self.main_admin = User.objects.create_user(
+            username='addisuguche_admin',
+            email='addisuguche68@gmail.com',
+            password='AdminPassword123!',
+            first_name='Addisu',
+            last_name='Guche',
+            role=User.Role.ADMIN,
+            is_staff=True,
+            is_superuser=True
+        )
+        self.admin_token, _ = Token.objects.get_or_create(user=self.main_admin)
+
+        # Create Store Manager
+        self.manager = User.objects.create_user(
+            username='gucheaddisu_manager',
+            email='gucheaddisu5@gmail.com',
+            password='ManagerPassword123!',
+            first_name='Store',
+            last_name='Manager',
+            role=User.Role.STORE_MANAGER,
+            is_staff=True,
+            is_superuser=False
+        )
+        self.manager_token, _ = Token.objects.get_or_create(user=self.manager)
+
+        # Create Customer
+        self.customer = User.objects.create_user(
+            username='ethio_customer',
+            email='customer@example.com',
+            password='CustomerPassword123!',
+            first_name='Abebe',
+            last_name='Bikila',
+            role=User.Role.CUSTOMER
+        )
+        self.customer_token, _ = Token.objects.get_or_create(user=self.customer)
+
+    def test_main_admin_can_update_email_successfully(self):
+        """The Main Administrator can update their email address via Profile Settings"""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.admin_token.key}')
+        new_email = 'admin.updated@ethiotech.com'
+
+        response = self.client.put('/api/auth/profile/', {
+            'first_name': 'Addisu',
+            'last_name': 'Guche',
+            'email': new_email
+        }, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['email'], new_email)
+
+        # Verify persisted in database
+        self.main_admin.refresh_from_db()
+        self.assertEqual(self.main_admin.email, new_email)
+        self.assertEqual(self.main_admin.role, User.Role.ADMIN)
+
+        # Verify login works with the updated email
+        login_res = self.client.post('/api/auth/login/', {
+            'username': new_email,
+            'password': 'AdminPassword123!'
+        }, format='json')
+        self.assertEqual(login_res.status_code, status.HTTP_200_OK)
+        self.assertIn('token', login_res.data)
+
+        # Verify login also still works with the username
+        login_username_res = self.client.post('/api/auth/login/', {
+            'username': 'addisuguche_admin',
+            'password': 'AdminPassword123!'
+        }, format='json')
+        self.assertEqual(login_username_res.status_code, status.HTTP_200_OK)
+
+        # Verify administrative access remains functional
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {login_res.data["token"]}')
+        dash_res = self.client.get('/api/auth/system-analytics/')
+        self.assertEqual(dash_res.status_code, status.HTTP_200_OK)
+
+    def test_main_admin_email_uniqueness_validation(self):
+        """Updating email to an address already registered to another account is rejected"""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.admin_token.key}')
+
+        # Attempt to use store manager's email
+        response = self.client.put('/api/auth/profile/', {
+            'email': 'gucheaddisu5@gmail.com'
+        }, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('email', response.data)
+
+        # Confirm email remained unchanged in DB
+        self.main_admin.refresh_from_db()
+        self.assertEqual(self.main_admin.email, 'addisuguche68@gmail.com')
+
+    def test_main_admin_email_format_validation(self):
+        """Updating email with an invalid format is rejected"""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.admin_token.key}')
+
+        response = self.client.put('/api/auth/profile/', {
+            'email': 'invalid-email-address'
+        }, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('email', response.data)
+
+    def test_main_admin_cannot_change_own_role_via_profile(self):
+        """The Main Administrator cannot change their role through profile settings API"""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.admin_token.key}')
+
+        for demoted_role in ['customer', 'store_manager']:
+            response = self.client.put('/api/auth/profile/', {
+                'first_name': 'Addisu',
+                'role': demoted_role
+            }, format='json')
+
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+            self.main_admin.refresh_from_db()
+            self.assertEqual(self.main_admin.role, User.Role.ADMIN)
+
+    def test_main_admin_cannot_change_own_role_via_users_api(self):
+        """The Main Administrator cannot change their role via the user management API"""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.admin_token.key}')
+
+        for demoted_role in ['customer', 'store_manager']:
+            response = self.client.patch(f'/api/auth/users/{self.main_admin.id}/', {
+                'role': demoted_role
+            }, format='json')
+
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+            self.main_admin.refresh_from_db()
+            self.assertEqual(self.main_admin.role, User.Role.ADMIN)
+
+    def test_main_admin_account_cannot_be_deactivated_or_deleted(self):
+        """The Main Administrator account cannot be deactivated or deleted"""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.admin_token.key}')
+
+        # Attempt deactivation
+        deact_res = self.client.patch(f'/api/auth/users/{self.main_admin.id}/', {
+            'is_active': False
+        }, format='json')
+        self.assertEqual(deact_res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.main_admin.refresh_from_db()
+        self.assertTrue(self.main_admin.is_active)
+
+        # Attempt deletion
+        del_res = self.client.delete(f'/api/auth/users/{self.main_admin.id}/')
+        self.assertEqual(del_res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(User.objects.filter(id=self.main_admin.id).exists())
+
+    def test_admin_can_manage_other_users_roles(self):
+        """Admin retains ability to manage roles for other accounts (e.g. promoting customer to store manager)"""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.admin_token.key}')
+
+        response = self.client.patch(f'/api/auth/users/{self.customer.id}/', {
+            'role': 'store_manager'
+        }, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.customer.refresh_from_db()
+        self.assertEqual(self.customer.role, User.Role.STORE_MANAGER)
+
+    def test_store_manager_permissions_preserved(self):
+        """Store Managers retain their existing permissions and cannot alter admin roles"""
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.manager_token.key}')
+
+        # Store Manager cannot modify admin account
+        response = self.client.patch(f'/api/auth/users/{self.main_admin.id}/', {
+            'role': 'customer'
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+

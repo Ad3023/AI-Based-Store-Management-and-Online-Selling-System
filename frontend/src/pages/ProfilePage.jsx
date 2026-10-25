@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import CustomerSidebar from '../components/CustomerSidebar';
@@ -15,10 +15,24 @@ const ProfilePage = () => {
   const [formData, setFormData] = useState({
     first_name: user?.first_name || '',
     last_name: user?.last_name || '',
+    email: user?.email || '',
     phone_number: user?.phone_number || '',
     address: user?.address || '',
     city: user?.city || '',
   });
+
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        first_name: user.first_name || '',
+        last_name: user.last_name || '',
+        email: user.email || '',
+        phone_number: user.phone_number || '',
+        address: user.address || '',
+        city: user.city || '',
+      });
+    }
+  }, [user]);
 
   // Password State
   const [passwordData, setPasswordData] = useState({
@@ -126,19 +140,45 @@ const ProfilePage = () => {
     }
   };
 
-  // Save Personal Info
+  // Save Personal Info & Email
   const handleProfileSubmit = async (e) => {
     e.preventDefault();
     setProfileMsg({ type: '', text: '' });
+
+    const trimmedEmail = (formData.email || '').trim();
+    if (!trimmedEmail) {
+      setProfileMsg({ type: 'danger', text: 'Email address cannot be empty.' });
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      setProfileMsg({ type: 'danger', text: 'Please enter a valid email address format (e.g. name@domain.com).' });
+      return;
+    }
+
     try {
       setSavingProfile(true);
-      await updateProfile(formData);
-      setProfileMsg({ type: 'success', text: 'Profile details saved successfully!' });
-    } catch (err) {
-      setProfileMsg({
-        type: 'danger',
-        text: err.response?.data?.error || 'Failed to update profile information.',
+      await updateProfile({
+        ...formData,
+        email: trimmedEmail.toLowerCase(),
       });
+      setProfileMsg({ type: 'success', text: 'Profile details and email saved successfully!' });
+    } catch (err) {
+      const respData = err.response?.data;
+      let errMsg = 'Failed to update profile information.';
+      if (respData) {
+        if (respData.email) {
+          errMsg = Array.isArray(respData.email) ? respData.email[0] : respData.email;
+        } else if (respData.error) {
+          errMsg = respData.error;
+        } else if (respData.role) {
+          errMsg = Array.isArray(respData.role) ? respData.role[0] : respData.role;
+        } else if (respData.detail) {
+          errMsg = respData.detail;
+        }
+      }
+      setProfileMsg({ type: 'danger', text: errMsg });
     } finally {
       setSavingProfile(false);
     }
@@ -204,7 +244,16 @@ const ProfilePage = () => {
           </div>
 
           <div className="d-flex align-items-center gap-2">
-            <Link to="/customer/dashboard" className="btn btn-sm btn-ethio-outline text-xs">
+            <Link
+              to={
+                user.role === 'admin' || user.is_superuser
+                  ? '/admin/dashboard'
+                  : user.role === 'store_manager'
+                  ? '/manager/dashboard'
+                  : '/customer/dashboard'
+              }
+              className="btn btn-sm btn-ethio-outline text-xs"
+            >
               <i className="bi bi-grid me-1"></i> Dashboard
             </Link>
           </div>
@@ -213,6 +262,24 @@ const ProfilePage = () => {
         {/* Content Container (Screenshot 5) */}
         <div className="p-3 p-md-4 max-w-7xl">
           
+          {/* Privileged Role Navigation Notice */}
+          {(user.role === 'admin' || user.role === 'store_manager' || user.is_superuser) && (
+            <div className="alert alert-info rounded-3 p-3 mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2 text-xs shadow-sm border border-cyan-200">
+              <div className="d-flex align-items-center gap-2">
+                <i className="bi bi-shield-check fs-5 text-cyan-700"></i>
+                <span>
+                  You are editing profile settings for your <strong className="text-uppercase">{getUserRoleLabel(user)}</strong> account.
+                </span>
+              </div>
+              <Link
+                to={user.role === 'admin' || user.is_superuser ? '/admin/dashboard' : '/manager/dashboard'}
+                className="btn btn-sm btn-primary rounded-pill px-3 py-1 font-bold text-xs shrink-0 shadow-sm"
+              >
+                Go to {user.role === 'admin' || user.is_superuser ? 'Admin Console' : 'Store Manager Portal'} &rarr;
+              </Link>
+            </div>
+          )}
+
           {/* Notification Messages */}
           {profileMsg.text && (
             <div className={`alert alert-${profileMsg.type} rounded-3 text-xs mb-3 d-flex align-items-center gap-2`} role="alert">
@@ -348,17 +415,52 @@ const ProfilePage = () => {
                     </div>
 
                     <div className="col-12">
-                      <label className="form-label text-xs fw-semibold text-slate-700 mb-1">
-                        Email Address
-                      </label>
+                      <div className="d-flex justify-content-between align-items-center mb-1">
+                        <label className="form-label text-xs fw-semibold text-slate-700 mb-0">
+                          Email Address *
+                        </label>
+                        {user.role === 'admin' && (
+                          <span className="badge bg-primary bg-opacity-10 text-primary text-[10px] fw-semibold">
+                            <i className="bi bi-shield-check me-1"></i> Editable Admin Credential
+                          </span>
+                        )}
+                      </div>
                       <input
                         type="email"
-                        className="form-control text-sm bg-slate-50 text-muted"
-                        value={user.email}
-                        disabled
-                        readOnly
+                        className="form-control text-sm"
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        required
+                        placeholder="you@example.com"
                       />
-                      <small className="text-muted text-[11px]">Email address is bound to your account credentials.</small>
+                      <small className="text-muted text-[11px]">
+                        Used for account login, password recovery, and administrative security alerts.
+                      </small>
+                    </div>
+
+                    {/* System Protected Role Indicator */}
+                    <div className="col-12">
+                      <label className="form-label text-xs fw-semibold text-slate-700 mb-1">
+                        Assigned Role & System Access
+                      </label>
+                      <div className="d-flex align-items-center justify-content-between p-2.5 rounded-3 bg-slate-50 border border-slate-200">
+                        <div className="d-flex align-items-center gap-2">
+                          <i className="bi bi-shield-lock-fill text-danger fs-5"></i>
+                          <div>
+                            <span className="fw-bold text-xs text-slate-900 text-uppercase">{getUserRoleLabel(user)}</span>
+                            <div className="text-slate-500 text-[11px]">
+                              {user.role === 'admin'
+                                ? 'Main Administrator role is permanently locked and protected.'
+                                : user.role === 'store_manager'
+                                ? 'Store Manager with product catalog and inventory permissions.'
+                                : 'Standard Customer account for storefront browsing and purchases.'}
+                            </div>
+                          </div>
+                        </div>
+                        <span className="badge bg-light text-slate-600 border border-slate-300 text-[10px] px-2.5 py-1">
+                          <i className="bi bi-lock-fill me-1 text-slate-400"></i> Role Locked
+                        </span>
+                      </div>
                     </div>
 
                     <div className="col-sm-6">

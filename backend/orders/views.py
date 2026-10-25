@@ -14,7 +14,7 @@ from .serializers import (
 )
 from .chapa import ChapaService
 from products.models import Product, StockMovement
-from accounts.permissions import IsStoreManagerOrAdmin
+from accounts.permissions import IsStoreManagerOrAdmin, IsNotAdmin
 from accounts.models import User
 from notifications.models import Notification
 from recommendations.models import CustomerActivity
@@ -23,13 +23,25 @@ logger = logging.getLogger(__name__)
 
 
 class CartView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsNotAdmin]
 
     def get(self, request):
+        if request.user.role == User.Role.ADMIN:
+            return Response(
+                {'error': 'Administrators are restricted from personal shopping and cart operations.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
         cart, _ = Cart.objects.get_or_create(user=request.user)
         return Response(CartSerializer(cart).data)
 
     def post(self, request):
+        # Prevent administrators from adding items to cart
+        if request.user.role == User.Role.ADMIN:
+            return Response(
+                {'error': 'Administrators are restricted from adding products to the shopping cart. Please use a customer account for personal purchases.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         # Add item to cart
         cart, _ = Cart.objects.get_or_create(user=request.user)
         product_id = request.data.get('product_id')
@@ -65,6 +77,12 @@ class CartView(APIView):
         return Response(CartSerializer(cart).data)
 
     def put(self, request):
+        if request.user.role == User.Role.ADMIN:
+            return Response(
+                {'error': 'Administrators are restricted from modifying shopping cart items.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         # Update item quantity
         cart, _ = Cart.objects.get_or_create(user=request.user)
         item_id = request.data.get('item_id')
@@ -86,6 +104,12 @@ class CartView(APIView):
         return Response(CartSerializer(cart).data)
 
     def delete(self, request):
+        if request.user.role == User.Role.ADMIN:
+            return Response(
+                {'error': 'Administrators are restricted from cart operations.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         # Remove item or clear cart
         cart, _ = Cart.objects.get_or_create(user=request.user)
         item_id = request.data.get('item_id')
@@ -97,10 +121,16 @@ class CartView(APIView):
 
 
 class CheckoutView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsNotAdmin]
 
     @transaction.atomic
     def post(self, request):
+        if request.user.role == User.Role.ADMIN:
+            return Response(
+                {'error': 'Administrators are restricted from personal shopping checkout. Please use a customer account to place orders.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         cart, _ = Cart.objects.get_or_create(user=request.user)
         cart_items = cart.items.select_related('product').all()
 
@@ -219,6 +249,28 @@ class CheckoutView(APIView):
             link=f"/orders/{order.id}"
         )
 
+        # Notify store managers and administrators
+        customer_display = request.user.get_full_name() or request.user.username
+        staff_recipients = User.objects.filter(
+            Q(role__in=[User.Role.STORE_MANAGER, User.Role.ADMIN]) |
+            Q(is_superuser=True) |
+            Q(is_staff=True)
+        ).exclude(id=request.user.id).distinct()
+
+        for staff_user in staff_recipients:
+            review_link = (
+                f"/admin/orders?order_id={order.id}"
+                if (staff_user.role == User.Role.ADMIN or staff_user.is_superuser)
+                else f"/manager/orders?order_id={order.id}"
+            )
+            Notification.objects.create(
+                user=staff_user,
+                title=f"New Order Placed: #{order.order_number}",
+                message=f"Customer {customer_display} placed a new order #{order.order_number} for ETB {total_amount:.2f} ({order.payment_method}). Click to review.",
+                notification_type=Notification.NotificationType.ORDER_UPDATE,
+                link=review_link
+            )
+
         # If paying via Chapa, initialize session
         response_data = OrderSerializer(order).data
         if payment_method == 'CHAPA':
@@ -305,15 +357,26 @@ class PaymentEvidenceUploadView(APIView):
         order.status = Order.Status.PAYMENT_SUBMITTED
         order.save()
 
-        # In-app notification to store managers
-        managers = User.objects.filter(role__in=[User.Role.STORE_MANAGER, User.Role.ADMIN])
-        for mgr in managers:
+        # In-app notification to store managers and administrators
+        customer_display = request.user.get_full_name() or request.user.username
+        staff_recipients = User.objects.filter(
+            Q(role__in=[User.Role.STORE_MANAGER, User.Role.ADMIN]) |
+            Q(is_superuser=True) |
+            Q(is_staff=True)
+        ).exclude(id=request.user.id).distinct()
+
+        for mgr in staff_recipients:
+            review_link = (
+                f"/admin/orders?order_id={order.id}"
+                if (mgr.role == User.Role.ADMIN or mgr.is_superuser)
+                else f"/manager/orders?order_id={order.id}"
+            )
             Notification.objects.create(
                 user=mgr,
                 title="New Payment Evidence Uploaded",
-                message=f"Customer {request.user.username} uploaded payment evidence for Order #{order.order_number}.",
+                message=f"Customer {customer_display} uploaded payment evidence for Order #{order.order_number}. Click to review and verify.",
                 notification_type=Notification.NotificationType.ORDER_UPDATE,
-                link=f"/manager/orders/{order.id}"
+                link=review_link
             )
 
         return Response({
@@ -453,7 +516,7 @@ class ChapaInitializePaymentView(APIView):
     Accepts order_id in URL path or JSON body.
     Returns hosted checkout_url to redirect user to.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsNotAdmin]
 
     def post(self, request, order_id=None):
         target_order_id = order_id or request.data.get('order_id')
@@ -612,6 +675,28 @@ class ChapaVerifyPaymentView(APIView):
                 notification_type=Notification.NotificationType.PAYMENT_VERIFIED,
                 link=f"/receipts/{order.id}"
             )
+
+            # Notify store managers and administrators
+            customer_display = order.customer.get_full_name() or order.customer.username
+            staff_recipients = User.objects.filter(
+                Q(role__in=[User.Role.STORE_MANAGER, User.Role.ADMIN]) |
+                Q(is_superuser=True) |
+                Q(is_staff=True)
+            ).exclude(id=order.customer.id).distinct()
+
+            for mgr in staff_recipients:
+                review_link = (
+                    f"/admin/orders?order_id={order.id}"
+                    if (mgr.role == User.Role.ADMIN or mgr.is_superuser)
+                    else f"/manager/orders?order_id={order.id}"
+                )
+                Notification.objects.create(
+                    user=mgr,
+                    title=f"Payment Verified for Order #{order.order_number}",
+                    message=f"Customer {customer_display} completed Chapa payment of ETB {order.total_amount:.2f} for Order #{order.order_number}. Ready for fulfillment.",
+                    notification_type=Notification.NotificationType.PAYMENT_VERIFIED,
+                    link=review_link
+                )
 
         return Response({
             'status': 'success',

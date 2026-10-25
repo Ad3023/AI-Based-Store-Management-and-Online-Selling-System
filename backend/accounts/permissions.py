@@ -26,3 +26,13 @@ class IsStoreManagerOrAdmin(permissions.BasePermission):
         return bool(request.user and request.user.is_authenticated and (
             request.user.role in [User.Role.STORE_MANAGER, User.Role.ADMIN] or request.user.is_superuser
         ))
+
+
+class IsNotAdmin(permissions.BasePermission):
+    message = "Administrators are restricted from personal shopping and cart operations. Please use a customer account."
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user and request.user.is_authenticated and request.user.role != User.Role.ADMIN
+        )
+

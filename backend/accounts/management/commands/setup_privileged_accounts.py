@@ -81,7 +81,7 @@ class Command(BaseCommand):
         ))
 
     def _provision_account(self, email, preferred_username, password, role, is_staff, is_superuser, first_name, last_name):
-        user = User.objects.filter(email__iexact=email).first()
+        user = User.objects.filter(email__iexact=email).first() or User.objects.filter(username__iexact=preferred_username).first()
 
         if not user:
             # Check if preferred_username is taken

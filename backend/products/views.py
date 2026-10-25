@@ -58,9 +58,22 @@ class ProductListView(generics.ListCreateAPIView):
         ordering = self.request.query_params.get('ordering', '-created_at')
 
         if category:
-            queryset = queryset.filter(category_id=category)
+            cat_str = str(category).strip()
+            if cat_str.isdigit():
+                queryset = queryset.filter(category_id=int(cat_str))
+            else:
+                queryset = queryset.filter(
+                    Q(category__slug__iexact=cat_str) |
+                    Q(category__name__iexact=cat_str) |
+                    Q(category__name__icontains=cat_str) |
+                    Q(category__slug__icontains=cat_str)
+                )
         if category_slug:
-            queryset = queryset.filter(category__slug=category_slug)
+            slug_str = str(category_slug).strip()
+            queryset = queryset.filter(
+                Q(category__slug__iexact=slug_str) |
+                Q(category__slug__icontains=slug_str)
+            )
         if search:
             queryset = queryset.filter(
                 Q(name__icontains=search) |

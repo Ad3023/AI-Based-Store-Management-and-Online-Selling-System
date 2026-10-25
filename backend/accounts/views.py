@@ -82,16 +82,43 @@ class CurrentUserView(APIView):
         return Response(UserSerializer(request.user, context={'request': request}).data)
 
     def put(self, request):
+        # Prevent any attempt to change role via profile
+        if 'role' in request.data and request.data['role'] != request.user.role:
+            if request.user.role == User.Role.ADMIN or request.user.is_superuser:
+                return Response(
+                    {'error': "The Main Administrator's role is protected and cannot be changed."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        if 'password' in request.data and str(request.data['password']).strip():
+            new_pwd = str(request.data['password']).strip()
+            if len(new_pwd) < 6:
+                return Response({'error': 'Password must be at least 6 characters long.'}, status=status.HTTP_400_BAD_REQUEST)
+            request.user.set_password(new_pwd)
+            request.user.save()
+            log_action(request.user, "Password Changed", "User updated their account password", request)
+
+        old_email = request.user.email
         serializer = UserSerializer(request.user, data=request.data, partial=True, context={'request': request})
         if serializer.is_valid():
-            serializer.save()
+            user = serializer.save()
+            new_email = user.email
+
             # Also update profile preferred categories if supplied
             if 'preferred_categories' in request.data and hasattr(request.user, 'profile'):
                 request.user.profile.preferred_categories = request.data['preferred_categories']
                 request.user.profile.save()
-            log_action(request.user, "Profile Updated", "User updated their profile information", request)
+
+            if old_email and old_email.lower() != new_email.lower():
+                log_action(request.user, "Email Changed", f"Email updated from {old_email} to {new_email}", request)
+            else:
+                log_action(request.user, "Profile Updated", "User updated their profile information", request)
+
             return Response(UserSerializer(request.user, context={'request': request}).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request):
+        return self.put(request)
 
 
 class UserAvatarView(APIView):
@@ -180,15 +207,48 @@ class AdminUserDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = AdminUserSerializer
     queryset = User.objects.all()
 
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        new_role = request.data.get('role')
+        if new_role and new_role != instance.role:
+            if instance.is_superuser or instance.username == 'addisuguche_admin':
+                return Response(
+                    {'error': "The Main Administrator's role is protected and cannot be changed."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            if instance == request.user and request.user.role == User.Role.ADMIN:
+                return Response(
+                    {'error': "Administrators cannot change their own role."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        if 'is_active' in request.data and not request.data['is_active']:
+            if instance == request.user:
+                return Response(
+                    {'error': "Cannot deactivate your own administrator account."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            if instance.is_superuser or instance.username == 'addisuguche_admin':
+                return Response(
+                    {'error': "The Main Administrator account cannot be deactivated."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        return super().update(request, *args, **kwargs)
+
     def perform_update(self, serializer):
         user = serializer.save()
         log_action(self.request.user, "Admin Updated User", f"Updated user {user.username} (Role: {user.role}, Active: {user.is_active})", self.request)
 
-    def perform_destroy(self, instance):
-        if instance == self.request.user:
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance == request.user:
             return Response({'error': 'Cannot delete your own administrator account.'}, status=status.HTTP_400_BAD_REQUEST)
-        log_action(self.request.user, "Admin Deleted User", f"Deleted user {instance.username}", self.request)
-        instance.delete()
+        if instance.is_superuser or instance.username == 'addisuguche_admin':
+            return Response({'error': 'The Main Administrator account cannot be deleted.'}, status=status.HTTP_400_BAD_REQUEST)
+        log_action(request.user, "Admin Deleted User", f"Deleted user {instance.username}", request)
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class AuditLogListView(generics.ListAPIView):

@@ -103,7 +103,13 @@ const ShopPage = () => {
     setSearchParams(new URLSearchParams());
   };
 
-  const activeCategoryObj = categories.find((c) => String(c.id) === selectedCategory);
+  const activeCategoryObj = categories.find((c) =>
+    String(c.id) === selectedCategory ||
+    (c.slug && c.slug.toLowerCase() === selectedCategory.toLowerCase()) ||
+    (c.name && c.name.toLowerCase() === selectedCategory.toLowerCase()) ||
+    (c.name && c.name.toLowerCase().includes(selectedCategory.toLowerCase())) ||
+    (c.slug && selectedCategory.toLowerCase().includes(c.slug.toLowerCase()))
+  );
   const hasActiveFilters = Boolean(selectedCategory || searchQuery || inStockOnly || minPrice || maxPrice || selectedBrand);
 
   return (
@@ -128,7 +134,12 @@ const ShopPage = () => {
 
           {/* Individual Category Ribbon Items with Outlined Icons */}
           {categories.map((cat) => {
-            const isSelected = selectedCategory === String(cat.id);
+            const isSelected = Boolean(
+              (activeCategoryObj && activeCategoryObj.id === cat.id) ||
+              selectedCategory === String(cat.id) ||
+              (cat.slug && selectedCategory.toLowerCase() === cat.slug.toLowerCase()) ||
+              (cat.name && cat.name.toLowerCase().includes(selectedCategory.toLowerCase()))
+            );
             const iconClass = CATEGORY_ICON_MAP[cat.name] || 'bi-cpu';
             return (
               <button
@@ -140,7 +151,7 @@ const ShopPage = () => {
                     : 'bg-white text-slate-700 border border-slate-200 hover:border-primary'
                 }`}
                 style={{ width: '115px', height: '90px' }}
-                onClick={() => updateFilter('category', isSelected ? '' : String(cat.id))}
+                onClick={() => updateFilter('category', isSelected ? '' : (cat.slug || String(cat.id)))}
               >
                 <i className={`bi ${iconClass} fs-4 mb-1`}></i>
                 <span className="text-[11px] font-bold text-truncate w-100 px-1 text-center" title={cat.name}>

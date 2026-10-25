@@ -33,6 +33,7 @@ export const CartProvider = ({ children }) => {
 
   // Sync guest cart to backend upon login
   const syncGuestCartToBackend = async (guestCart) => {
+    if (user?.role === 'admin') return;
     if (!guestCart.items || guestCart.items.length === 0) return;
     try {
       for (const item of guestCart.items) {
@@ -51,6 +52,12 @@ export const CartProvider = ({ children }) => {
   };
 
   const fetchCart = async () => {
+    if (token && user?.role === 'admin') {
+      // Administrators have personal shopping disabled
+      setCart({ items: [], total_price: '0.00', total_items: 0 });
+      return;
+    }
+
     if (token && user?.role === 'customer') {
       try {
         setLoading(true);
@@ -66,10 +73,12 @@ export const CartProvider = ({ children }) => {
       } finally {
         setLoading(false);
       }
-    } else {
-      // Guest mode
+    } else if (!token || user?.role !== 'admin') {
+      // Guest mode (unauthenticated)
       const guest = loadGuestCart();
       setCart(guest);
+    } else {
+      setCart({ items: [], total_price: '0.00', total_items: 0 });
     }
   };
 
@@ -78,6 +87,10 @@ export const CartProvider = ({ children }) => {
   }, [token, user]);
 
   const addToCart = async (productOrId, quantity = 1, productObj = null) => {
+    if (user?.role === 'admin') {
+      throw new Error('Administrators are restricted from personal shopping and cart operations.');
+    }
+
     const productId = typeof productOrId === 'object' && productOrId !== null ? productOrId.id : productOrId;
     const resolvedProduct = typeof productOrId === 'object' && productOrId !== null ? productOrId : productObj;
 
@@ -126,6 +139,10 @@ export const CartProvider = ({ children }) => {
   };
 
   const updateQuantity = async (itemId, quantity) => {
+    if (user?.role === 'admin') {
+      throw new Error('Administrators cannot modify cart.');
+    }
+
     if (token && user?.role === 'customer') {
       const res = await api.put('orders/cart/', { item_id: itemId, quantity });
       setCart(res.data);
@@ -154,6 +171,10 @@ export const CartProvider = ({ children }) => {
   };
 
   const removeFromCart = async (itemId) => {
+    if (user?.role === 'admin') {
+      throw new Error('Administrators cannot modify cart.');
+    }
+
     if (token && user?.role === 'customer') {
       const res = await api.delete(`orders/cart/`, { data: { item_id: itemId } });
       setCart(res.data);
@@ -171,6 +192,11 @@ export const CartProvider = ({ children }) => {
   };
 
   const clearCart = async () => {
+    if (user?.role === 'admin') {
+      setCart({ items: [], total_price: '0.00', total_items: 0 });
+      return;
+    }
+
     if (token && user?.role === 'customer') {
       const res = await api.delete(`orders/cart/`);
       setCart(res.data);
@@ -187,14 +213,15 @@ export const CartProvider = ({ children }) => {
     <CartContext.Provider
       value={{
         cart,
-        cartCount: cart.total_items || 0,
-        cartTotal: cart.total_price || '0.00',
+        cartCount: user?.role === 'admin' ? 0 : (cart.total_items || 0),
+        cartTotal: user?.role === 'admin' ? '0.00' : (cart.total_price || '0.00'),
         loading,
         fetchCart,
         addToCart,
         updateQuantity,
         removeFromCart,
         clearCart,
+        isAdmin: user?.role === 'admin',
       }}
     >
       {children}

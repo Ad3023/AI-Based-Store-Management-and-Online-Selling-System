@@ -37,7 +37,7 @@ const Footer = () => {
               Better Tech. Brighter Future. Premium consumer electronics, laptops, wearables, and audio gear delivered across Ethiopia with verified Chapa checkout and official warranty coverage.
             </p>
             <div className="text-slate-400 text-xs">
-              <i className="bi bi-geo-alt text-info me-1"></i> Addis Ababa, Ethiopia &bull; ETB Currency
+              <i className="bi bi-geo-alt text-info me-1"></i> Debre Birhan, Amhara, Ethiopia &bull; ETB Currency
             </div>
           </div>
 

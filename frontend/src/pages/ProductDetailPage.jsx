@@ -57,6 +57,10 @@ const ProductDetailPage = () => {
   }, [id]);
 
   const handleAddToCart = async () => {
+    if (user?.role === 'admin') {
+      alert("Administrators cannot add products to a shopping cart.");
+      return;
+    }
     if (!user) {
       navigate(`/login?redirect=${encodeURIComponent(window.location.pathname)}&action=add_to_cart&productId=${product.id}&quantity=${quantity}`);
       return;
@@ -78,6 +82,10 @@ const ProductDetailPage = () => {
   };
 
   const handleBuyNow = async () => {
+    if (user?.role === 'admin') {
+      alert("Administrators cannot make personal shopping purchases.");
+      return;
+    }
     if (!user) {
       navigate(`/login?redirect=${encodeURIComponent(window.location.pathname)}&action=add_to_cart&productId=${product.id}&quantity=${quantity}`);
       return;
@@ -277,79 +285,105 @@ const ProductDetailPage = () => {
               </div>
 
               {/* Quantity Stepper & Action Buttons (Screen 8) */}
-              <div className="d-flex flex-wrap align-items-center gap-3 pt-3 border-top border-slate-200">
-                {/* Stepper */}
-                <div className="input-group" style={{ width: '130px' }}>
+              {user?.role === 'admin' ? (
+                <div className="p-3.5 rounded-3 bg-slate-50 border border-slate-300 w-100 mt-2">
+                  <div className="d-flex align-items-center gap-2 text-slate-800 fw-bold mb-1">
+                    <i className="bi bi-shield-lock-fill text-primary fs-5"></i>
+                    <span>Administrator Catalog Preview</span>
+                  </div>
+                  <p className="text-slate-600 small mb-3">
+                    Personal shopping buttons (Add to Cart, Buy Now, Wishlist) are disabled for administrator accounts. You can edit this item’s price, stock, and descriptions via the Manager / Admin catalog.
+                  </p>
+                  <div className="d-flex flex-wrap gap-2">
+                    <Link
+                      to={`/manager/products?search=${encodeURIComponent(product.name)}`}
+                      className="btn btn-sm btn-outline-primary fw-semibold d-inline-flex align-items-center gap-1"
+                    >
+                      <i className="bi bi-pencil-square"></i> Manage in Admin Console
+                    </Link>
+                    <Link
+                      to="/admin/dashboard"
+                      className="btn btn-sm btn-outline-secondary fw-semibold d-inline-flex align-items-center gap-1"
+                    >
+                      <i className="bi bi-speedometer2"></i> Admin Dashboard
+                    </Link>
+                  </div>
+                </div>
+              ) : (
+                <div className="d-flex flex-wrap align-items-center gap-3 pt-3 border-top border-slate-200">
+                  {/* Stepper */}
+                  <div className="input-group" style={{ width: '130px' }}>
+                    <button
+                      className="btn btn-outline-secondary"
+                      type="button"
+                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                      disabled={quantity <= 1 || product.stock === 0}
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      className="form-control text-center fw-bold"
+                      value={quantity}
+                      min="1"
+                      max={product.stock}
+                      onChange={(e) => setQuantity(Math.max(1, Math.min(product.stock, Number(e.target.value))))}
+                      disabled={product.stock === 0}
+                    />
+                    <button
+                      className="btn btn-outline-secondary"
+                      type="button"
+                      onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
+                      disabled={quantity >= product.stock || product.stock === 0}
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  {/* Add to Cart */}
                   <button
-                    className="btn btn-outline-secondary"
-                    type="button"
-                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                    disabled={quantity <= 1 || product.stock === 0}
+                    className={`btn btn-lg btn-ethio-primary px-4 fw-bold d-flex align-items-center gap-2 ${
+                      added ? 'btn-success' : ''
+                    }`}
+                    onClick={handleAddToCart}
+                    disabled={adding || product.stock === 0}
                   >
-                    -
+                    {adding ? (
+                      <span className="spinner-border spinner-border-sm" role="status"></span>
+                    ) : added ? (
+                      <>
+                        <i className="bi bi-check2-circle"></i> Added to Cart!
+                      </>
+                    ) : (
+                      <>
+                        <i className="bi bi-bag-plus-fill"></i> Add to Cart
+                      </>
+                    )}
                   </button>
-                  <input
-                    type="number"
-                    className="form-control text-center fw-bold"
-                    value={quantity}
-                    min="1"
-                    max={product.stock}
-                    onChange={(e) => setQuantity(Math.max(1, Math.min(product.stock, Number(e.target.value))))}
-                    disabled={product.stock === 0}
-                  />
+
+                  {/* Buy Now */}
                   <button
-                    className="btn btn-outline-secondary"
-                    type="button"
-                    onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
-                    disabled={quantity >= product.stock || product.stock === 0}
+                    className="btn btn-lg btn-outline-primary px-4 fw-bold"
+                    onClick={handleBuyNow}
+                    disabled={adding || product.stock === 0}
                   >
-                    +
+                    Buy Now
+                  </button>
+
+                  {/* Add to Wishlist */}
+                  <button
+                    type="button"
+                    className={`btn btn-lg rounded-3 px-3 d-flex align-items-center gap-2 ${
+                      isInWishlist(product.id) ? 'btn-danger text-white' : 'btn-outline-danger'
+                    }`}
+                    onClick={() => toggleWishlist(product)}
+                    title={isInWishlist(product.id) ? "Remove from Wishlist" : "Save to Wishlist"}
+                  >
+                    <i className={`bi ${isInWishlist(product.id) ? 'bi-heart-fill' : 'bi-heart'}`}></i>
+                    <span className="small fw-semibold">{isInWishlist(product.id) ? 'Wishlisted' : 'Wishlist'}</span>
                   </button>
                 </div>
-
-                {/* Add to Cart */}
-                <button
-                  className={`btn btn-lg btn-ethio-primary px-4 fw-bold d-flex align-items-center gap-2 ${
-                    added ? 'btn-success' : ''
-                  }`}
-                  onClick={handleAddToCart}
-                  disabled={adding || product.stock === 0}
-                >
-                  {adding ? (
-                    <span className="spinner-border spinner-border-sm" role="status"></span>
-                  ) : added ? (
-                    <>
-                      <i className="bi bi-check2-circle"></i> Added to Cart!
-                    </>
-                  ) : (
-                    <>
-                      <i className="bi bi-bag-plus-fill"></i> Add to Cart
-                    </>
-                  )}
-                </button>
-
-                {/* Buy Now */}
-                <button
-                  className="btn btn-lg btn-outline-primary px-4 fw-bold"
-                  onClick={handleBuyNow}
-                  disabled={adding || product.stock === 0}
-                >
-                  Buy Now
-                </button>
-
-                {/* Add to Wishlist */}
-                <button
-                  type="button"
-                  className={`btn btn-lg rounded-3 px-3 d-flex align-items-center gap-2 ${
-                    isInWishlist(product.id) ? 'btn-danger text-white' : 'btn-outline-danger'
-                  }`}
-                  onClick={() => toggleWishlist(product)}
-                  title={isInWishlist(product.id) ? "Remove from Wishlist" : "Save to Wishlist"}
-                >
-                  <i className={`bi ${isInWishlist(product.id) ? 'bi-heart-fill' : 'bi-heart'}`}></i>
-                  <span className="small fw-semibold">{isInWishlist(product.id) ? 'Wishlisted' : 'Wishlist'}</span>
-                </button>
-              </div>
+              )}
 
               {/* 3 Trust Badges (Screen 8) */}
               <div className="mt-4 pt-3 border-top border-slate-200">

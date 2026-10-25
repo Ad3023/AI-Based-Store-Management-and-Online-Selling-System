@@ -263,3 +263,62 @@ class VerifiedReviewTests(TestCase):
         })
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(ProductReview.objects.filter(product=self.product).count(), 1)
+
+
+class ProductCategoryFilterTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.cat_laptops = Category.objects.create(name='Laptops & Computers', slug='laptops-computers')
+        self.cat_wearables = Category.objects.create(name='Smart Wearables', slug='smart-wearables')
+
+        self.p_laptop = Product.objects.create(
+            name='Dell XPS 15',
+            slug='dell-xps-15',
+            category=self.cat_laptops,
+            price=Decimal('85000.00'),
+            stock=5,
+            is_active=True
+        )
+        self.p_watch = Product.objects.create(
+            name='Galaxy Watch 6',
+            slug='galaxy-watch-6',
+            category=self.cat_wearables,
+            price=Decimal('22000.00'),
+            stock=8,
+            is_active=True
+        )
+
+    def test_filter_by_partial_name(self):
+        response = self.client.get('/api/products/items/?category=Wearables')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data.get('results', response.data)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]['name'], 'Galaxy Watch 6')
+
+    def test_filter_by_slug(self):
+        response = self.client.get('/api/products/items/?category=smart-wearables')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data.get('results', response.data)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]['name'], 'Galaxy Watch 6')
+
+    def test_filter_by_id(self):
+        response = self.client.get(f'/api/products/items/?category={self.cat_wearables.id}')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data.get('results', response.data)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]['name'], 'Galaxy Watch 6')
+
+    def test_filter_by_category_and_search_query(self):
+        response = self.client.get('/api/products/items/?category=Wearables&search=Galaxy')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data.get('results', response.data)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]['name'], 'Galaxy Watch 6')
+
+        # When search does not match within category
+        response_mismatch = self.client.get('/api/products/items/?category=Wearables&search=Dell')
+        self.assertEqual(response_mismatch.status_code, status.HTTP_200_OK)
+        results_mismatch = response_mismatch.data.get('results', response_mismatch.data)
+        self.assertEqual(len(results_mismatch), 0)
+

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink, Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { cleanDisplayName, getUserRoleLabel } from '../../utils/orderStatus';
+import { cleanDisplayName, getUserRoleLabel, getUserRoleBadgeClass } from '../../utils/orderStatus';
 import { getMediaUrl, getDefaultAvatar } from '../../utils/imageUrl';
 
 const DashboardLayout = () => {
@@ -81,21 +81,23 @@ const DashboardLayout = () => {
         {/* User Persona Pill with Real Photo */}
         <div className="p-2.5 mx-3 my-2.5 rounded-3" style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
           <div className="d-flex align-items-center gap-2.5">
-            <img
-              src={avatarUrl}
-              alt={cleanDisplayName(user)}
-              className="rounded-circle object-fit-cover shrink-0 border border-white border-opacity-25"
-              style={{ width: '36px', height: '36px' }}
-              onError={(e) => {
-                e.target.onerror = null;
-                e.target.src = getDefaultAvatar(user?.username);
-              }}
-            />
+            <Link to="/profile" title="Edit Profile & Photo">
+              <img
+                src={avatarUrl}
+                alt={cleanDisplayName(user)}
+                className="rounded-circle object-fit-cover shrink-0 border border-white border-opacity-25"
+                style={{ width: '36px', height: '36px' }}
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = getDefaultAvatar(user?.username);
+                }}
+              />
+            </Link>
             <div className="text-truncate min-w-0">
-              <div className="fw-bold text-white small text-truncate" style={{ fontSize: '0.8rem' }}>
+              <Link to="/profile" className="text-decoration-none text-white fw-bold small text-truncate d-block" style={{ fontSize: '0.8rem' }} title="Edit Profile & Photo">
                 {cleanDisplayName(user)}
-              </div>
-              <span className="badge bg-primary text-uppercase" style={{ fontSize: '0.6rem' }}>
+              </Link>
+              <span className={`badge ${getUserRoleBadgeClass(user)} text-uppercase`} style={{ fontSize: '0.6rem' }}>
                 {getUserRoleLabel(user)}
               </span>
             </div>
@@ -346,11 +348,11 @@ const DashboardLayout = () => {
 
               {/* 13. Admin Profile */}
               <NavLink
-                to="/customer/dashboard?tab=profile"
+                to="/profile"
                 className="dashboard-nav-item py-1.5 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 text-decoration-none text-slate-300 hover:text-white hover:bg-slate-800 transition"
                 onClick={() => setMobileDrawerOpen(false)}
               >
-                <i className="bi bi-person-circle"></i> Admin Profile
+                <i className="bi bi-person-gear"></i> Admin Profile & Photo
               </NavLink>
             </>
           )}

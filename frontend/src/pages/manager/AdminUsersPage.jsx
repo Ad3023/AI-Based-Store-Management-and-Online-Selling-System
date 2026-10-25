@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api';
+import { useAuth } from '../../context/AuthContext';
 import { formatETB } from '../../utils/currency';
 
 const AdminUsersPage = () => {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [systemAnalytics, setSystemAnalytics] = useState(null);
@@ -12,6 +14,14 @@ const AdminUsersPage = () => {
   const [roleFilter, setRoleFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [feedback, setFeedback] = useState({ type: '', text: '' });
+
+  const isProtectedUser = (targetUser) => {
+    if (!targetUser) return false;
+    if (targetUser.is_superuser) return true;
+    if (targetUser.username === 'addisuguche_admin') return true;
+    if (currentUser && targetUser.id === currentUser.id && currentUser.role === 'admin') return true;
+    return false;
+  };
 
   const fetchAdminData = async () => {
     try {
@@ -50,23 +60,33 @@ const AdminUsersPage = () => {
   };
 
   const handleRoleChange = async (userId, newRole) => {
+    const target = users.find(u => u.id === userId);
+    if (target && isProtectedUser(target)) {
+      alert("The Main Administrator's role is protected and cannot be changed.");
+      return;
+    }
     try {
       await api.patch(`auth/users/${userId}/`, { role: newRole });
       setFeedback({ type: 'success', text: `User role successfully updated to ${newRole}.` });
       fetchAdminData();
     } catch (err) {
-      const msg = err.response?.data?.error || err.response?.data?.detail || "Failed to update user role.";
+      const msg = err.response?.data?.error || err.response?.data?.role?.[0] || err.response?.data?.detail || "Failed to update user role.";
       alert(msg);
     }
   };
 
   const handleToggleActive = async (userId, currentActive) => {
+    const target = users.find(u => u.id === userId);
+    if (target && isProtectedUser(target)) {
+      alert("The Main Administrator account cannot be deactivated.");
+      return;
+    }
     try {
       await api.patch(`auth/users/${userId}/`, { is_active: !currentActive });
       setFeedback({ type: 'success', text: `User account ${!currentActive ? 'activated' : 'deactivated'}.` });
       fetchAdminData();
     } catch (err) {
-      alert("Failed to toggle user status.");
+      alert(err.response?.data?.error || "Failed to toggle user status.");
     }
   };
 
@@ -234,16 +254,23 @@ const AdminUsersPage = () => {
                       </span>
                     </td>
                     <td>
-                      <select
-                        className="form-select form-select-sm rounded-pill text-xs"
-                        style={{ width: '150px' }}
-                        value={u.role}
-                        onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                      >
-                        <option value="customer">Customer</option>
-                        <option value="store_manager">Store Manager</option>
-                        <option value="admin">Administrator</option>
-                      </select>
+                      {isProtectedUser(u) ? (
+                        <div className="d-inline-flex align-items-center gap-1.5 px-3 py-1.5 rounded-pill bg-slate-100 text-slate-700 border border-slate-200">
+                          <i className="bi bi-shield-lock-fill text-danger"></i>
+                          <span className="fw-bold text-[11px]">Protected Administrator</span>
+                        </div>
+                      ) : (
+                        <select
+                          className="form-select form-select-sm rounded-pill text-xs"
+                          style={{ width: '150px' }}
+                          value={u.role}
+                          onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                        >
+                          <option value="customer">Customer</option>
+                          <option value="store_manager">Store Manager</option>
+                          <option value="admin">Administrator</option>
+                        </select>
+                      )}
                     </td>
                     <td>
                       {u.is_active !== false ? (
@@ -257,14 +284,20 @@ const AdminUsersPage = () => {
                       )}
                     </td>
                     <td className="text-end">
-                      <button
-                        className={`btn btn-sm rounded-pill px-3 py-1 text-xs ${
-                          u.is_active !== false ? 'btn-outline-danger' : 'btn-outline-success'
-                        }`}
-                        onClick={() => handleToggleActive(u.id, u.is_active !== false)}
-                      >
-                        {u.is_active !== false ? 'Deactivate' : 'Activate'}
-                      </button>
+                      {isProtectedUser(u) ? (
+                        <span className="badge bg-light text-muted border px-3 py-1.5 rounded-pill text-[10px]">
+                          <i className="bi bi-lock me-1"></i> System Account
+                        </span>
+                      ) : (
+                        <button
+                          className={`btn btn-sm rounded-pill px-3 py-1 text-xs ${
+                            u.is_active !== false ? 'btn-outline-danger' : 'btn-outline-success'
+                          }`}
+                          onClick={() => handleToggleActive(u.id, u.is_active !== false)}
+                        >
+                          {u.is_active !== false ? 'Deactivate' : 'Activate'}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation, Link } from 'react-router-dom';
 import api from '../../api';
 import { formatETB } from '../../utils/currency';
 
@@ -6,6 +7,9 @@ const ManagerOrdersPage = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const targetOrderId = searchParams.get('order_id');
 
   // Selected Order for Review/Verification Modal
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -29,6 +33,18 @@ const ManagerOrdersPage = () => {
   useEffect(() => {
     fetchOrders();
   }, [statusFilter]);
+
+  // Auto-open order review when arriving from an order notification link (?order_id=...)
+  useEffect(() => {
+    if (targetOrderId && orders.length > 0) {
+      const match = orders.find(
+        (o) => String(o.id) === String(targetOrderId) || String(o.order_number) === String(targetOrderId)
+      );
+      if (match) {
+        setSelectedOrder(match);
+      }
+    }
+  }, [orders, targetOrderId]);
 
   const handleVerify = async (action) => {
     if (!selectedOrder) return;
@@ -183,16 +199,14 @@ const ManagerOrdersPage = () => {
                       </select>
                     </td>
                     <td className="text-end">
-                      {ord.payment_evidence ? (
-                        <button
-                          className="btn btn-sm btn-outline-primary rounded-pill px-3"
-                          onClick={() => setSelectedOrder(ord)}
-                        >
-                          <i className="bi bi-eye me-1"></i> Review Evidence
-                        </button>
-                      ) : (
-                        <span className="text-muted small">Awaiting Upload</span>
-                      )}
+                      <button
+                        className={`btn btn-sm rounded-pill px-3 ${
+                          ord.payment_evidence ? 'btn-outline-primary' : 'btn-outline-secondary'
+                        }`}
+                        onClick={() => setSelectedOrder(ord)}
+                      >
+                        <i className="bi bi-eye me-1"></i> {ord.payment_evidence ? 'Review Evidence' : 'Review Order'}
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -259,50 +273,85 @@ const ManagerOrdersPage = () => {
                         <strong className="text-primary fs-5 ms-2">{formatETB(selectedOrder.total_amount)}</strong>
                       </div>
                       <div className="mb-2">
-                        <span className="text-muted">Bank Channel:</span>
+                        <span className="text-muted">Payment Channel:</span>
                         <span className="badge bg-light text-dark border ms-2">
-                          {selectedOrder.payment_evidence?.payment_method}
+                          {selectedOrder.payment_evidence?.payment_method || selectedOrder.payment_method || 'Standard'}
                         </span>
                       </div>
-                      <div className="mb-2">
-                        <span className="text-muted">Transaction Reference:</span>
-                        <code className="fs-6 ms-2 text-dark">{selectedOrder.payment_evidence?.transaction_reference}</code>
-                      </div>
+                      {selectedOrder.payment_evidence?.transaction_reference && (
+                        <div className="mb-2">
+                          <span className="text-muted">Transaction Reference:</span>
+                          <code className="fs-6 ms-2 text-dark">{selectedOrder.payment_evidence.transaction_reference}</code>
+                        </div>
+                      )}
                       <div>
-                        <span className="text-muted">Submitted At:</span>
-                        <span className="ms-2">{new Date(selectedOrder.payment_evidence?.submitted_at).toLocaleString()}</span>
+                        <span className="text-muted">Order Date:</span>
+                        <span className="ms-2">{new Date(selectedOrder.created_at).toLocaleString()}</span>
                       </div>
                     </div>
 
-                    {/* Rejection reason input */}
-                    <div className="mb-3">
-                      <label className="form-label small fw-bold text-danger">Rejection Reason (if rejecting):</label>
-                      <input
-                        type="text"
-                        className="form-control form-control-sm"
-                        placeholder="e.g. Transaction ID not found in CBE statement"
-                        value={rejectionReason}
-                        onChange={(e) => setRejectionReason(e.target.value)}
-                      />
-                    </div>
+                    {/* Order Items Breakdown */}
+                    {selectedOrder.items && selectedOrder.items.length > 0 && (
+                      <div className="p-2.5 rounded-3 bg-light border mb-3 small">
+                        <span className="fw-bold text-muted d-block mb-1">Items ({selectedOrder.items.length}):</span>
+                        <div style={{ maxHeight: '120px', overflowY: 'auto' }}>
+                          {selectedOrder.items.map((it, idx) => (
+                            <div key={idx} className="d-flex justify-content-between text-xs py-1 border-bottom border-light">
+                              <span className="text-truncate" style={{ maxWidth: '210px' }}>
+                                {it.product_name || `Product #${it.product}`} x{it.quantity}
+                              </span>
+                              <span className="fw-bold text-dark">{formatETB(it.unit_price * it.quantity)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
-                    {/* Action Buttons */}
-                    <div className="d-flex gap-2">
-                      <button
-                        className="btn btn-success flex-grow-1 rounded-pill fw-bold"
-                        onClick={() => handleVerify('approve')}
-                        disabled={processingAction}
-                      >
-                        <i className="bi bi-check-circle-fill me-1"></i> Approve & Issue Receipt
-                      </button>
-                      <button
-                        className="btn btn-outline-danger flex-grow-1 rounded-pill fw-bold"
-                        onClick={() => handleVerify('reject')}
-                        disabled={processingAction}
-                      >
-                        <i className="bi bi-x-circle-fill me-1"></i> Reject Evidence
-                      </button>
-                    </div>
+                    {/* Rejection reason & verification action buttons (if evidence attached) */}
+                    {selectedOrder.payment_evidence ? (
+                      <>
+                        <div className="mb-3">
+                          <label className="form-label small fw-bold text-danger">Rejection Reason (if rejecting):</label>
+                          <input
+                            type="text"
+                            className="form-control form-control-sm"
+                            placeholder="e.g. Transaction reference not found in CBE/Telebirr statement"
+                            value={rejectionReason}
+                            onChange={(e) => setRejectionReason(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="d-flex gap-2">
+                          <button
+                            className="btn btn-success flex-grow-1 rounded-pill fw-bold"
+                            onClick={() => handleVerify('approve')}
+                            disabled={processingAction}
+                          >
+                            <i className="bi bi-check-circle-fill me-1"></i> Approve & Issue Receipt
+                          </button>
+                          <button
+                            className="btn btn-outline-danger flex-grow-1 rounded-pill fw-bold"
+                            onClick={() => handleVerify('reject')}
+                            disabled={processingAction}
+                          >
+                            <i className="bi bi-x-circle-fill me-1"></i> Reject Evidence
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="d-flex flex-column gap-2">
+                        <div className="alert alert-light border small text-muted p-2 mb-0">
+                          <i className="bi bi-info-circle me-1"></i> Paid or electronic gateway order. You can adjust fulfillment status directly from the orders table or view full details.
+                        </div>
+                        <Link
+                          to={`/orders/${selectedOrder.id}`}
+                          target="_blank"
+                          className="btn btn-outline-primary btn-sm rounded-pill w-100"
+                        >
+                          <i className="bi bi-box-arrow-up-right me-1"></i> View Full Customer Order Page
+                        </Link>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

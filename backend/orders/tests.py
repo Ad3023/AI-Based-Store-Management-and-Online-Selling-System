@@ -225,3 +225,159 @@ class ChapaPaymentTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['message'], 'Payment already verified.')
         mock_get.assert_not_called()
+
+
+class AdminCartRestrictionTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = User.objects.create_user(
+            username='system_admin',
+            email='admin@example.com',
+            password='adminpassword123',
+            role=User.Role.ADMIN,
+            is_staff=True,
+            is_superuser=True
+        )
+        self.customer = User.objects.create_user(
+            username='regular_customer',
+            email='customer2@example.com',
+            password='custpassword123',
+            role=User.Role.CUSTOMER
+        )
+        self.category = Category.objects.create(name='Computers', slug='computers')
+        self.product = Product.objects.create(
+            name='Dell XPS 15',
+            slug='dell-xps-15',
+            category=self.category,
+            price=Decimal('25000.00'),
+            stock=5,
+            is_active=True
+        )
+
+    def test_admin_cannot_access_cart(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get('/api/orders/cart/')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue('error' in response.data or 'detail' in response.data)
+
+    def test_admin_cannot_add_product_to_cart(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post('/api/orders/cart/', {
+            'product_id': self.product.id,
+            'quantity': 1
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue('error' in response.data or 'detail' in response.data)
+
+    def test_admin_cannot_update_cart(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.put('/api/orders/cart/', {
+            'item_id': 1,
+            'quantity': 2
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_cannot_delete_from_cart(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.delete('/api/orders/cart/', format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_cannot_checkout(self):
+        self.client.force_authenticate(user=self.admin)
+        payload = {
+            'shipping_name': 'Admin User',
+            'shipping_phone': '0911000000',
+            'shipping_address': 'Headquarters, Addis Ababa',
+            'shipping_city': 'Addis Ababa',
+            'payment_method': 'CHAPA'
+        }
+        response = self.client.post('/api/orders/checkout/', payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue('error' in response.data or 'detail' in response.data)
+
+    def test_admin_cannot_initialize_chapa_payment(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post('/api/orders/chapa/initialize/', {
+            'order_id': 999
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_customer_can_use_cart_normally(self):
+        self.client.force_authenticate(user=self.customer)
+        # GET empty cart
+        get_res = self.client.get('/api/orders/cart/')
+        self.assertEqual(get_res.status_code, status.HTTP_200_OK)
+
+        # POST add item
+        post_res = self.client.post('/api/orders/cart/', {
+            'product_id': self.product.id,
+            'quantity': 2
+        }, format='json')
+        self.assertEqual(post_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(post_res.data['items']), 1)
+        self.assertEqual(post_res.data['items'][0]['quantity'], 2)
+
+        # PUT update quantity
+        item_id = post_res.data['items'][0]['id']
+        put_res = self.client.put('/api/orders/cart/', {
+            'item_id': item_id,
+            'quantity': 3
+        }, format='json')
+        self.assertEqual(put_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(put_res.data['items'][0]['quantity'], 3)
+
+        # DELETE remove item
+        del_res = self.client.delete('/api/orders/cart/', {
+            'item_id': item_id
+        }, format='json')
+        self.assertEqual(del_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(del_res.data['items']), 0)
+
+    def test_admin_retains_access_to_orders_oversight(self):
+        # Admin should still have access to OrderListView to oversee customer orders
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get('/api/orders/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_customer_order_creates_notifications_for_admin_and_manager(self):
+        from notifications.models import Notification
+        manager = User.objects.create_user(
+            username='mgr_notif',
+            email='mgr_notif@example.com',
+            password='password123',
+            role='store_manager'
+        )
+        self.client.force_authenticate(user=self.customer)
+        # Add item to cart
+        self.client.post('/api/orders/cart/', {'product_id': self.product.id, 'quantity': 1}, format='json')
+
+        # Place order
+        response = self.client.post('/api/orders/checkout/', {
+            'shipping_name': 'Customer Test',
+            'shipping_phone': '0911000000',
+            'shipping_address': 'Debre Birhan',
+            'shipping_city': 'Debre Birhan',
+            'delivery_method': 'standard',
+            'payment_method': 'CBE_TRANSFER'
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        order_id = response.data['id']
+
+        # Verify customer notification exists
+        cust_notif = Notification.objects.filter(user=self.customer).first()
+        self.assertIsNotNone(cust_notif)
+        self.assertIn(str(order_id), cust_notif.link)
+
+        # Verify admin received notification with link to /admin/orders
+        admin_notif = Notification.objects.filter(user=self.admin).first()
+        self.assertIsNotNone(admin_notif)
+        self.assertIn('/admin/orders', admin_notif.link)
+        self.assertIn(f'order_id={order_id}', admin_notif.link)
+
+        # Verify manager received notification with link to /manager/orders
+        mgr_notif = Notification.objects.filter(user=manager).first()
+        self.assertIsNotNone(mgr_notif)
+        self.assertIn('/manager/orders', mgr_notif.link)
+        self.assertIn(f'order_id={order_id}', mgr_notif.link)
+
+

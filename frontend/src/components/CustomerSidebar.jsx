@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useNotifications } from '../context/NotificationContext';
-import { cleanDisplayName, getUserRoleLabel } from '../utils/orderStatus';
+import { cleanDisplayName, getUserRoleLabel, getUserRoleBadgeClass } from '../utils/orderStatus';
 import { getMediaUrl, getDefaultAvatar } from '../utils/imageUrl';
 
 const CustomerSidebar = ({ mobileOpen, setMobileOpen, activeItem }) => {
@@ -21,7 +21,8 @@ const CustomerSidebar = ({ mobileOpen, setMobileOpen, activeItem }) => {
   };
 
   const displayName = cleanDisplayName(user);
-  const roleLabel = getUserRoleLabel(user?.role);
+  const roleLabel = getUserRoleLabel(user);
+  const roleBadgeClass = getUserRoleBadgeClass(user);
   const avatarUrl = user?.avatar ? getMediaUrl(user.avatar) : null;
 
   const currentTab = new URLSearchParams(location.search).get('tab') || 'overview';
@@ -105,7 +106,7 @@ const CustomerSidebar = ({ mobileOpen, setMobileOpen, activeItem }) => {
             <div className="fw-bold text-white text-xs text-truncate">
               {displayName}
             </div>
-            <span className="badge bg-primary bg-opacity-20 text-blue-300 text-[10px] fw-semibold text-uppercase">
+            <span className={`badge ${roleBadgeClass} text-[10px] fw-semibold text-uppercase`}>
               {roleLabel}
             </span>
           </div>
@@ -114,6 +115,28 @@ const CustomerSidebar = ({ mobileOpen, setMobileOpen, activeItem }) => {
         {/* Navigation Items (Screens 4 & 5) */}
         <div className="flex-grow-1 py-1" style={{ overflowY: 'auto' }}>
           
+          {(user?.role === 'admin' || user?.is_superuser) && (
+            <Link
+              to="/admin/dashboard"
+              className="ethio-nav-item bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 mb-1.5"
+              onClick={() => setMobileOpen(false)}
+            >
+              <i className="bi bi-shield-lock-fill text-danger"></i>
+              <span className="fw-bold">Admin Console</span>
+            </Link>
+          )}
+
+          {user?.role === 'store_manager' && (
+            <Link
+              to="/manager/dashboard"
+              className="ethio-nav-item bg-info bg-opacity-10 text-info border border-info border-opacity-25 mb-1.5"
+              onClick={() => setMobileOpen(false)}
+            >
+              <i className="bi bi-speedometer2 text-info"></i>
+              <span className="fw-bold">Manager Portal</span>
+            </Link>
+          )}
+
           <Link
             to="/customer/dashboard?tab=overview"
             className={`ethio-nav-item ${isNavActive('dashboard') ? 'active' : ''}`}
@@ -132,28 +155,32 @@ const CustomerSidebar = ({ mobileOpen, setMobileOpen, activeItem }) => {
             <span>Browse Products</span>
           </Link>
 
-          <Link
-            to="/cart"
-            className={`ethio-nav-item ${isNavActive('cart') ? 'active' : ''}`}
-            onClick={() => setMobileOpen(false)}
-          >
-            <i className="bi bi-cart3"></i>
-            <span>My Cart</span>
-            {cartCount > 0 && (
-              <span className="badge rounded-pill bg-primary ms-auto" style={{ fontSize: '0.68rem' }}>
-                {cartCount}
-              </span>
-            )}
-          </Link>
+          {user?.role !== 'admin' && (
+            <Link
+              to="/cart"
+              className={`ethio-nav-item ${isNavActive('cart') ? 'active' : ''}`}
+              onClick={() => setMobileOpen(false)}
+            >
+              <i className="bi bi-cart3"></i>
+              <span>My Cart</span>
+              {cartCount > 0 && (
+                <span className="badge rounded-pill bg-primary ms-auto" style={{ fontSize: '0.68rem' }}>
+                  {cartCount}
+                </span>
+              )}
+            </Link>
+          )}
 
-          <Link
-            to="/customer/dashboard?tab=orders"
-            className={`ethio-nav-item ${isNavActive('orders') ? 'active' : ''}`}
-            onClick={() => setMobileOpen(false)}
-          >
-            <i className="bi bi-box-seam"></i>
-            <span>My Orders</span>
-          </Link>
+          {user?.role !== 'admin' && (
+            <Link
+              to="/customer/dashboard?tab=orders"
+              className={`ethio-nav-item ${isNavActive('orders') ? 'active' : ''}`}
+              onClick={() => setMobileOpen(false)}
+            >
+              <i className="bi bi-box-seam"></i>
+              <span>My Orders</span>
+            </Link>
+          )}
 
           <Link
             to="/track"
