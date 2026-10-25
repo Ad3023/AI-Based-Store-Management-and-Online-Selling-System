@@ -41,3 +41,11 @@ media/
 *.swo
 .DS_Store
 Thumbs.db
+
+# Scratch, Testing & Temporary Data
+backend/backup_before_reset.json
+backend/reset_app_data.py
+backend/verify_ethio_tech.py
+backend/verify_stage1.py
+backend/check_postgres_connection.py
+

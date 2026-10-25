@@ -35,7 +35,7 @@ const WishlistPage = () => {
           <div className="d-flex gap-2">
             <button
               type="button"
-              className="btn btn-primary-gradient rounded-full px-4 text-xs font-bold shadow-sm d-flex align-items-center gap-1.5"
+              className="btn btn-ethio-primary px-4 text-xs font-bold shadow-sm d-flex align-items-center gap-1.5"
               onClick={handleMoveAllToCart}
             >
               <i className="bi bi-bag-plus-fill"></i>
@@ -43,7 +43,7 @@ const WishlistPage = () => {
             </button>
             <button
               type="button"
-              className="btn btn-outline-danger rounded-full px-3 text-xs font-bold"
+              className="btn btn-outline-danger px-3 text-xs font-bold"
               onClick={clearWishlist}
             >
               Clear All
@@ -54,7 +54,7 @@ const WishlistPage = () => {
 
       {/* Wishlist Grid or Empty State */}
       {wishlist.length === 0 ? (
-        <div className="card border-0 shadow-sm rounded-4 p-5 text-center bg-white my-4 mx-auto" style={{ maxWidth: '520px' }}>
+        <div className="card ethio-card p-5 text-center my-4 mx-auto" style={{ maxWidth: '520px' }}>
           <div
             className="rounded-circle d-inline-flex align-items-center justify-content-center text-rose-500 mx-auto mb-3"
             style={{ width: '70px', height: '70px', background: '#ffe4e6' }}
@@ -63,11 +63,11 @@ const WishlistPage = () => {
           </div>
           <h4 className="fw-bolder text-slate-900 mb-2">Your Wishlist is Empty</h4>
           <p className="text-slate-500 text-xs mb-4">
-            Explore our curated AI electronics catalog and click the heart icon on any product card to save your top picks.
+            Explore our curated electronics catalog and click the heart icon on any product card to save your top picks.
           </p>
           <Link
             to="/shop"
-            className="btn btn-primary-gradient rounded-full px-5 py-2.5 font-bold text-xs shadow-sm mx-auto"
+            className="btn btn-ethio-primary px-5 py-2.5 font-bold text-xs shadow-sm mx-auto"
           >
             Explore Electronics Catalog
           </Link>

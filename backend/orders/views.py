@@ -4,6 +4,7 @@ from rest_framework import generics, status, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db import transaction
+from django.db.models import Sum, Q
 from django.utils import timezone
 from .models import Cart, CartItem, Order, OrderItem, PaymentEvidence, Receipt, WarrantyClaim
 from .serializers import (
@@ -198,11 +199,10 @@ class CheckoutView(APIView):
         # Clear cart
         cart.items.all().delete()
 
-        # Update customer profile totals
+        # Update customer profile order count (total_spent is strictly incremented only upon verified payment)
         if hasattr(request.user, 'profile'):
             profile = request.user.profile
             profile.order_count += 1
-            profile.total_spent = Decimal(str(profile.total_spent)) + total_amount
             profile.save()
 
         # Create customer notification
@@ -240,13 +240,20 @@ class OrderListView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
+        status_param = self.request.query_params.get('status')
+        search_param = self.request.query_params.get('search')
+
         if user.role in [User.Role.STORE_MANAGER, User.Role.ADMIN] or user.is_superuser:
             qs = Order.objects.all()
-            status_param = self.request.query_params.get('status')
-            if status_param:
-                qs = qs.filter(status=status_param)
-            return qs
-        return Order.objects.filter(customer=user)
+        else:
+            qs = Order.objects.filter(customer=user)
+
+        if status_param:
+            qs = qs.filter(status=status_param)
+        if search_param:
+            term = search_param.strip()
+            qs = qs.filter(Q(order_number__icontains=term) | Q(chapa_tx_ref__icontains=term))
+        return qs
 
 
 class OrderDetailView(generics.RetrieveAPIView):
@@ -750,4 +757,39 @@ class WarrantyClaimDetailView(APIView):
         )
 
         return Response(WarrantyClaimSerializer(claim).data)
+
+
+class CustomerDashboardSummaryView(APIView):
+    """
+    Retrieves authoritative authenticated customer metrics and recent orders.
+    Calculates exact total orders, total verified spent in ETB, and issued receipts.
+    Strictly isolated to request.user to prevent data leakage.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        orders_qs = Order.objects.filter(customer=user)
+        total_orders = orders_qs.count()
+
+        # Count completed purchases only (payment verified and processed, never pending or cancelled)
+        verified_orders = orders_qs.filter(status__in=[
+            Order.Status.PROCESSING,
+            Order.Status.SHIPPED,
+            Order.Status.DELIVERED
+        ])
+        total_spent = float(verified_orders.aggregate(total=Sum('total_amount'))['total'] or 0.0)
+
+        # Count receipts that genuinely exist for this customer
+        verified_receipts_count = Receipt.objects.filter(order__customer=user).count()
+
+        # Latest 5 orders for authenticated customer
+        recent_orders = orders_qs.order_by('-created_at')[:5]
+
+        return Response({
+            'total_orders': total_orders,
+            'total_spent': total_spent,
+            'verified_receipts_count': verified_receipts_count,
+            'recent_orders': OrderSerializer(recent_orders, many=True).data
+        })
 

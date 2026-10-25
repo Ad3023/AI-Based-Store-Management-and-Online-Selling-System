@@ -15,32 +15,29 @@ const Footer = () => {
   };
 
   return (
-    <footer className="text-white pt-5 pb-4 mt-auto border-top border-slate-800" style={{ background: '#040814' }}>
-      <div className="container">
+    <footer className="text-white pt-5 pb-4 mt-auto border-top border-slate-800" style={{ background: '#0b1a2d' }}>
+      <div className="container-fluid max-w-7xl px-3 px-lg-4">
         {/* 4 Clean Columns */}
         <div className="row g-4 mb-4">
           {/* Brand & Mission */}
           <div className="col-lg-4 col-md-6">
             <div className="d-flex align-items-center gap-2 mb-3">
               <div
-                className="rounded-xl d-flex align-items-center justify-content-center text-white shadow-sm"
-                style={{ width: '40px', height: '40px', background: 'var(--gradient-primary)' }}
+                className="rounded-3 d-flex align-items-center justify-content-center text-white shadow-sm"
+                style={{ width: '40px', height: '40px', background: 'var(--color-primary)' }}
               >
                 <i className="bi bi-cpu-fill fs-5"></i>
               </div>
               <div className="d-flex align-items-center">
-                <span className="fw-bolder fs-4 text-white tracking-tight">Nexus</span>
-                <span className="text-primary fw-bolder fs-4 tracking-tight">Store</span>
-                <span className="badge bg-slate-800 text-cyan-400 ms-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono border border-cyan-500/30">
-                  AI
-                </span>
+                <span className="fw-bolder fs-4 text-white tracking-tight">EthioTech</span>
+                <span className="text-info fw-bolder fs-4 tracking-tight ms-1">Market</span>
               </div>
             </div>
-            <p className="text-slate-400 text-xs mb-3" style={{ lineHeight: '1.7' }}>
-              Premium consumer electronics, smart gadgets, and high-performance computing delivered across Ethiopia with verified Chapa checkout and official warranty coverage.
+            <p className="text-slate-300 text-xs mb-3" style={{ lineHeight: '1.7' }}>
+              Better Tech. Brighter Future. Premium consumer electronics, laptops, wearables, and audio gear delivered across Ethiopia with verified Chapa checkout and official warranty coverage.
             </p>
             <div className="text-slate-400 text-xs">
-              <i className="bi bi-geo-alt text-cyan-400 me-1"></i> Addis Ababa, Ethiopia &bull; ETB Currency
+              <i className="bi bi-geo-alt text-info me-1"></i> Addis Ababa, Ethiopia &bull; ETB Currency
             </div>
           </div>
 
@@ -84,12 +81,12 @@ const Footer = () => {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                 />
-                <button className="btn btn-cyan-glow btn-sm rounded-end-xl text-xs px-3 font-bold" type="submit">
+                <button className="btn btn-ethio-primary btn-sm rounded-end-3 text-xs px-3 font-bold" type="submit">
                   Subscribe
                 </button>
               </div>
               {subscribed && (
-                <div className="text-cyan-400 text-[11px] mt-1.5 font-semibold">
+                <div className="text-info text-[11px] mt-1.5 font-semibold">
                   <i className="bi bi-check-circle me-1"></i> Subscribed successfully!
                 </div>
               )}
@@ -114,7 +111,7 @@ const Footer = () => {
 
         <div className="d-flex flex-column flex-md-row justify-content-between align-items-center text-slate-500 text-xs">
           <div>
-            &copy; {new Date().getFullYear()} <strong className="text-slate-300">NexusStore AI</strong> &bull; All prices in Ethiopian Birr (ETB). Payments processed securely via Chapa.
+            &copy; {new Date().getFullYear()} <strong className="text-slate-300">EthioTech Market</strong> &bull; All prices in Ethiopian Birr (ETB). Payments processed securely via Chapa.
           </div>
           <div className="d-flex gap-3 mt-2 mt-md-0 text-slate-400">
             <Link to="/privacy" className="hover:text-slate-300 text-decoration-none">Privacy</Link>

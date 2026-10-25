@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { NavLink, Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { cleanDisplayName, getUserRoleLabel } from '../../utils/orderStatus';
+import { getMediaUrl, getDefaultAvatar } from '../../utils/imageUrl';
 
 const DashboardLayout = () => {
   const { user, logout, isStoreManager, isAdmin } = useAuth();
@@ -18,8 +20,8 @@ const DashboardLayout = () => {
             This management console is strictly reserved for authenticated Store Managers and Administrators.
           </p>
           <div className="d-flex justify-content-center gap-2">
-            <Link to="/login" className="btn btn-primary rounded-pill px-4">Sign In</Link>
-            <Link to="/" className="btn btn-outline-secondary rounded-pill px-4">Return Home</Link>
+            <Link to="/login" className="btn btn-ethio-primary px-4">Sign In</Link>
+            <Link to="/" className="btn btn-outline-secondary px-4">Return Home</Link>
           </div>
         </div>
       </div>
@@ -31,78 +33,70 @@ const DashboardLayout = () => {
     navigate('/');
   };
 
+  const avatarUrl = user?.profile_image
+    ? getMediaUrl(user.profile_image)
+    : getDefaultAvatar(user?.first_name || user?.username);
+
   return (
-    <div className="d-flex flex-column flex-md-row" style={{ minHeight: '100vh', background: '#f8fafc' }}>
-      {/* Mobile Top Header with Drawer Toggle */}
-      <div className="d-md-none bg-dark text-white p-3 d-flex justify-content-between align-items-center sticky-top z-3 border-bottom border-slate-800">
-        <div className="d-flex align-items-center gap-2">
-          <div
-            className="rounded-3 d-flex align-items-center justify-content-center text-white"
-            style={{ width: '32px', height: '32px', background: 'var(--gradient-primary)' }}
-          >
-            <i className="bi bi-cpu-fill fs-6"></i>
-          </div>
-          <span className="fw-bold fs-6">NexusStore {isAdmin ? 'Admin' : 'Manager'}</span>
-        </div>
-        <button
-          className="btn btn-sm btn-outline-light rounded-pill px-3"
-          onClick={() => setMobileDrawerOpen(!mobileDrawerOpen)}
-          aria-label="Toggle navigation drawer"
-        >
-          <i className={`bi ${mobileDrawerOpen ? 'bi-x-lg' : 'bi-list'}`}></i> Menu
-        </button>
-      </div>
+    <div className="ethio-dashboard-layout">
+      {/* Mobile Backdrop */}
+      {mobileDrawerOpen && (
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100 bg-black bg-opacity-50 z-3 d-lg-none"
+          onClick={() => setMobileDrawerOpen(false)}
+        />
+      )}
 
       {/* Persistent Fixed Left Sidebar */}
       <aside
-        className={`dashboard-sidebar shadow-lg ${mobileDrawerOpen ? 'd-flex' : 'd-none d-md-flex'}`}
-        style={{
-          width: '265px',
-          minWidth: '265px',
-          height: '100vh',
-          position: 'sticky',
-          top: 0,
-          background: '#0a1020',
-          color: '#ffffff',
-          flexDirection: 'column',
-          zIndex: 1040,
-          borderRight: '1px solid rgba(255, 255, 255, 0.08)',
-        }}
+        className={`ethio-sidebar ${mobileDrawerOpen ? 'open' : ''}`}
+        aria-label="Management Navigation"
       >
         {/* Sidebar Brand */}
-        <div className="p-3.5 border-bottom border-secondary border-opacity-25 d-flex align-items-center justify-content-between">
+        <div className="p-3 border-bottom border-white border-opacity-10 d-flex align-items-center justify-content-between">
           <Link to="/" className="d-flex align-items-center gap-2 text-decoration-none text-white">
             <div
               className="rounded-3 d-flex align-items-center justify-content-center text-white shadow-sm"
-              style={{ width: '34px', height: '34px', background: 'var(--gradient-primary)' }}
+              style={{ width: '34px', height: '34px', background: 'var(--color-primary)' }}
             >
               <i className="bi bi-cpu-fill fs-6"></i>
             </div>
             <div>
-              <span className="fw-bolder">Nexus</span>
-              <span className="text-info fw-bolder">Store</span>
-              <span className="badge bg-info bg-opacity-20 text-info ms-1.5" style={{ fontSize: '0.6rem' }}>
-                {isAdmin ? 'ADMIN' : 'MANAGER'}
+              <div className="fw-bolder text-white lh-1 text-sm">EthioTech <span className="text-info">Market</span></div>
+              <span className="badge bg-primary bg-opacity-25 text-info mt-1" style={{ fontSize: '0.62rem' }}>
+                {isAdmin ? 'ADMINISTRATOR' : 'STORE MANAGER'}
               </span>
             </div>
           </Link>
+          <button
+            type="button"
+            className="btn btn-sm btn-link text-white-50 d-lg-none p-0 text-decoration-none"
+            onClick={() => setMobileDrawerOpen(false)}
+            aria-label="Close menu"
+          >
+            <i className="bi bi-x-lg fs-5"></i>
+          </button>
         </div>
 
-        {/* User Persona Pill */}
-        <div className="p-2.5 mx-3 my-2.5 rounded-3" style={{ background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-          <div className="d-flex align-items-center gap-2">
-            <div
-              className="rounded-circle text-white d-flex align-items-center justify-content-center fw-bold small shrink-0"
-              style={{ width: '30px', height: '30px', background: 'var(--color-primary)' }}
-            >
-              {user.username.charAt(0).toUpperCase()}
-            </div>
-            <div className="text-truncate">
-              <div className="fw-bold text-white small text-truncate" style={{ fontSize: '0.78rem' }}>
-                {user.first_name ? `${user.first_name} ${user.last_name}` : user.username}
+        {/* User Persona Pill with Real Photo */}
+        <div className="p-2.5 mx-3 my-2.5 rounded-3" style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+          <div className="d-flex align-items-center gap-2.5">
+            <img
+              src={avatarUrl}
+              alt={cleanDisplayName(user)}
+              className="rounded-circle object-fit-cover shrink-0 border border-white border-opacity-25"
+              style={{ width: '36px', height: '36px' }}
+              onError={(e) => {
+                e.target.onerror = null;
+                e.target.src = getDefaultAvatar(user?.username);
+              }}
+            />
+            <div className="text-truncate min-w-0">
+              <div className="fw-bold text-white small text-truncate" style={{ fontSize: '0.8rem' }}>
+                {cleanDisplayName(user)}
               </div>
-              <span className="badge bg-primary text-uppercase" style={{ fontSize: '0.58rem' }}>
-                {user.role}
+              <span className="badge bg-primary text-uppercase" style={{ fontSize: '0.6rem' }}>
+                {getUserRoleLabel(user)}
               </span>
             </div>
           </div>
@@ -379,41 +373,60 @@ const DashboardLayout = () => {
         </div>
       </aside>
 
-      {/* Main Content Area: Independent scroll */}
-      <main
-        className="flex-grow-1 p-3 p-md-4 p-lg-5 overflow-y-auto"
-        style={{ height: 'calc(100vh - 60px)', minHeight: '100vh' }}
-      >
-        {/* Navigation Breadcrumb with Back Button */}
-        <div className="d-flex align-items-center mb-4">
-          <button
-            onClick={() => {
-              if (window.history.length > 1) {
-                navigate(-1);
-              } else {
-                navigate(isAdmin ? '/admin/dashboard' : '/manager/dashboard');
-              }
-            }}
-            className="btn btn-sm btn-outline-secondary rounded-pill me-3 d-inline-flex align-items-center gap-1 shadow-sm px-3"
-            aria-label="Go back"
-          >
-            <i className="bi bi-arrow-left"></i> Back
-          </button>
-          <nav aria-label="breadcrumb" className="small flex-grow-1">
-            <ol className="breadcrumb mb-0">
-              <li className="breadcrumb-item"><Link to="/" className="text-decoration-none">Storefront</Link></li>
-              <li className="breadcrumb-item">
-                <Link to={isAdmin ? '/admin/dashboard' : '/manager/dashboard'} className="text-decoration-none">
-                  {isAdmin ? 'Admin Console' : 'Store Management'}
-                </Link>
-              </li>
-              <li className="breadcrumb-item active" aria-current="page">Portal</li>
-            </ol>
-          </nav>
+      {/* Main Content Area: Independent fluid scroll */}
+      <div className="ethio-dashboard-content">
+        {/* Mobile Header Bar */}
+        <div className="bg-white border-bottom py-2.5 px-3 px-md-4 d-flex align-items-center justify-content-between sticky-top z-2 d-lg-none">
+          <div className="d-flex align-items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-secondary p-1.5"
+              onClick={() => setMobileDrawerOpen(true)}
+              aria-label="Open sidebar menu"
+            >
+              <i className="bi bi-list fs-5"></i>
+            </button>
+            <h6 className="fw-bolder text-slate-900 mb-0">
+              EthioTech {isAdmin ? 'Admin' : 'Manager'}
+            </h6>
+          </div>
+          <Link to="/" className="btn btn-sm btn-outline-primary text-xs py-1 px-2.5">
+            <i className="bi bi-shop me-1"></i> Storefront
+          </Link>
         </div>
 
-        <Outlet />
-      </main>
+        <main className="p-3 p-md-4 p-lg-5" style={{ minWidth: 0 }}>
+          {/* Navigation Breadcrumb with Back Button */}
+          <div className="d-flex align-items-center mb-4">
+            <button
+              onClick={() => {
+                if (window.history.length > 1) {
+                  navigate(-1);
+                } else {
+                  navigate(isAdmin ? '/admin/dashboard' : '/manager/dashboard');
+                }
+              }}
+              className="btn btn-sm btn-outline-secondary rounded-pill me-3 d-inline-flex align-items-center gap-1 shadow-sm px-3"
+              aria-label="Go back"
+            >
+              <i className="bi bi-arrow-left"></i> Back
+            </button>
+            <nav aria-label="breadcrumb" className="small flex-grow-1">
+              <ol className="breadcrumb mb-0">
+                <li className="breadcrumb-item"><Link to="/" className="text-decoration-none">Storefront</Link></li>
+                <li className="breadcrumb-item">
+                  <Link to={isAdmin ? '/admin/dashboard' : '/manager/dashboard'} className="text-decoration-none">
+                    {isAdmin ? 'Admin Console' : 'Store Management'}
+                  </Link>
+                </li>
+                <li className="breadcrumb-item active" aria-current="page">Portal</li>
+              </ol>
+            </nav>
+          </div>
+
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 };

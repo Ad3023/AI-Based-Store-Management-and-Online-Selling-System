@@ -2,14 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
 import { useNotifications } from '../context/NotificationContext';
+import CustomerSidebar from '../components/CustomerSidebar';
 import api from '../api';
 import { formatETB } from '../utils/currency';
 import ProductCard from '../components/ProductCard';
+import {
+  cleanDisplayName,
+  getUserRoleLabel,
+  getUserRoleBadgeClass,
+  getPaymentStatusInfo,
+  getFulfillmentStatusInfo,
+} from '../utils/orderStatus';
 
 const CustomerDashboardPage = () => {
-  const { user, updateProfile, logout } = useAuth();
+  const { user, loading: authLoading, updateProfile, logout, isAdmin, isStoreManager } = useAuth();
   const { cartCount } = useCart();
+  const { wishlistCount } = useWishlist();
   const { notifications, markAsRead, markAllAsRead } = useNotifications();
   const navigate = useNavigate();
   const location = useLocation();
@@ -20,6 +30,16 @@ const CustomerDashboardPage = () => {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
+  // Authoritative Backend Summary
+  const [summaryData, setSummaryData] = useState({
+    total_orders: 0,
+    total_spent: 0,
+    verified_receipts_count: 0,
+    recent_orders: [],
+  });
+  const [loadingSummary, setLoadingSummary] = useState(true);
+
+  // Orders list and claims
   const [orders, setOrders] = useState([]);
   const [warrantyClaims, setWarrantyClaims] = useState([]);
   const [feedbackList, setFeedbackList] = useState([]);
@@ -36,6 +56,20 @@ const CustomerDashboardPage = () => {
     address: user?.address || '',
     city: user?.city || '',
   });
+
+  // Sync formData when user changes
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        first_name: user.first_name || '',
+        last_name: user.last_name || '',
+        email: user.email || '',
+        phone_number: user.phone_number || '',
+        address: user.address || '',
+        city: user.city || '',
+      });
+    }
+  }, [user]);
 
   // Feedback Form
   const [feedbackForm, setFeedbackForm] = useState({
@@ -60,6 +94,21 @@ const CustomerDashboardPage = () => {
     let isMounted = true;
     const fetchUserData = async () => {
       if (!user) return;
+
+      // 1. Fetch Authoritative Customer Summary Metrics
+      try {
+        setLoadingSummary(true);
+        const summaryRes = await api.get('orders/customer-summary/');
+        if (isMounted && summaryRes.data) {
+          setSummaryData(summaryRes.data);
+        }
+      } catch (err) {
+        console.error('Customer summary fetch error', err);
+      } finally {
+        if (isMounted) setLoadingSummary(false);
+      }
+
+      // 2. Fetch Customer Orders List
       try {
         setLoadingOrders(true);
         const oRes = await api.get('orders/');
@@ -72,6 +121,7 @@ const CustomerDashboardPage = () => {
         if (isMounted) setLoadingOrders(false);
       }
 
+      // 3. Warranty claims
       try {
         setLoadingClaims(true);
         const wRes = await api.get('orders/warranty-claims/').catch(() => ({ data: [] }));
@@ -84,6 +134,7 @@ const CustomerDashboardPage = () => {
         if (isMounted) setLoadingClaims(false);
       }
 
+      // 4. Feedback
       try {
         const fRes = await api.get('products/feedback/').catch(() => ({ data: [] }));
         if (isMounted) {
@@ -93,6 +144,7 @@ const CustomerDashboardPage = () => {
         // Silently handle
       }
 
+      // 5. Recommendations
       try {
         const rRes = await api.get('recommendations/personalized/?limit=4').catch(() => ({ data: { results: [] } }));
         if (isMounted) {
@@ -159,364 +211,218 @@ const CustomerDashboardPage = () => {
     navigate('/');
   };
 
-  if (!user) {
+  // Loading state while checking authentication
+  if (authLoading) {
     return (
-      <div className="container py-5 text-center">
-        <div className="card border-0 shadow-sm rounded-4 p-5 mx-auto" style={{ maxWidth: '480px' }}>
-          <i className="bi bi-person-lock fs-1 text-primary mb-3"></i>
-          <h4 className="fw-bolder">Please Sign In</h4>
-          <p className="text-muted small mb-4">You must authenticate before accessing your customer dashboard.</p>
-          <Link to="/login?redirect=/customer/dashboard" className="btn btn-primary rounded-pill px-4">Sign In</Link>
+      <div className="container py-5 text-center" style={{ minHeight: '60vh' }}>
+        <div className="card border-0 shadow-sm rounded-4 p-5 mx-auto bg-white border" style={{ maxWidth: '420px' }}>
+          <div className="spinner-border text-primary mx-auto mb-3" role="status" style={{ width: '2.5rem', height: '2.5rem' }}></div>
+          <h5 className="fw-bold text-slate-800 mb-1">Authenticating...</h5>
+          <p className="text-muted text-xs mb-0">Verifying session credentials with server</p>
         </div>
       </div>
     );
   }
 
-  const displayName = user.first_name ? `${user.first_name} ${user.last_name}`.trim() : user.username;
-  const verifiedOrdersCount = orders.filter((o) =>
-    ['PROCESSING', 'SHIPPED', 'DELIVERED'].includes(o.status)
-  ).length;
+  // If user profile fails or not authenticated
+  if (!user) {
+    return (
+      <div className="container py-5 text-center" style={{ minHeight: '60vh' }}>
+        <div className="card border-0 shadow-sm rounded-4 p-5 mx-auto bg-white border" style={{ maxWidth: '480px' }}>
+          <div className="rounded-circle bg-amber-50 text-amber-600 d-inline-flex align-items-center justify-content-center mx-auto mb-3" style={{ width: '60px', height: '60px' }}>
+            <i className="bi bi-person-lock fs-2"></i>
+          </div>
+          <h4 className="fw-bolder text-slate-900 mb-1">Authentication Required</h4>
+          <p className="text-muted text-xs mb-4">Please sign in to your verified account to access this dashboard.</p>
+          <div className="d-flex justify-content-center gap-2">
+            <Link to="/login?redirect=/customer/dashboard" className="btn btn-primary rounded-pill px-4 text-xs font-bold">
+              Sign In
+            </Link>
+            <Link to="/" className="btn btn-outline-secondary rounded-pill px-4 text-xs font-bold">
+              Return Home
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-  const totalSpentAmount = orders.reduce((sum, o) => {
-    if (o.status !== 'CANCELLED') {
-      return sum + Number(o.total_amount || 0);
-    }
-    return sum;
-  }, 0);
+  // Authoritative identity derivation without appending role labels
+  const displayName = cleanDisplayName(user);
+  const roleLabel = getUserRoleLabel(user);
+  const roleBadgeClass = getUserRoleBadgeClass(user);
 
-  const getBadgeClass = (status) => {
-    switch (status) {
-      case 'DELIVERED':
-        return 'bg-success text-white';
-      case 'SHIPPED':
-        return 'bg-info text-dark';
-      case 'PROCESSING':
-        return 'bg-primary text-white';
-      case 'PAYMENT_PENDING':
-        return 'bg-warning text-dark';
-      case 'CANCELLED':
-        return 'bg-danger text-white';
-      default:
-        return 'bg-secondary text-white';
-    }
-  };
+  // Filter verified receipts (only orders that genuinely possess an issued receipt)
+  const verifiedReceipts = orders.filter((o) => Boolean(o.receipt && o.receipt.receipt_number));
 
   return (
-    <div className="d-flex flex-column flex-md-row" style={{ minHeight: '100vh', background: '#f8fafc' }}>
-      {/* Mobile Top Header with Drawer Toggle */}
-      <div className="d-md-none bg-dark text-white p-3 d-flex justify-content-between align-items-center sticky-top z-3 border-bottom border-slate-800">
-        <div className="d-flex align-items-center gap-2">
-          <div
-            className="rounded-3 d-flex align-items-center justify-content-center text-white"
-            style={{ width: '32px', height: '32px', background: 'var(--gradient-primary)' }}
-          >
-            <i className="bi bi-cpu-fill fs-6"></i>
-          </div>
-          <span className="fw-bold fs-6">Customer Dashboard</span>
-        </div>
-        <button
-          className="btn btn-sm btn-outline-light rounded-pill px-3"
-          onClick={() => setMobileDrawerOpen(!mobileDrawerOpen)}
-          aria-label="Toggle navigation drawer"
-        >
-          <i className={`bi ${mobileDrawerOpen ? 'bi-x-lg' : 'bi-list'}`}></i> Menu
-        </button>
-      </div>
+    <div className="ethio-dashboard-layout">
+      {/* Reusable Fixed Sidebar (Screenshot 4) */}
+      <CustomerSidebar
+        mobileOpen={mobileDrawerOpen}
+        setMobileOpen={setMobileDrawerOpen}
+        activeItem={activeTab === 'overview' ? 'dashboard' : activeTab}
+      />
 
-      {/* Persistent Fixed Left Sidebar for Customer */}
-      <aside
-        className={`dashboard-sidebar shadow-lg ${mobileDrawerOpen ? 'd-flex' : 'd-none d-md-flex'}`}
-        style={{
-          width: '260px',
-          minWidth: '260px',
-          height: '100vh',
-          position: 'sticky',
-          top: 0,
-          background: '#0a1020',
-          color: '#ffffff',
-          flexDirection: 'column',
-          zIndex: 1040,
-          borderRight: '1px solid rgba(255, 255, 255, 0.08)',
-        }}
-      >
-        {/* Brand */}
-        <div className="p-3.5 border-bottom border-secondary border-opacity-25 d-flex align-items-center justify-content-between">
-          <Link to="/" className="d-flex align-items-center gap-2 text-decoration-none text-white">
-            <div
-              className="rounded-3 d-flex align-items-center justify-content-center text-white shadow-sm"
-              style={{ width: '34px', height: '34px', background: 'var(--gradient-primary)' }}
-            >
-              <i className="bi bi-cpu-fill fs-6"></i>
-            </div>
-            <div>
-              <span className="fw-bolder">Nexus</span>
-              <span className="text-info fw-bolder">Store</span>
-              <span className="badge bg-primary bg-opacity-25 text-primary ms-1.5" style={{ fontSize: '0.6rem' }}>
-                CUSTOMER
-              </span>
-            </div>
-          </Link>
-        </div>
-
-        {/* User Card */}
-        <div className="p-2.5 mx-3 my-2.5 rounded-3" style={{ background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+      {/* Main Content Area */}
+      <div className="ethio-dashboard-content">
+        {/* Mobile Header Toggle */}
+        <div className="bg-white border-bottom py-2.5 px-3 px-md-4 d-flex align-items-center justify-content-between sticky-top z-2">
           <div className="d-flex align-items-center gap-2">
-            <div
-              className="rounded-circle text-white d-flex align-items-center justify-content-center fw-bold small shrink-0"
-              style={{ width: '32px', height: '32px', background: 'var(--color-primary)' }}
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-secondary d-lg-none p-1.5"
+              onClick={() => setMobileDrawerOpen(true)}
+              aria-label="Open sidebar menu"
             >
-              {user.username.charAt(0).toUpperCase()}
-            </div>
-            <div className="text-truncate">
-              <div className="fw-bold text-white small text-truncate" style={{ fontSize: '0.78rem' }}>{displayName}</div>
-              <small className="text-slate-400 text-truncate d-block" style={{ fontSize: '0.65rem' }}>{user.email}</small>
-            </div>
+              <i className="bi bi-list fs-5"></i>
+            </button>
+            <h5 className="fw-bolder text-slate-900 mb-0">Customer Dashboard</h5>
+          </div>
+
+          <div className="d-flex align-items-center gap-2">
+            <Link to="/shop" className="btn btn-sm btn-ethio-primary text-xs py-1.5 px-3">
+              <i className="bi bi-bag-plus me-1"></i> Browse Products
+            </Link>
           </div>
         </div>
 
-        {/* Customer Navigation Links Container (Exact list requested) */}
-        <div className="flex-grow-1 overflow-y-auto px-2 py-2" style={{ scrollbarWidth: 'thin' }}>
-          <div className="px-3 text-uppercase fw-bold text-secondary mb-1.5" style={{ fontSize: '0.65rem', letterSpacing: '0.5px' }}>
-            Account Navigation
-          </div>
-
-          {/* 1. Dashboard */}
-          <button
-            type="button"
-            className={`w-100 text-start py-2 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 border-0 transition ${
-              activeTab === 'overview' ? 'bg-primary text-white font-bold shadow-sm' : 'bg-transparent text-slate-300 hover:text-white hover:bg-slate-800'
-            }`}
-            onClick={() => {
-              setActiveTab('overview');
-              setMobileDrawerOpen(false);
-            }}
-          >
-            <i className="bi bi-grid-1x2"></i> Dashboard
-          </button>
-
-          {/* 2. Browse Products */}
-          <Link
-            to="/shop"
-            className="w-100 text-start py-2 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 text-decoration-none text-slate-300 hover:text-white hover:bg-slate-800 transition"
-            onClick={() => setMobileDrawerOpen(false)}
-          >
-            <i className="bi bi-shop"></i> Browse Products
-          </Link>
-
-          {/* 3. My Cart */}
-          <Link
-            to="/cart"
-            className="w-100 text-start py-2 px-3 mb-1 rounded-2 text-xs d-flex justify-content-between align-items-center text-decoration-none text-slate-300 hover:text-white hover:bg-slate-800 transition"
-            onClick={() => setMobileDrawerOpen(false)}
-          >
-            <div className="d-flex align-items-center gap-2.5">
-              <i className="bi bi-cart3 text-primary"></i> My Cart
-            </div>
-            <span className="badge bg-primary text-white rounded-pill px-2">{cartCount}</span>
-          </Link>
-
-          {/* 4. My Orders */}
-          <button
-            type="button"
-            className={`w-100 text-start py-2 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 border-0 transition ${
-              activeTab === 'orders' ? 'bg-primary text-white font-bold shadow-sm' : 'bg-transparent text-slate-300 hover:text-white hover:bg-slate-800'
-            }`}
-            onClick={() => {
-              setActiveTab('orders');
-              setMobileDrawerOpen(false);
-            }}
-          >
-            <i className="bi bi-bag-check"></i> My Orders ({orders.length})
-          </button>
-
-          {/* 5. Order Tracking */}
-          <Link
-            to="/track"
-            className="w-100 text-start py-2 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 text-decoration-none text-slate-300 hover:text-white hover:bg-slate-800 transition"
-            onClick={() => setMobileDrawerOpen(false)}
-          >
-            <i className="bi bi-geo-alt text-info"></i> Order Tracking
-          </Link>
-
-          {/* 6. Payment History */}
-          <button
-            type="button"
-            className={`w-100 text-start py-2 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 border-0 transition ${
-              activeTab === 'payments' ? 'bg-primary text-white font-bold shadow-sm' : 'bg-transparent text-slate-300 hover:text-white hover:bg-slate-800'
-            }`}
-            onClick={() => {
-              setActiveTab('payments');
-              setMobileDrawerOpen(false);
-            }}
-          >
-            <i className="bi bi-credit-card text-cyan-400"></i> Payment History
-          </button>
-
-          {/* 7. Receipts */}
-          <button
-            type="button"
-            className={`w-100 text-start py-2 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 border-0 transition ${
-              activeTab === 'receipts' ? 'bg-primary text-white font-bold shadow-sm' : 'bg-transparent text-slate-300 hover:text-white hover:bg-slate-800'
-            }`}
-            onClick={() => {
-              setActiveTab('receipts');
-              setMobileDrawerOpen(false);
-            }}
-          >
-            <i className="bi bi-receipt-cutoff text-success"></i> Receipts ({verifiedOrdersCount})
-          </button>
-
-          {/* 8. Warranty and Claims */}
-          <button
-            type="button"
-            className={`w-100 text-start py-2 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 border-0 transition ${
-              activeTab === 'warranty' ? 'bg-primary text-white font-bold shadow-sm' : 'bg-transparent text-slate-300 hover:text-white hover:bg-slate-800'
-            }`}
-            onClick={() => {
-              setActiveTab('warranty');
-              setMobileDrawerOpen(false);
-            }}
-          >
-            <i className="bi bi-shield-check text-emerald-400"></i> Warranty and Claims ({warrantyClaims.length})
-          </button>
-
-          {/* 9. Notifications */}
-          <button
-            type="button"
-            className={`w-100 text-start py-2 px-3 mb-1 rounded-2 text-xs d-flex justify-content-between align-items-center border-0 transition ${
-              activeTab === 'notifications' ? 'bg-primary text-white font-bold shadow-sm' : 'bg-transparent text-slate-300 hover:text-white hover:bg-slate-800'
-            }`}
-            onClick={() => {
-              setActiveTab('notifications');
-              setMobileDrawerOpen(false);
-            }}
-          >
-            <div className="d-flex align-items-center gap-2.5">
-              <i className="bi bi-bell"></i> Notifications
-            </div>
-            {notifications.filter((n) => !n.is_read).length > 0 && (
-              <span className="badge bg-danger rounded-pill px-1.5 py-0.5 text-[10px]">
-                {notifications.filter((n) => !n.is_read).length}
-              </span>
-            )}
-          </button>
-
-          {/* 10. My Profile */}
-          <button
-            type="button"
-            className={`w-100 text-start py-2 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 border-0 transition ${
-              activeTab === 'profile' ? 'bg-primary text-white font-bold shadow-sm' : 'bg-transparent text-slate-300 hover:text-white hover:bg-slate-800'
-            }`}
-            onClick={() => {
-              setActiveTab('profile');
-              setMobileDrawerOpen(false);
-            }}
-          >
-            <i className="bi bi-person-circle"></i> My Profile
-          </button>
-        </div>
-
-        {/* 11. Sign Out near the bottom */}
-        <div className="p-3 border-top border-secondary border-opacity-25 mt-auto">
-          <button
-            onClick={handleSignOut}
-            className="btn btn-danger btn-sm text-start py-2 w-100 d-flex align-items-center gap-2 rounded-3 bg-danger bg-opacity-25 border-danger border-opacity-50 text-danger text-xs fw-bold"
-          >
-            <i className="bi bi-box-arrow-right"></i> Sign Out
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content Area: Independent Scroll */}
-      <main
-        className="flex-grow-1 p-3 p-md-4 p-lg-5 overflow-y-auto"
-        style={{ height: 'calc(100vh - 60px)', minHeight: '100vh' }}
-      >
-        {/* Navigation Breadcrumb with Back Button */}
-        <div className="d-flex align-items-center mb-4">
-          <button
-            onClick={() => {
-              if (window.history.length > 1) {
-                navigate(-1);
-              } else {
-                navigate('/');
-              }
-            }}
-            className="btn btn-sm btn-outline-secondary rounded-pill me-3 d-inline-flex align-items-center gap-1 shadow-sm px-3"
-            aria-label="Go back"
-          >
-            <i className="bi bi-arrow-left"></i> Back
-          </button>
-          <nav aria-label="breadcrumb" className="small flex-grow-1">
-            <ol className="breadcrumb mb-0">
-              <li className="breadcrumb-item"><Link to="/" className="text-decoration-none">Storefront</Link></li>
-              <li className="breadcrumb-item active" aria-current="page">Customer Dashboard</li>
+        {/* Main Content Area (Natural fluid scrolling without trapped inner overflow) */}
+        <main className="flex-grow-1 p-3 p-md-4 min-w-0" style={{ maxWidth: '1280px' }}>
+        {/* Navigation Breadcrumb */}
+        <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+          <nav aria-label="breadcrumb">
+            <ol className="breadcrumb mb-0 text-xs">
+              <li className="breadcrumb-item"><Link to="/" className="text-decoration-none text-slate-500">Storefront</Link></li>
+              <li className="breadcrumb-item active fw-bold text-slate-800" aria-current="page">
+                {roleLabel === 'CUSTOMER' ? 'Customer Dashboard' : `${roleLabel} Account Dashboard`}
+              </li>
             </ol>
           </nav>
         </div>
 
+        {/* Privileged Role Navigation Notice */}
+        {(isAdmin || isStoreManager) && (
+          <div className="alert alert-info rounded-3 p-3 mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2 text-xs shadow-sm border border-cyan-200">
+            <div className="d-flex align-items-center gap-2">
+              <i className="bi bi-shield-check fs-5 text-cyan-700"></i>
+              <span>
+                You are currently signed in as <strong className="text-uppercase">{roleLabel}</strong>. To manage products, review orders, or adjust configurations, visit your dedicated console.
+              </span>
+            </div>
+            <Link
+              to={isAdmin ? '/admin/dashboard' : '/manager/dashboard'}
+              className="btn btn-sm btn-primary rounded-pill px-3 py-1 font-bold text-xs shrink-0 shadow-sm"
+            >
+              Open {isAdmin ? 'Admin Console' : 'Store Manager Portal'} &rarr;
+            </Link>
+          </div>
+        )}
+
         {message.text && (
-          <div className={`alert alert-${message.type} alert-dismissible fade show rounded-3 small mb-4`} role="alert">
+          <div className={`alert alert-${message.type} alert-dismissible fade show rounded-3 text-xs mb-3 shadow-sm`} role="alert">
             {message.text}
             <button type="button" className="btn-close" onClick={() => setMessage({ type: '', text: '' })}></button>
           </div>
         )}
 
-        {/* TAB 1: DASHBOARD OVERVIEW */}
+        {/* TAB 1: OVERVIEW */}
         {activeTab === 'overview' && (
           <div>
-            <div className="mb-4">
-              <h3 className="fw-bolder text-slate-900 tracking-tight mb-1">Customer Dashboard</h3>
-              <p className="text-slate-500 text-xs mb-0">Welcome back, {displayName}! Summary of your shopping activity and verified receipts</p>
+            <div className="mb-3">
+              <h4 className="fw-bolder text-slate-900 tracking-tight mb-1">
+                {roleLabel === 'CUSTOMER' ? 'Customer Dashboard' : `${roleLabel} Shopping Summary`}
+              </h4>
+              <p className="text-slate-500 text-xs mb-0">
+                Welcome back, {displayName}! Verified purchase records, receipts, and order statuses.
+              </p>
             </div>
 
-            {/* Metric Cards */}
+            {/* Authoritative Metric Cards (Screen 4) */}
             <div className="row g-3 mb-4">
-              <div className="col-md-4">
-                <div className="card border-0 shadow-sm rounded-4 p-4 bg-white">
+              {/* Total Orders Card */}
+              <div className="col-6 col-lg-3">
+                <div className="card ethio-card p-3 p-md-4 h-100">
                   <div className="d-flex align-items-center justify-content-between mb-2">
-                    <span className="text-xs fw-bold uppercase text-slate-400">Total Orders</span>
-                    <div className="rounded-xl p-2 bg-blue-50 text-blue-600">
+                    <span className="text-xs fw-bold uppercase text-slate-500">Total Orders</span>
+                    <div className="rounded-3 p-2 bg-blue-50 text-blue-600">
                       <i className="bi bi-bag-check fs-5"></i>
                     </div>
                   </div>
-                  <h3 className="fw-bolder text-slate-900 mb-0">{orders.length}</h3>
-                  <small className="text-slate-400 text-xs">Total orders placed</small>
+                  <h3 className="fw-bolder text-slate-900 mb-0">
+                    {loadingSummary ? (
+                      <span className="spinner-border spinner-border-sm" role="status"></span>
+                    ) : (
+                      summaryData.total_orders
+                    )}
+                  </h3>
+                  <small className="text-slate-400 text-xs mt-1 d-block">Lifetime placed</small>
                 </div>
               </div>
 
-              <div className="col-md-4">
-                <div className="card border-0 shadow-sm rounded-4 p-4 bg-white">
+              {/* Total Spent Card */}
+              <div className="col-6 col-lg-3">
+                <div className="card ethio-card p-3 p-md-4 h-100">
                   <div className="d-flex align-items-center justify-content-between mb-2">
-                    <span className="text-xs fw-bold uppercase text-slate-400">Total Spent</span>
-                    <div className="rounded-xl p-2 bg-emerald-50 text-emerald-600">
+                    <span className="text-xs fw-bold uppercase text-slate-500">Total Spent</span>
+                    <div className="rounded-3 p-2 bg-emerald-50 text-emerald-600">
                       <i className="bi bi-cash-stack fs-5"></i>
                     </div>
                   </div>
-                  <h3 className="fw-bolder text-slate-900 mb-0">{formatETB(totalSpentAmount)}</h3>
-                  <small className="text-slate-400 text-xs">Accumulated purchase value in ETB</small>
+                  <h3 className="fw-bolder text-slate-900 mb-0">
+                    {loadingSummary ? (
+                      <span className="spinner-border spinner-border-sm" role="status"></span>
+                    ) : (
+                      formatETB(summaryData.total_spent)
+                    )}
+                  </h3>
+                  <small className="text-slate-400 text-xs mt-1 d-block">Verified purchases</small>
                 </div>
               </div>
 
-              <div className="col-md-4">
-                <div className="card border-0 shadow-sm rounded-4 p-4 bg-white">
+              {/* Verified Receipts Card */}
+              <div className="col-6 col-lg-3">
+                <div className="card ethio-card p-3 p-md-4 h-100">
                   <div className="d-flex align-items-center justify-content-between mb-2">
-                    <span className="text-xs fw-bold uppercase text-slate-400">Verified Receipts</span>
-                    <div className="rounded-xl p-2 bg-purple-50 text-purple-600">
+                    <span className="text-xs fw-bold uppercase text-slate-500">Digital Receipts</span>
+                    <div className="rounded-3 p-2 bg-purple-50 text-purple-600">
                       <i className="bi bi-receipt fs-5"></i>
                     </div>
                   </div>
-                  <h3 className="fw-bolder text-slate-900 mb-0">{verifiedOrdersCount}</h3>
-                  <small className="text-slate-400 text-xs">Official receipts issued</small>
+                  <h3 className="fw-bolder text-slate-900 mb-0">
+                    {loadingSummary ? (
+                      <span className="spinner-border spinner-border-sm" role="status"></span>
+                    ) : (
+                      summaryData.verified_receipts_count
+                    )}
+                  </h3>
+                  <small className="text-slate-400 text-xs mt-1 d-block">Official tax receipts</small>
+                </div>
+              </div>
+
+              {/* Wishlist Items Card */}
+              <div className="col-6 col-lg-3">
+                <div className="card ethio-card p-3 p-md-4 h-100">
+                  <div className="d-flex align-items-center justify-content-between mb-2">
+                    <span className="text-xs fw-bold uppercase text-slate-500">Wishlist</span>
+                    <div className="rounded-3 p-2 bg-rose-50 text-rose-600">
+                      <i className="bi bi-heart fs-5"></i>
+                    </div>
+                  </div>
+                  <h3 className="fw-bolder text-slate-900 mb-0">
+                    {wishlistCount}
+                  </h3>
+                  <small className="text-slate-400 text-xs mt-1 d-block">Saved favorites</small>
                 </div>
               </div>
             </div>
 
             {/* Recent Orders Shelf */}
-            <div className="card border-0 shadow-sm rounded-4 p-4 bg-white mb-4">
+            <div className="card border-0 shadow-sm rounded-4 p-3 p-md-4 bg-white border border-slate-200 mb-4">
               <div className="d-flex justify-content-between align-items-center mb-3">
-                <h5 className="fw-bold text-slate-900 mb-0">Recent Orders</h5>
+                <h5 className="fw-bold text-slate-900 mb-0 text-sm">Recent Orders</h5>
                 <button
+                  type="button"
                   className="btn btn-link btn-sm text-primary p-0 text-xs fw-bold text-decoration-none"
                   onClick={() => setActiveTab('orders')}
                 >
@@ -524,14 +430,19 @@ const CustomerDashboardPage = () => {
                 </button>
               </div>
 
-              {loadingOrders ? (
-                <div className="text-center py-4 text-muted small">Loading order history...</div>
-              ) : orders.length === 0 ? (
+              {loadingSummary ? (
+                <div className="text-center py-4 text-muted small">
+                  <div className="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                  Loading order history...
+                </div>
+              ) : summaryData.recent_orders.length === 0 ? (
                 <div className="text-center py-5 bg-slate-50 rounded-3">
                   <i className="bi bi-bag-x fs-1 text-slate-400 mb-2 d-block"></i>
                   <h6 className="fw-bold text-slate-700">No orders placed yet</h6>
                   <p className="text-slate-400 text-xs mb-3">Explore our high-performance electronics and add items to your cart.</p>
-                  <Link to="/shop" className="btn btn-primary rounded-pill px-4 btn-sm">Browse Products</Link>
+                  <Link to="/shop" className="btn btn-primary rounded-pill px-4 btn-sm text-xs font-bold">
+                    Browse Storefront
+                  </Link>
                 </div>
               ) : (
                 <div className="table-responsive">
@@ -547,32 +458,43 @@ const CustomerDashboardPage = () => {
                       </tr>
                     </thead>
                     <tbody className="text-xs">
-                      {orders.slice(0, 5).map((o) => (
-                        <tr key={o.id}>
-                          <td className="fw-bold">
-                            <Link to={`/orders/${o.id}`} className="text-primary text-decoration-none">
-                              {o.order_number}
-                            </Link>
-                          </td>
-                          <td className="text-slate-500">{new Date(o.created_at).toLocaleDateString()}</td>
-                          <td className="fw-bold text-slate-900">{formatETB(o.total_amount)}</td>
-                          <td>
-                            <span className="badge bg-success bg-opacity-10 text-success rounded-pill px-2 py-0.5 text-[10px]">
-                              {o.payment_method === 'CHAPA' ? 'Chapa Gateway' : 'Online'}
-                            </span>
-                          </td>
-                          <td>
-                            <span className={`badge rounded-pill px-2.5 py-1 text-[10px] uppercase font-bold ${getBadgeClass(o.status)}`}>
-                              {o.status.replace('_', ' ')}
-                            </span>
-                          </td>
-                          <td className="text-end">
-                            <Link to={`/orders/${o.id}`} className="btn btn-outline-primary btn-sm rounded-pill px-3 py-1 text-xs">
-                              Details
-                            </Link>
-                          </td>
-                        </tr>
-                      ))}
+                      {summaryData.recent_orders.map((o) => {
+                        const paymentInfo = getPaymentStatusInfo(o);
+                        const fulfillmentInfo = getFulfillmentStatusInfo(o);
+                        return (
+                          <tr key={o.id}>
+                            <td className="fw-bold">
+                              <Link to={`/orders/${o.id}`} className="text-primary text-decoration-none">
+                                {o.order_number}
+                              </Link>
+                            </td>
+                            <td className="text-slate-500">{new Date(o.created_at).toLocaleDateString()}</td>
+                            <td className="fw-bold text-slate-900">{formatETB(o.total_amount)}</td>
+                            <td>
+                              <span className={`badge rounded-pill px-2.5 py-1 text-[10px] font-bold ${paymentInfo.badgeClass}`}>
+                                {paymentInfo.label}
+                              </span>
+                            </td>
+                            <td>
+                              <span className={`badge rounded-pill px-2.5 py-1 text-[10px] font-bold ${fulfillmentInfo.badgeClass}`}>
+                                {fulfillmentInfo.label}
+                              </span>
+                            </td>
+                            <td className="text-end">
+                              <div className="d-flex justify-content-end gap-1.5">
+                                <Link to={`/orders/${o.id}`} className="btn btn-outline-primary btn-sm rounded-pill px-3 py-1 text-xs">
+                                  Details
+                                </Link>
+                                {o.receipt && o.receipt.receipt_number && (
+                                  <Link to={`/receipts/${o.id}`} className="btn btn-outline-success btn-sm rounded-pill px-2.5 py-1 text-xs">
+                                    <i className="bi bi-receipt"></i> Receipt
+                                  </Link>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -581,9 +503,9 @@ const CustomerDashboardPage = () => {
 
             {/* AI Recommendations */}
             {recommendations.length > 0 && (
-              <div className="card border-0 shadow-sm rounded-4 p-4 bg-white">
+              <div className="card border-0 shadow-sm rounded-4 p-3 p-md-4 bg-white border border-slate-200">
                 <div className="d-flex justify-content-between align-items-center mb-3">
-                  <h6 className="fw-bold text-slate-900 mb-0">Personalized Product Recommendations</h6>
+                  <h6 className="fw-bold text-slate-900 mb-0 text-sm">Personalized AI Recommendations</h6>
                   <Link to="/recommendations" className="text-primary text-xs fw-bold text-decoration-none">
                     View AI Center &rarr;
                   </Link>
@@ -602,69 +524,83 @@ const CustomerDashboardPage = () => {
 
         {/* TAB 2: MY ORDERS */}
         {activeTab === 'orders' && (
-          <div className="card border-0 shadow-sm rounded-4 p-4 bg-white">
-            <div className="d-flex justify-content-between align-items-center mb-4">
+          <div className="card border-0 shadow-sm rounded-4 p-3 p-md-4 bg-white border border-slate-200">
+            <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
               <div>
-                <h4 className="fw-bolder text-slate-900 mb-1">My Orders & Tracking</h4>
-                <p className="text-slate-500 text-xs mb-0">All orders placed with real delivery milestone status</p>
+                <h5 className="fw-bolder text-slate-900 mb-0.5">My Orders & Purchases</h5>
+                <p className="text-slate-500 text-xs mb-0">Genuine order records with real-time payment and milestone status</p>
               </div>
-              <Link to="/track" className="btn btn-outline-custom btn-sm rounded-pill px-3">
-                <i className="bi bi-geo-alt me-1"></i> Live Tracker
+              <Link to="/track" className="btn btn-outline-custom btn-sm rounded-pill px-3 text-xs">
+                <i className="bi bi-geo-alt me-1"></i> Track Order
               </Link>
             </div>
 
             {loadingOrders ? (
               <div className="text-center py-5">
                 <div className="spinner-border text-primary" role="status"></div>
+                <p className="text-muted text-xs mt-2">Loading orders...</p>
               </div>
             ) : orders.length === 0 ? (
               <div className="text-center py-5 bg-slate-50 rounded-3">
-                <p className="text-muted small mb-3">No orders found.</p>
-                <Link to="/shop" className="btn btn-primary rounded-pill px-4 btn-sm">Shop Catalog</Link>
+                <i className="bi bi-bag-x fs-1 text-slate-400 mb-2 d-block"></i>
+                <p className="text-slate-600 text-xs mb-3">You have not placed any orders yet.</p>
+                <Link to="/shop" className="btn btn-primary rounded-pill px-4 btn-sm text-xs font-bold">
+                  Browse Catalog
+                </Link>
               </div>
             ) : (
               <div className="table-responsive">
                 <table className="table align-middle mb-0">
                   <thead className="table-light text-uppercase text-[11px] text-slate-500">
                     <tr>
-                      <th>Order Number</th>
+                      <th>Order #</th>
                       <th>Date Placed</th>
                       <th>Items Count</th>
                       <th>Total Amount</th>
-                      <th>Status</th>
+                      <th>Payment Status</th>
+                      <th>Order Status</th>
                       <th className="text-end">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="text-xs">
-                    {orders.map((o) => (
-                      <tr key={o.id}>
-                        <td className="fw-bold">
-                          <Link to={`/orders/${o.id}`} className="text-primary text-decoration-none">
-                            {o.order_number}
-                          </Link>
-                        </td>
-                        <td className="text-slate-500">{new Date(o.created_at).toLocaleDateString()}</td>
-                        <td className="text-slate-700">{o.items?.length || 1} items</td>
-                        <td className="fw-bold text-slate-900">{formatETB(o.total_amount)}</td>
-                        <td>
-                          <span className={`badge rounded-pill px-2.5 py-1 text-[10px] uppercase font-bold ${getBadgeClass(o.status)}`}>
-                            {o.status.replace('_', ' ')}
-                          </span>
-                        </td>
-                        <td className="text-end">
-                          <div className="d-flex justify-content-end gap-1.5">
-                            <Link to={`/orders/${o.id}`} className="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-1">
-                              View
+                    {orders.map((o) => {
+                      const paymentInfo = getPaymentStatusInfo(o);
+                      const fulfillmentInfo = getFulfillmentStatusInfo(o);
+                      return (
+                        <tr key={o.id}>
+                          <td className="fw-bold">
+                            <Link to={`/orders/${o.id}`} className="text-primary text-decoration-none font-monospace">
+                              {o.order_number}
                             </Link>
-                            {['PROCESSING', 'SHIPPED', 'DELIVERED'].includes(o.status) && (
-                              <Link to={`/receipts/${o.id}`} className="btn btn-sm btn-outline-success rounded-pill px-2.5 py-1">
-                                Receipt
+                          </td>
+                          <td className="text-slate-500">{new Date(o.created_at).toLocaleDateString()}</td>
+                          <td className="text-slate-700">{o.items?.length || 1} items</td>
+                          <td className="fw-bold text-slate-900">{formatETB(o.total_amount)}</td>
+                          <td>
+                            <span className={`badge rounded-pill px-2.5 py-1 text-[10px] font-bold ${paymentInfo.badgeClass}`}>
+                              {paymentInfo.label}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`badge rounded-pill px-2.5 py-1 text-[10px] font-bold ${fulfillmentInfo.badgeClass}`}>
+                              {fulfillmentInfo.label}
+                            </span>
+                          </td>
+                          <td className="text-end">
+                            <div className="d-flex justify-content-end gap-1.5">
+                              <Link to={`/orders/${o.id}`} className="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-1">
+                                View
                               </Link>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                              {o.receipt && o.receipt.receipt_number && (
+                                <Link to={`/receipts/${o.id}`} className="btn btn-sm btn-outline-success rounded-pill px-2.5 py-1">
+                                  Receipt
+                                </Link>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -674,24 +610,24 @@ const CustomerDashboardPage = () => {
 
         {/* TAB 3: PAYMENT HISTORY */}
         {activeTab === 'payments' && (
-          <div className="card border-0 shadow-sm rounded-4 p-4 bg-white">
-            <div className="mb-4">
-              <h4 className="fw-bolder text-slate-900 mb-1">Chapa Payment History</h4>
+          <div className="card border-0 shadow-sm rounded-4 p-3 p-md-4 bg-white border border-slate-200">
+            <div className="mb-3">
+              <h5 className="fw-bolder text-slate-900 mb-0.5">Payment History & Ledger</h5>
               <p className="text-slate-500 text-xs mb-0">
-                Authoritative transaction ledger for payments completed through the Chapa gateway
+                Authoritative transaction ledger for payments initiated and settled through Chapa
               </p>
             </div>
 
             {orders.length === 0 ? (
-              <div className="text-center py-5 bg-slate-50 rounded-3 text-muted small">No payments recorded.</div>
+              <div className="text-center py-5 bg-slate-50 rounded-3 text-muted text-xs">No payments recorded.</div>
             ) : (
               <div className="table-responsive">
-                <table className="table align-middle mb-0 text-sm">
-                  <thead className="table-light text-slate-600 text-xs">
+                <table className="table align-middle mb-0">
+                  <thead className="table-light text-slate-600 text-[11px] text-uppercase">
                     <tr>
                       <th>Order #</th>
                       <th>Gateway</th>
-                      <th>Chapa Tx Ref</th>
+                      <th>Transaction Reference</th>
                       <th>Amount (ETB)</th>
                       <th>Date</th>
                       <th>Payment Status</th>
@@ -700,7 +636,7 @@ const CustomerDashboardPage = () => {
                   </thead>
                   <tbody className="text-xs">
                     {orders.map((o) => {
-                      const isPaid = ['PROCESSING', 'SHIPPED', 'DELIVERED'].includes(o.status);
+                      const paymentInfo = getPaymentStatusInfo(o);
                       return (
                         <tr key={`pay-${o.id}`}>
                           <td className="fw-bold">
@@ -712,9 +648,9 @@ const CustomerDashboardPage = () => {
                             <span className="badge bg-slate-100 text-slate-800">Chapa</span>
                           </td>
                           <td>
-                            {o.chapa_reference ? (
-                              <code className="text-xs bg-light px-2 py-0.5 rounded text-dark">
-                                {o.chapa_reference}
+                            {o.chapa_tx_ref ? (
+                              <code className="text-xs bg-light px-2 py-0.5 rounded text-dark break-anywhere">
+                                {o.chapa_tx_ref}
                               </code>
                             ) : (
                               <span className="text-muted text-xs">—</span>
@@ -723,22 +659,14 @@ const CustomerDashboardPage = () => {
                           <td><strong>{formatETB(o.total_amount)}</strong></td>
                           <td>{new Date(o.created_at).toLocaleDateString()}</td>
                           <td>
-                            {isPaid ? (
-                              <span className="badge bg-success rounded-pill px-2 py-0.5 text-[10px]">
-                                Verified Paid
-                              </span>
-                            ) : o.status === 'CANCELLED' ? (
-                              <span className="badge bg-danger rounded-pill px-2 py-0.5 text-[10px]">Cancelled</span>
-                            ) : (
-                              <span className="badge bg-warning text-dark rounded-pill px-2 py-0.5 text-[10px]">
-                                Pending
-                              </span>
-                            )}
+                            <span className={`badge rounded-pill px-2.5 py-1 text-[10px] font-bold ${paymentInfo.badgeClass}`}>
+                              {paymentInfo.label}
+                            </span>
                           </td>
                           <td className="text-end">
-                            {isPaid ? (
+                            {o.receipt && o.receipt.receipt_number ? (
                               <Link to={`/receipts/${o.id}`} className="btn btn-sm btn-outline-success rounded-pill px-2.5 py-1 text-xs">
-                                <i className="bi bi-receipt"></i> Receipt
+                                <i className="bi bi-receipt me-1"></i> Receipt
                               </Link>
                             ) : (
                               <span className="text-muted text-xs">Pending verification</span>
@@ -754,60 +682,58 @@ const CustomerDashboardPage = () => {
           </div>
         )}
 
-        {/* TAB 4: RECEIPTS */}
+        {/* TAB 4: OFFICIAL RECEIPTS (Strictly verified receipts only) */}
         {activeTab === 'receipts' && (
-          <div className="card border-0 shadow-sm rounded-4 p-4 bg-white">
-            <div className="mb-4">
-              <h4 className="fw-bolder text-slate-900 mb-1">Official Digital Receipts</h4>
+          <div className="card border-0 shadow-sm rounded-4 p-3 p-md-4 bg-white border border-slate-200">
+            <div className="mb-3">
+              <h5 className="fw-bolder text-slate-900 mb-0.5">Verified Digital Receipts</h5>
               <p className="text-slate-500 text-xs mb-0">
-                Tax-compliant digital receipts generated automatically after server-side Chapa payment verification
+                Official receipts issued upon successful server-side Chapa payment verification
               </p>
             </div>
 
-            {orders.filter((o) => ['PROCESSING', 'SHIPPED', 'DELIVERED'].includes(o.status)).length === 0 ? (
+            {verifiedReceipts.length === 0 ? (
               <div className="text-center py-5 bg-slate-50 rounded-3">
                 <i className="bi bi-receipt-cutoff fs-1 text-slate-400 mb-2 d-block"></i>
                 <h6 className="fw-bold text-slate-700">No verified receipts yet</h6>
                 <p className="text-slate-400 text-xs mb-0">
-                  Digital receipts are generated automatically upon successful Chapa payment confirmation.
+                  Digital receipts are generated automatically upon successful Chapa payment verification.
                 </p>
               </div>
             ) : (
               <div className="row g-3">
-                {orders
-                  .filter((o) => ['PROCESSING', 'SHIPPED', 'DELIVERED'].includes(o.status))
-                  .map((o) => (
-                    <div key={o.id} className="col-md-6">
-                      <div className="p-4 rounded-3 border border-slate-200 bg-slate-50 h-100 d-flex flex-column justify-content-between">
-                        <div>
-                          <div className="d-flex justify-content-between align-items-center mb-2">
-                            <span className="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 rounded-pill px-2.5 py-1 text-[10px] font-bold">
-                              VERIFIED PAID
-                            </span>
-                            <small className="text-slate-400 text-[11px]">
-                              {new Date(o.created_at).toLocaleDateString()}
-                            </small>
-                          </div>
-                          <h6 className="fw-bold text-slate-900 mb-1">Order #{o.order_number}</h6>
-                          <p className="text-slate-500 text-xs mb-2">Total Paid: <strong>{formatETB(o.total_amount)}</strong></p>
-                          <div className="text-[11px] text-slate-500 mb-1">
-                            Payment Gateway: <strong>Chapa</strong>
-                          </div>
-                          {o.chapa_reference && (
-                            <div className="text-[10px] text-muted">
-                              Tx Ref: <code>{o.chapa_reference}</code>
-                            </div>
-                          )}
+                {verifiedReceipts.map((o) => (
+                  <div key={o.id} className="col-12 col-md-6">
+                    <div className="p-3 p-md-4 rounded-3 border border-slate-200 bg-slate-50 h-100 d-flex flex-column justify-content-between">
+                      <div>
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                          <span className="badge bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-pill px-2.5 py-1 text-[10px] font-bold">
+                            VERIFIED PAID
+                          </span>
+                          <small className="text-slate-400 text-[11px]">
+                            {new Date(o.created_at).toLocaleDateString()}
+                          </small>
                         </div>
+                        <h6 className="fw-bold text-slate-900 mb-1">Receipt #{o.receipt.receipt_number}</h6>
+                        <div className="text-slate-600 text-xs mb-1">Order #{o.order_number}</div>
+                        <div className="text-slate-700 text-xs mb-2">
+                          Amount Paid: <strong className="text-primary">{formatETB(o.total_amount)}</strong>
+                        </div>
+                        {o.chapa_tx_ref && (
+                          <div className="text-[10px] text-muted mb-2">
+                            Ref: <code className="break-anywhere">{o.chapa_tx_ref}</code>
+                          </div>
+                        )}
+                      </div>
 
-                        <div className="pt-3 border-top border-slate-200 mt-3">
-                          <Link to={`/receipts/${o.id}`} className="btn btn-primary-gradient btn-sm rounded-pill px-3 py-1.5 w-100 fw-bold">
-                            <i className="bi bi-printer me-1"></i> View & Print Receipt
-                          </Link>
-                        </div>
+                      <div className="pt-3 border-top border-slate-200 mt-2">
+                        <Link to={`/receipts/${o.id}`} className="btn btn-primary-gradient btn-sm rounded-pill px-3 py-1.5 w-100 fw-bold text-xs shadow-sm">
+                          <i className="bi bi-printer me-1"></i> View Official Receipt
+                        </Link>
                       </div>
                     </div>
-                  ))}
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -815,9 +741,9 @@ const CustomerDashboardPage = () => {
 
         {/* TAB 5: WARRANTY AND CLAIMS */}
         {activeTab === 'warranty' && (
-          <div className="card border-0 shadow-sm rounded-4 p-4 bg-white">
-            <div className="mb-4">
-              <h4 className="fw-bolder text-slate-900 mb-1">Warranty Protection & Claims</h4>
+          <div className="card border-0 shadow-sm rounded-4 p-3 p-md-4 bg-white border border-slate-200">
+            <div className="mb-3">
+              <h5 className="fw-bolder text-slate-900 mb-0.5">Warranty Protection & Claims</h5>
               <p className="text-slate-500 text-xs mb-0">
                 Official snapshot policies recorded with each purchased product, active duration, and claims status
               </p>
@@ -829,7 +755,9 @@ const CustomerDashboardPage = () => {
               </div>
             ) : (
               <>
-                <h6 className="fw-bold text-slate-800 mb-3">Submitted Claims ({warrantyClaims.length})</h6>
+                <h6 className="fw-bold text-slate-800 mb-3 text-xs uppercase tracking-wider">
+                  Submitted Claims ({warrantyClaims.length})
+                </h6>
                 {warrantyClaims.length === 0 ? (
                   <div className="text-center py-4 bg-slate-50 rounded-3 mb-4 text-muted small">
                     No warranty claims submitted yet. You can submit claims directly from any verified order item.
@@ -879,13 +807,15 @@ const CustomerDashboardPage = () => {
 
                 <hr className="my-4" />
 
-                <h6 className="fw-bold text-slate-800 mb-2">Purchased Products with Active Warranty</h6>
+                <h6 className="fw-bold text-slate-800 mb-2 text-xs uppercase tracking-wider">
+                  Purchased Products with Active Warranty
+                </h6>
                 <div className="row g-3">
                   {orders
                     .filter((o) => ['PROCESSING', 'SHIPPED', 'DELIVERED'].includes(o.status))
                     .flatMap((o) => o.items || [])
                     .map((item, idx) => (
-                      <div key={`w-item-${idx}`} className="col-md-6">
+                      <div key={`w-item-${idx}`} className="col-12 col-md-6">
                         <div className="p-3 rounded-3 border bg-slate-50">
                           <div className="d-flex justify-content-between align-items-center mb-1">
                             <strong className="text-slate-900 small">{item.product_name}</strong>
@@ -912,10 +842,10 @@ const CustomerDashboardPage = () => {
 
         {/* TAB 6: NOTIFICATIONS */}
         {activeTab === 'notifications' && (
-          <div className="card border-0 shadow-sm rounded-4 p-4 bg-white">
-            <div className="d-flex justify-content-between align-items-center mb-4">
+          <div className="card border-0 shadow-sm rounded-4 p-3 p-md-4 bg-white border border-slate-200">
+            <div className="d-flex justify-content-between align-items-center mb-3">
               <div>
-                <h4 className="fw-bolder text-slate-900 mb-1">In-App Notifications</h4>
+                <h5 className="fw-bolder text-slate-900 mb-0.5">In-App Notifications</h5>
                 <p className="text-slate-500 text-xs mb-0">Alerts for payments, order milestones, and warranty updates</p>
               </div>
               {notifications.length > 0 && (
@@ -956,32 +886,32 @@ const CustomerDashboardPage = () => {
           </div>
         )}
 
-        {/* TAB 7: MY PROFILE */}
+        {/* TAB 7: PROFILE SETTINGS */}
         {activeTab === 'profile' && (
-          <div className="card border-0 shadow-sm rounded-4 p-4 bg-white">
-            <div className="mb-4">
-              <h4 className="fw-bolder text-slate-900 mb-1">My Customer Profile</h4>
-              <p className="text-slate-500 text-xs mb-0">Manage recipient credentials, phone number, and default delivery address</p>
+          <div className="card border-0 shadow-sm rounded-4 p-3 p-md-4 bg-white border border-slate-200">
+            <div className="mb-3">
+              <h5 className="fw-bolder text-slate-900 mb-0.5">Account Profile Details</h5>
+              <p className="text-slate-500 text-xs mb-0">Authoritative account credentials and default delivery address</p>
             </div>
 
             <form onSubmit={handleProfileSubmit}>
               <div className="row g-3 mb-3">
-                <div className="col-md-6">
+                <div className="col-12 col-md-6">
                   <label className="form-label text-xs fw-bold text-slate-700">First Name</label>
                   <input
                     type="text"
                     name="first_name"
-                    className="form-control text-sm py-2"
+                    className="form-control text-sm py-2 rounded-3"
                     value={formData.first_name}
                     onChange={handleChange}
                   />
                 </div>
-                <div className="col-md-6">
+                <div className="col-12 col-md-6">
                   <label className="form-label text-xs fw-bold text-slate-700">Last Name</label>
                   <input
                     type="text"
                     name="last_name"
-                    className="form-control text-sm py-2"
+                    className="form-control text-sm py-2 rounded-3"
                     value={formData.last_name}
                     onChange={handleChange}
                   />
@@ -989,21 +919,21 @@ const CustomerDashboardPage = () => {
               </div>
 
               <div className="row g-3 mb-3">
-                <div className="col-md-6">
-                  <label className="form-label text-xs fw-bold text-slate-700">Email Address (Read-only)</label>
+                <div className="col-12 col-md-6">
+                  <label className="form-label text-xs fw-bold text-slate-700">Email Address (Authoritative)</label>
                   <input
                     type="email"
-                    className="form-control text-sm py-2 bg-slate-50"
+                    className="form-control text-sm py-2 bg-slate-50 rounded-3"
                     value={user.email}
                     disabled
                   />
                 </div>
-                <div className="col-md-6">
+                <div className="col-12 col-md-6">
                   <label className="form-label text-xs fw-bold text-slate-700">Phone Number</label>
                   <input
                     type="tel"
                     name="phone_number"
-                    className="form-control text-sm py-2"
+                    className="form-control text-sm py-2 rounded-3"
                     placeholder="+251 9..."
                     value={formData.phone_number}
                     onChange={handleChange}
@@ -1015,7 +945,7 @@ const CustomerDashboardPage = () => {
                 <label className="form-label text-xs fw-bold text-slate-700">Delivery Address</label>
                 <textarea
                   name="address"
-                  className="form-control text-sm py-2"
+                  className="form-control text-sm py-2 rounded-3"
                   rows="2"
                   placeholder="Street, Subcity, House No."
                   value={formData.address}
@@ -1024,23 +954,23 @@ const CustomerDashboardPage = () => {
               </div>
 
               <div className="row g-3 mb-4">
-                <div className="col-md-6">
+                <div className="col-12 col-md-6">
                   <label className="form-label text-xs fw-bold text-slate-700">City / Region</label>
                   <input
                     type="text"
                     name="city"
-                    className="form-control text-sm py-2"
+                    className="form-control text-sm py-2 rounded-3"
                     placeholder="e.g. Addis Ababa"
                     value={formData.city}
                     onChange={handleChange}
                   />
                 </div>
-                <div className="col-md-6">
-                  <label className="form-label text-xs fw-bold text-slate-700">Account Role</label>
+                <div className="col-12 col-md-6">
+                  <label className="form-label text-xs fw-bold text-slate-700">Account Role (Backend Authorization)</label>
                   <input
                     type="text"
-                    className="form-control text-sm py-2 bg-slate-50 text-uppercase fw-bold text-primary"
-                    value={user.role}
+                    className="form-control text-sm py-2 bg-slate-50 rounded-3 text-uppercase fw-bold text-primary"
+                    value={roleLabel}
                     disabled
                   />
                 </div>
@@ -1048,7 +978,7 @@ const CustomerDashboardPage = () => {
 
               <button
                 type="submit"
-                className="btn btn-primary-gradient rounded-pill px-4 py-2.5 fw-bold text-sm shadow-md"
+                className="btn btn-primary-gradient rounded-pill px-4 py-2 fw-bold text-xs shadow-sm"
                 disabled={saving}
               >
                 {saving ? 'Saving...' : 'Save Profile Changes'}
@@ -1058,7 +988,8 @@ const CustomerDashboardPage = () => {
         )}
       </main>
     </div>
-  );
+  </div>
+);
 };
 
 export default CustomerDashboardPage;

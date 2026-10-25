@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useNotifications } from '../context/NotificationContext';
+import { cleanDisplayName, getUserRoleLabel } from '../utils/orderStatus';
+import { getMediaUrl, getDefaultAvatar } from '../utils/imageUrl';
 
 const Navbar = () => {
   const { user, logout, isManagerOrAdmin } = useAuth();
@@ -11,6 +13,7 @@ const Navbar = () => {
   const { wishlistCount } = useWishlist();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
   const [showNotifications, setShowNotifications] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
@@ -18,444 +21,380 @@ const Navbar = () => {
   const handleSearch = (e) => {
     e.preventDefault();
     if (searchTerm.trim()) {
-      navigate(`/shop?search=${encodeURIComponent(searchTerm.trim())}`);
+      navigate(`/shop?search=${encodeURIComponent(searchTerm.trim())}${selectedCategory !== 'All' ? `&category=${encodeURIComponent(selectedCategory)}` : ''}`);
       setMobileMenuOpen(false);
     }
   };
 
-  const displayName = user?.first_name ? user.first_name : user?.username || 'Shopper';
+  const handleSignOut = () => {
+    logout();
+    setMobileMenuOpen(false);
+    navigate('/');
+  };
+
+  const displayName = cleanDisplayName(user);
+  const roleLabel = getUserRoleLabel(user?.role);
+  const avatarUrl = user?.avatar ? getMediaUrl(user.avatar) : null;
 
   return (
-    <>
-      {/* Announcement Bar */}
-      <div className="announcement-bar py-1.5 px-3">
-        <div className="container d-flex justify-content-between align-items-center">
-          <div className="d-flex align-items-center gap-2">
-            <span className="announcement-badge">
-              <i className="bi bi-cpu-fill me-1"></i> AI POWERED
-            </span>
-            <span className="d-none d-md-inline text-slate-300">
-              Chapa Online Payment Gateway (Telebirr, CBEBirr, Cards) & Instant Digital Receipts
-            </span>
-            <span className="d-inline d-md-none text-slate-300">
-              Chapa Verified Online Payments
-            </span>
-          </div>
-
-          <div className="d-flex align-items-center gap-2.5 text-xs">
-            <span className="d-none d-lg-inline text-slate-300">
-              <i className="bi bi-truck me-1 text-cyan-400"></i> Express Addis & Regional Delivery
-            </span>
-            <span className="d-none d-lg-inline text-slate-600">&bull;</span>
-            <Link to="/track" className="text-cyan-400 hover:text-white transition text-decoration-none d-none d-sm-inline">
-              Track Order
-            </Link>
-
-            <span className="text-slate-600 d-none d-sm-inline">&bull;</span>
-
-            {/* Top-Right Corner Auth Controls */}
-            {!user ? (
-              <div className="d-flex align-items-center gap-2 ms-1">
-                <Link
-                  to="/login"
-                  className="text-white hover:text-cyan-300 transition text-decoration-none px-2.5 py-1 rounded fw-semibold text-xs d-flex align-items-center gap-1"
-                  style={{ background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255, 255, 255, 0.2)' }}
-                >
-                  <i className="bi bi-box-arrow-in-right text-cyan-400"></i> Sign In
-                </Link>
-                <Link
-                  to="/register"
-                  className="btn btn-sm btn-primary-gradient text-white px-3 py-1 rounded-pill fw-bold text-decoration-none text-xs d-flex align-items-center gap-1 shadow-sm"
-                >
-                  <i className="bi bi-person-plus"></i> Sign Up
-                </Link>
-              </div>
-            ) : (
-              <Link
-                to={
-                  user.role === 'admin'
-                    ? '/admin/dashboard'
-                    : user.role === 'store_manager'
-                    ? '/manager/dashboard'
-                    : '/customer/dashboard'
-                }
-                className="text-cyan-300 fw-semibold text-decoration-none d-flex align-items-center gap-1"
-              >
-                <i className="bi bi-person-circle"></i> {displayName}
-              </Link>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Main Navbar */}
-      <nav className="navbar navbar-expand-lg navbar-light bg-white sticky-top border-bottom border-slate-100 shadow-sm py-2.5">
-        <div className="container">
-          {/* Unified Brand: NexusStore AI */}
-          <Link className="navbar-brand d-flex align-items-center gap-2" to="/">
+    <header
+      className="sticky-top z-3"
+      style={{
+        position: 'sticky',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 1030,
+        backgroundColor: '#0c1e33',
+        boxShadow: '0 2px 10px rgba(11, 26, 45, 0.12)',
+      }}
+    >
+      {/* Top Navbar Header - Deep Navy Blue (Screenshot 1) */}
+      <div style={{ backgroundColor: '#0c1e33', color: '#ffffff' }} className="py-2.5 px-3 px-lg-4 border-bottom border-dark border-opacity-25">
+        <div className="container-fluid max-w-7xl d-flex align-items-center justify-content-between gap-2 gap-md-4">
+          
+          {/* Logo & Brand */}
+          <Link to="/" className="d-flex align-items-center gap-2 text-decoration-none flex-shrink-0">
             <div
-              className="rounded-xl d-flex align-items-center justify-content-center text-white shadow-sm"
-              style={{ width: '40px', height: '40px', background: 'var(--gradient-primary)' }}
+              className="rounded-3 d-flex align-items-center justify-content-center text-white"
+              style={{ width: '38px', height: '38px', backgroundColor: '#1b64da', boxShadow: '0 2px 8px rgba(27, 100, 218, 0.4)' }}
             >
-              <i className="bi bi-cpu-fill fs-5"></i>
+              <i className="bi bi-cart3 fs-5"></i>
             </div>
-            <div className="d-flex align-items-center">
-              <span className="fw-bolder fs-4 text-slate-900 tracking-tight">Nexus</span>
-              <span className="text-primary fw-bolder fs-4 tracking-tight">Store</span>
-              <span
-                className="badge ms-1.5 rounded-full font-bold text-[10px] uppercase tracking-wider"
-                style={{
-                  background: 'linear-gradient(135deg, #0b1329 0%, #1e1b4b 100%)',
-                  color: '#00f2fe',
-                  border: '1px solid rgba(0, 242, 254, 0.3)',
-                  padding: '4px 8px'
-                }}
-              >
-                AI
+            <div className="d-flex flex-column">
+              <span className="fw-bolder fs-5 text-white tracking-tight lh-1" style={{ letterSpacing: '-0.02em' }}>
+                EthioTech <span style={{ color: '#60a5fa' }}>Market</span>
+              </span>
+              <span className="text-slate-400 d-none d-sm-inline" style={{ fontSize: '0.68rem', letterSpacing: '0.02em' }}>
+                Better Tech. Brighter Future.
               </span>
             </div>
           </Link>
 
-          {/* Mobile Right Quick Controls: Sign In & Sign Up or Cart */}
-          <div className="d-flex align-items-center gap-1.5 d-lg-none ms-auto me-2">
-            {!user ? (
-              <>
+          {/* Search Bar with Category Dropdown (Screenshot 1) */}
+          <form className="d-none d-md-flex align-items-center flex-grow-1 mx-2 mx-xl-4" onSubmit={handleSearch} style={{ maxWidth: '620px' }}>
+            <div className="input-group shadow-sm" style={{ borderRadius: '0.5rem', overflow: 'hidden' }}>
+              <select
+                className="form-select border-0 bg-slate-100 text-slate-700 text-xs fw-semibold px-2.5"
+                style={{ maxWidth: '130px', cursor: 'pointer', backgroundColor: '#e2e8f0' }}
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+              >
+                <option value="All">All Categories</option>
+                <option value="Laptops">Laptops</option>
+                <option value="Smartphones">Smartphones</option>
+                <option value="Accessories">Accessories</option>
+                <option value="Audio">Audio</option>
+                <option value="Wearables">Wearables</option>
+                <option value="Tablets">Tablets</option>
+              </select>
+              <input
+                type="text"
+                className="form-control border-0 py-2 text-sm bg-white"
+                placeholder="Search products, brands, and categories..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              <button
+                className="btn text-white px-3.5 d-flex align-items-center justify-content-center"
+                style={{ backgroundColor: '#1b64da' }}
+                type="submit"
+                aria-label="Search"
+              >
+                <i className="bi bi-search fs-6"></i>
+              </button>
+            </div>
+          </form>
+
+          {/* Right Header Navigation Controls */}
+          <div className="d-flex align-items-center gap-2 gap-sm-3 flex-shrink-0">
+            
+            {/* Wishlist Icon */}
+            <Link
+              to="/wishlist"
+              className="text-white text-decoration-none position-relative p-2 rounded-circle hover-bg-navy d-flex align-items-center justify-content-center"
+              style={{ width: '38px', height: '38px', background: 'rgba(255, 255, 255, 0.08)' }}
+              title="My Wishlist"
+            >
+              <i className="bi bi-heart fs-5"></i>
+              {wishlistCount > 0 && (
+                <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style={{ fontSize: '0.65rem' }}>
+                  {wishlistCount}
+                </span>
+              )}
+            </Link>
+
+            {/* Shopping Cart Icon with Counter */}
+            <Link
+              to="/cart"
+              className="text-white text-decoration-none position-relative px-2.5 py-1.5 rounded-3 d-flex align-items-center gap-1.5"
+              style={{ background: 'rgba(255, 255, 255, 0.08)' }}
+              title="Shopping Cart"
+            >
+              <i className="bi bi-cart3 fs-5" style={{ color: '#60a5fa' }}></i>
+              <span className="fw-semibold text-xs d-none d-sm-inline">Cart</span>
+              {cartCount > 0 && (
+                <span className="badge rounded-pill text-white" style={{ backgroundColor: '#1b64da', fontSize: '0.7rem' }}>
+                  {cartCount}
+                </span>
+              )}
+            </Link>
+
+            {/* Notifications Dropdown (If signed in) */}
+            {user && (
+              <div className="position-relative">
+                <button
+                  className="btn text-white p-0 position-relative border-0 d-flex align-items-center justify-content-center rounded-circle"
+                  style={{ width: '38px', height: '38px', background: 'rgba(255, 255, 255, 0.08)' }}
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  type="button"
+                  title="Notifications"
+                >
+                  <i className="bi bi-bell fs-5"></i>
+                  {unreadCount > 0 && (
+                    <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style={{ fontSize: '0.65rem' }}>
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {showNotifications && (
+                  <div
+                    className="card shadow-lg border-0 rounded-3 p-3 position-absolute end-0 mt-2 bg-white text-dark"
+                    style={{ width: '320px', zIndex: 1060 }}
+                  >
+                    <div className="d-flex justify-content-between align-items-center pb-2 border-bottom">
+                      <span className="fw-bold text-sm text-slate-900">Notifications</span>
+                      {unreadCount > 0 && (
+                        <button className="btn btn-link btn-sm text-primary p-0 text-decoration-none text-xs" onClick={markAllAsRead}>
+                          Mark all as read
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ maxHeight: '260px', overflowY: 'auto' }} className="py-2">
+                      {notifications.length === 0 ? (
+                        <div className="text-center py-4 text-muted small">No notifications yet</div>
+                      ) : (
+                        notifications.map((n) => (
+                          <div
+                            key={n.id}
+                            className={`p-2.5 rounded-2 mb-1.5 transition ${n.is_read ? 'bg-white hover:bg-slate-50' : 'bg-blue-50'}`}
+                            onClick={() => {
+                              markAsRead(n.id);
+                              if (n.link) {
+                                setShowNotifications(false);
+                                navigate(n.link);
+                              }
+                            }}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <div className="d-flex align-items-center justify-content-between mb-1">
+                              <span className="fw-semibold text-xs text-dark">{n.title}</span>
+                              <small className="text-muted text-[10px]">{new Date(n.created_at).toLocaleDateString()}</small>
+                            </div>
+                            <p className="text-muted text-xs mb-0" style={{ lineHeight: '1.3' }}>
+                              {n.message}
+                            </p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* User Account / Profile Dropdown */}
+            {user ? (
+              <div className="dropdown">
+                <button
+                  className="btn text-white border-0 p-1 d-flex align-items-center gap-2 rounded-pill"
+                  style={{ background: 'rgba(255, 255, 255, 0.08)' }}
+                  data-bs-toggle="dropdown"
+                  type="button"
+                >
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt={displayName}
+                      className="rounded-circle object-fit-cover"
+                      style={{ width: '32px', height: '32px' }}
+                      onError={(e) => { e.target.src = getDefaultAvatar(displayName); }}
+                    />
+                  ) : (
+                    <div
+                      className="rounded-circle text-white d-flex align-items-center justify-content-center fw-bold small"
+                      style={{ width: '32px', height: '32px', backgroundColor: '#1b64da' }}
+                    >
+                      {user.username.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <span className="fw-semibold text-xs d-none d-md-inline pe-1 text-white">
+                    {displayName.split(' ')[0]}
+                  </span>
+                  <i className="bi bi-chevron-down text-slate-400 d-none d-md-inline" style={{ fontSize: '0.65rem' }}></i>
+                </button>
+
+                <ul className="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-3 p-2 mt-2" style={{ minWidth: '220px' }}>
+                  <li className="px-3 py-2 border-bottom mb-1">
+                    <div className="fw-bold text-sm text-slate-900">{displayName}</div>
+                    <small className="text-muted text-xs">{user.email}</small>
+                    <div className="mt-1">
+                      <span className="badge bg-primary bg-opacity-10 text-primary text-[10px] fw-bold text-uppercase">
+                        {roleLabel}
+                      </span>
+                    </div>
+                  </li>
+
+                  <li>
+                    <Link
+                      className="dropdown-item py-2 rounded-2 text-xs d-flex align-items-center gap-2 fw-semibold"
+                      to={
+                        user.role === 'admin'
+                          ? '/admin/dashboard'
+                          : user.role === 'store_manager'
+                          ? '/manager/dashboard'
+                          : '/customer/dashboard'
+                      }
+                    >
+                      <i className="bi bi-speedometer2 text-primary"></i> Dashboard
+                    </Link>
+                  </li>
+
+                  <li>
+                    <Link
+                      className="dropdown-item py-2 rounded-2 text-xs d-flex align-items-center gap-2 fw-semibold"
+                      to="/profile"
+                    >
+                      <i className="bi bi-person text-secondary"></i> My Profile & Photo
+                    </Link>
+                  </li>
+
+                  {user.role === 'customer' && (
+                    <>
+                      <li>
+                        <Link className="dropdown-item py-2 rounded-2 text-xs d-flex align-items-center gap-2 fw-semibold" to="/customer/dashboard?tab=orders">
+                          <i className="bi bi-box-seam text-secondary"></i> My Orders
+                        </Link>
+                      </li>
+                      <li>
+                        <Link className="dropdown-item py-2 rounded-2 text-xs d-flex align-items-center gap-2 fw-semibold" to="/track">
+                          <i className="bi bi-geo-alt text-secondary"></i> Order Tracking
+                        </Link>
+                      </li>
+                    </>
+                  )}
+
+                  <li><hr className="dropdown-divider my-1" /></li>
+
+                  <li>
+                    <button
+                      className="dropdown-item py-2 rounded-2 text-xs d-flex align-items-center gap-2 text-danger fw-semibold"
+                      onClick={handleSignOut}
+                    >
+                      <i className="bi bi-box-arrow-right"></i> Sign Out
+                    </button>
+                  </li>
+                </ul>
+              </div>
+            ) : (
+              <div className="d-flex align-items-center gap-2">
                 <Link
                   to="/login"
-                  className="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-1 text-xs fw-bold"
+                  className="btn btn-sm text-white px-3 py-1.5 rounded-2 fw-semibold text-xs text-decoration-none"
+                  style={{ background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255, 255, 255, 0.2)' }}
                 >
                   Sign In
                 </Link>
                 <Link
                   to="/register"
-                  className="btn btn-sm btn-primary-gradient rounded-pill px-2.5 py-1 text-xs fw-bold text-white shadow-sm"
+                  className="btn btn-sm text-white px-3 py-1.5 rounded-2 fw-bold text-xs text-decoration-none"
+                  style={{ backgroundColor: '#1b64da' }}
                 >
-                  Sign Up
+                  Create Account
                 </Link>
-              </>
-            ) : (
-              <Link
-                to="/cart"
-                className="btn btn-sm btn-light rounded-pill px-2.5 py-1 text-xs position-relative border"
-              >
-                <i className="bi bi-cart3 fs-6 text-primary"></i>
-                {cartCount > 0 && (
-                  <span className="position-absolute top-0 start-100 translate-middle badge rounded-full bg-primary text-white text-[9px] px-1">
-                    {cartCount}
-                  </span>
-                )}
-              </Link>
+              </div>
             )}
+
+            {/* Mobile Hamburger Menu Toggle */}
+            <button
+              className="btn text-white p-1 d-md-none border-0"
+              type="button"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle navigation menu"
+            >
+              <i className={`bi ${mobileMenuOpen ? 'bi-x-lg' : 'bi-list'} fs-3`}></i>
+            </button>
+
+          </div>
+        </div>
+      </div>
+
+      {/* Subheader Navigation Links (Desktop & Mobile Drawer) */}
+      <nav className={`bg-white border-bottom py-2 px-3 px-lg-4 shadow-sm ${mobileMenuOpen ? 'd-block' : 'd-none d-md-block'}`}>
+        <div className="container-fluid max-w-7xl d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+          
+          {/* Quick Category / Page Links */}
+          <div className="d-flex flex-wrap align-items-center gap-1 gap-md-3 text-xs fw-semibold">
+            <Link to="/" className="text-slate-700 hover-text-blue px-2 py-1 rounded text-decoration-none" onClick={() => setMobileMenuOpen(false)}>
+              Home
+            </Link>
+            <Link to="/shop" className="text-slate-700 hover-text-blue px-2 py-1 rounded text-decoration-none" onClick={() => setMobileMenuOpen(false)}>
+              All Products
+            </Link>
+            <Link to="/categories" className="text-slate-700 hover-text-blue px-2 py-1 rounded text-decoration-none" onClick={() => setMobileMenuOpen(false)}>
+              Categories
+            </Link>
+            <Link to="/deals" className="text-rose-600 hover-text-blue px-2 py-1 rounded text-decoration-none d-flex align-items-center gap-1" onClick={() => setMobileMenuOpen(false)}>
+              <i className="bi bi-lightning-charge-fill text-danger"></i> Featured Deals
+            </Link>
+            <Link to="/recommendations" className="text-slate-700 hover-text-blue px-2 py-1 rounded text-decoration-none d-flex align-items-center gap-1" onClick={() => setMobileMenuOpen(false)}>
+              <i className="bi bi-stars text-primary"></i> AI Picks
+            </Link>
+            <Link to="/track" className="text-slate-700 hover-text-blue px-2 py-1 rounded text-decoration-none" onClick={() => setMobileMenuOpen(false)}>
+              Order Tracking
+            </Link>
+            <Link to="/contact" className="text-slate-700 hover-text-blue px-2 py-1 rounded text-decoration-none" onClick={() => setMobileMenuOpen(false)}>
+              Help & Support
+            </Link>
           </div>
 
-          {/* Mobile menu toggle */}
-          <button
-            className="navbar-toggler border-0 shadow-none p-1"
-            type="button"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label="Toggle navigation"
-          >
-            <i className={`bi ${mobileMenuOpen ? 'bi-x-lg' : 'bi-list'} fs-3 text-slate-800`}></i>
-          </button>
+          {/* Manager / Admin Direct Portal Link if authenticated staff */}
+          {isManagerOrAdmin && (
+            <div className="d-flex align-items-center">
+              <Link
+                to={user?.role === 'admin' ? '/admin/dashboard' : '/manager/dashboard'}
+                className="btn btn-sm text-white px-2.5 py-1 rounded-2 text-xs fw-bold d-flex align-items-center gap-1"
+                style={{ backgroundColor: '#0c1e33' }}
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <i className="bi bi-shield-lock-fill text-warning"></i>
+                {user?.role === 'admin' ? 'Admin Console' : 'Manager Console'}
+              </Link>
+            </div>
+          )}
 
-          {/* Nav Links & Controls */}
-          <div className={`collapse navbar-collapse ${mobileMenuOpen ? 'show' : ''}`} id="navbarMain">
-            <ul className="navbar-nav me-auto mb-2 mb-lg-0 ms-lg-2 gap-0.5 text-xs">
-              <li className="nav-item">
-                <Link
-                  className="nav-link fw-semibold px-2.5 text-slate-700 hover:text-blue-600"
-                  to="/"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Home
-                </Link>
-              </li>
-              <li className="nav-item">
-                <Link
-                  className="nav-link fw-semibold px-2.5 text-slate-700 hover:text-blue-600"
-                  to="/shop"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Shop
-                </Link>
-              </li>
-              <li className="nav-item">
-                <Link
-                  className="nav-link fw-semibold px-2.5 text-slate-700 hover:text-blue-600"
-                  to="/categories"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Categories
-                </Link>
-              </li>
-              <li className="nav-item">
-                <Link
-                  className="nav-link fw-semibold px-2.5 text-slate-700 hover:text-rose-600 d-flex align-items-center gap-1"
-                  to="/deals"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  <i className="bi bi-fire text-danger"></i> Deals
-                </Link>
-              </li>
-              <li className="nav-item">
-                <Link
-                  className="nav-link fw-semibold px-2.5 text-slate-700 hover:text-blue-600 d-flex align-items-center gap-1"
-                  to="/recommendations"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  <i className="bi bi-stars text-primary"></i> AI
-                </Link>
-              </li>
-              <li className="nav-item">
-                <Link
-                  className="nav-link fw-semibold px-2.5 text-slate-700 hover:text-blue-600"
-                  to="/about"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  About Us
-                </Link>
-              </li>
-              <li className="nav-item">
-                <Link
-                  className="nav-link fw-semibold px-2.5 text-slate-700 hover:text-blue-600"
-                  to="/contact"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Contact
-                </Link>
-              </li>
-              <li className="nav-item">
-                <Link
-                  className="nav-link fw-semibold px-2.5 text-slate-700 hover:text-blue-600"
-                  to="/faq"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Help
-                </Link>
-              </li>
-              {isManagerOrAdmin && (
-                <li className="nav-item">
-                  <Link
-                    className="nav-link fw-semibold px-2.5 text-primary d-flex align-items-center gap-1"
-                    to="/manager"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <i className="bi bi-speedometer2"></i> Portal
-                  </Link>
-                </li>
-              )}
-            </ul>
-
-            {/* Search Input */}
-            <form className="d-flex me-lg-3 my-2 my-lg-0" onSubmit={handleSearch} style={{ maxWidth: '280px', width: '100%' }}>
+          {/* Mobile Search Bar (Only shown on mobile when menu opens) */}
+          <div className="d-md-none mt-2">
+            <form onSubmit={handleSearch}>
               <div className="input-group">
-                <span className="input-group-text bg-slate-100 border-0 text-slate-400 ps-3 rounded-start-pill">
-                  <i className="bi bi-search"></i>
-                </span>
                 <input
                   type="text"
-                  className="form-control form-control-sm bg-slate-100 border-0 rounded-end-pill py-2 text-sm"
-                  placeholder="Search electronics..."
+                  className="form-control form-control-sm"
+                  placeholder="Search products..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
+                <button className="btn btn-sm text-white" style={{ backgroundColor: '#1b64da' }} type="submit">
+                  <i className="bi bi-search"></i>
+                </button>
               </div>
             </form>
-
-            {/* Right Action Icons */}
-            <div className="d-flex align-items-center gap-2.5 mt-2 mt-lg-0">
-              {/* Notifications Icon (for logged-in user) */}
-              {user && (
-                <div className="position-relative">
-                  <button
-                    className="btn btn-light rounded-circle p-2 position-relative text-slate-600 border-0 hover:bg-slate-100"
-                    onClick={() => setShowNotifications(!showNotifications)}
-                    title="Notifications"
-                    type="button"
-                  >
-                    <i className="bi bi-bell fs-5"></i>
-                    {unreadCount > 0 && (
-                      <span className="position-absolute top-0 start-100 translate-middle badge rounded-full bg-danger">
-                        {unreadCount}
-                      </span>
-                    )}
-                  </button>
-
-                  {showNotifications && (
-                    <div
-                      className="card shadow-xl border-0 rounded-3xl p-3 position-absolute end-0 mt-2 bg-white"
-                      style={{ width: '320px', zIndex: 1050 }}
-                    >
-                      <div className="d-flex justify-content-between align-items-center px-1 pb-2 border-bottom">
-                        <span className="fw-bold text-sm">Notifications</span>
-                        {unreadCount > 0 && (
-                          <button className="btn btn-link btn-sm text-primary p-0 text-decoration-none text-xs" onClick={markAllAsRead}>
-                            Mark all as read
-                          </button>
-                        )}
-                      </div>
-                      <div style={{ maxHeight: '260px', overflowY: 'auto' }} className="py-2">
-                        {notifications.length === 0 ? (
-                          <div className="text-center py-4 text-muted small">No notifications yet</div>
-                        ) : (
-                          notifications.map((n) => (
-                            <div
-                              key={n.id}
-                              className={`p-2.5 rounded-2xl mb-1.5 transition ${
-                                n.is_read ? 'bg-white hover:bg-slate-50' : 'bg-blue-50'
-                              }`}
-                              onClick={() => {
-                                markAsRead(n.id);
-                                if (n.link) {
-                                  setShowNotifications(false);
-                                  navigate(n.link);
-                                }
-                              }}
-                              style={{ cursor: 'pointer' }}
-                            >
-                              <div className="d-flex align-items-center justify-content-between mb-1">
-                                <span className="fw-semibold text-xs text-dark">{n.title}</span>
-                                <small className="text-muted text-[10px]">
-                                  {new Date(n.created_at).toLocaleDateString()}
-                                </small>
-                              </div>
-                              <p className="text-muted text-xs mb-0" style={{ lineHeight: '1.3' }}>
-                                {n.message}
-                              </p>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Wishlist Button */}
-              <Link
-                to="/wishlist"
-                className="btn btn-light rounded-full p-2 text-slate-700 position-relative border border-slate-200 hover:border-rose-400 shadow-sm transition"
-                title="My Wishlist"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                <i className="bi bi-heart text-rose-500 fs-5"></i>
-                {wishlistCount > 0 && (
-                  <span className="position-absolute top-0 start-100 translate-middle badge rounded-full bg-danger text-white text-[10px] px-1.5">
-                    {wishlistCount}
-                  </span>
-                )}
-              </Link>
-
-              {/* Shopping Cart Button */}
-              <Link
-                to="/cart"
-                className="btn btn-light rounded-full px-3 py-1.5 text-slate-800 d-flex align-items-center gap-2 border border-slate-200 hover:border-blue-500 shadow-sm transition"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                <i className="bi bi-cart3 fs-5 text-primary"></i>
-                <span className="fw-bold text-xs d-none d-sm-inline">Cart</span>
-                <span className="badge rounded-full bg-primary text-white text-[11px] px-2">{cartCount}</span>
-              </Link>
-
-              {/* User Account / Profile */}
-              {user ? (
-                <div className="dropdown">
-                  <button
-                    className="btn btn-outline-light text-slate-800 border-0 p-1 d-flex align-items-center gap-2 rounded-full hover:bg-slate-50"
-                    data-bs-toggle="dropdown"
-                    type="button"
-                  >
-                    <div
-                      className="rounded-full text-white d-flex align-items-center justify-content-center fw-bold shadow-sm"
-                      style={{ width: '36px', height: '36px', background: 'var(--gradient-primary)' }}
-                    >
-                      {user.username.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="text-start d-none d-md-block pe-1">
-                      <div className="fw-bold text-xs text-slate-900 text-truncate" style={{ maxWidth: '95px' }}>
-                        {displayName}
-                      </div>
-                      <span className="text-[10px] text-slate-400 uppercase font-semibold">
-                        {user.role}
-                      </span>
-                    </div>
-                  </button>
-                  <ul className="dropdown-menu dropdown-menu-end shadow-xl border-0 rounded-2xl p-2 mt-2">
-                    <li className="px-3 py-2 border-bottom mb-1">
-                      <div className="fw-bold text-sm text-slate-900">{displayName}</div>
-                      <small className="text-muted text-xs">{user.email}</small>
-                    </li>
-                    <li>
-                      <Link
-                        className="dropdown-item py-2 rounded-xl text-xs d-flex align-items-center gap-2 fw-semibold"
-                        to={
-                          user.role === 'admin'
-                            ? '/admin/dashboard'
-                            : user.role === 'store_manager'
-                            ? '/manager/dashboard'
-                            : '/customer/dashboard'
-                        }
-                      >
-                        <i className="bi bi-speedometer2 text-primary"></i>{' '}
-                        {user.role === 'admin'
-                          ? 'Administrator Dashboard'
-                          : user.role === 'store_manager'
-                          ? 'Store Manager Dashboard'
-                          : 'Customer Dashboard'}
-                      </Link>
-                    </li>
-                    <li>
-                      <Link className="dropdown-item py-2 rounded-xl text-xs d-flex align-items-center gap-2" to="/customer/dashboard?tab=orders">
-                        <i className="bi bi-bag-check text-primary"></i> My Orders & Tracking
-                      </Link>
-                    </li>
-                    <li>
-                      <Link className="dropdown-item py-2 rounded-xl text-xs d-flex align-items-center gap-2" to="/customer/dashboard?tab=receipts">
-                        <i className="bi bi-receipt text-primary"></i> Digital Receipts
-                      </Link>
-                    </li>
-                    <li>
-                      <Link className="dropdown-item py-2 rounded-xl text-xs d-flex align-items-center gap-2" to="/customer/dashboard?tab=warranty">
-                        <i className="bi bi-shield-check text-emerald-600"></i> Warranty & Claims
-                      </Link>
-                    </li>
-                    <li><hr className="dropdown-divider my-1" /></li>
-                    <li>
-                      <button
-                        className="dropdown-item py-2 rounded-xl text-xs text-danger d-flex align-items-center gap-2"
-                        onClick={() => {
-                          logout();
-                          navigate('/');
-                        }}
-                      >
-                        <i className="bi bi-box-arrow-right"></i> Sign Out
-                      </button>
-                    </li>
-                  </ul>
-                </div>
-              ) : (
-                <div className="d-flex align-items-center gap-2">
-                  <Link
-                    to="/login"
-                    className="btn btn-outline-primary btn-sm rounded-pill text-xs fw-bold px-3 py-1.5 d-flex align-items-center gap-1 shadow-sm"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <i className="bi bi-box-arrow-in-right"></i> Sign In
-                  </Link>
-                  <Link
-                    to="/register"
-                    className="btn btn-primary-gradient btn-sm rounded-pill text-xs fw-bold px-3.5 py-1.5 shadow-sm text-white d-flex align-items-center gap-1"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <i className="bi bi-person-plus"></i> Sign Up
-                  </Link>
-                </div>
-              )}
-            </div>
           </div>
+
         </div>
       </nav>
-    </>
+    </header>
   );
 };
 

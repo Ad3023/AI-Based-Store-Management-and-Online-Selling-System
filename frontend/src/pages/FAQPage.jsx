@@ -60,39 +60,39 @@ const FAQPage = () => {
         </span>
         <h1 className="display-6 fw-bolder text-slate-900 mb-2">Frequently Asked Questions</h1>
         <p className="text-slate-500 text-sm">
-          Everything you need to know about shopping, Chapa payments, order tracking, and AI features on NexusStore AI.
+          Everything you need to know about shopping, Chapa payments, order tracking, and AI features on EthioTech Market.
         </p>
       </div>
 
       {/* Category Pills */}
       <div className="d-flex justify-content-center flex-wrap gap-2 mb-5">
         <button
-          className={`btn btn-sm rounded-full px-4 font-bold text-xs ${
-            activeCategory === 'payments' ? 'btn-primary-gradient text-white shadow-sm' : 'btn-light text-slate-700'
+          className={`btn btn-sm rounded-pill px-4 font-bold text-xs ${
+            activeCategory === 'payments' ? 'btn-ethio-primary text-white shadow-sm' : 'btn-light text-slate-700'
           }`}
           onClick={() => setActiveCategory('payments')}
         >
           <i className="bi bi-wallet2 me-1.5"></i> Payments & Chapa
         </button>
         <button
-          className={`btn btn-sm rounded-full px-4 font-bold text-xs ${
-            activeCategory === 'shipping' ? 'btn-primary-gradient text-white shadow-sm' : 'btn-light text-slate-700'
+          className={`btn btn-sm rounded-pill px-4 font-bold text-xs ${
+            activeCategory === 'shipping' ? 'btn-ethio-primary text-white shadow-sm' : 'btn-light text-slate-700'
           }`}
           onClick={() => setActiveCategory('shipping')}
         >
           <i className="bi bi-truck me-1.5"></i> Shipping & Delivery
         </button>
         <button
-          className={`btn btn-sm rounded-full px-4 font-bold text-xs ${
-            activeCategory === 'ai' ? 'btn-primary-gradient text-white shadow-sm' : 'btn-light text-slate-700'
+          className={`btn btn-sm rounded-pill px-4 font-bold text-xs ${
+            activeCategory === 'ai' ? 'btn-ethio-primary text-white shadow-sm' : 'btn-light text-slate-700'
           }`}
           onClick={() => setActiveCategory('ai')}
         >
           <i className="bi bi-cpu me-1.5"></i> AI Recommendations
         </button>
         <button
-          className={`btn btn-sm rounded-full px-4 font-bold text-xs ${
-            activeCategory === 'orders' ? 'btn-primary-gradient text-white shadow-sm' : 'btn-light text-slate-700'
+          className={`btn btn-sm rounded-pill px-4 font-bold text-xs ${
+            activeCategory === 'orders' ? 'btn-ethio-primary text-white shadow-sm' : 'btn-light text-slate-700'
           }`}
           onClick={() => setActiveCategory('orders')}
         >

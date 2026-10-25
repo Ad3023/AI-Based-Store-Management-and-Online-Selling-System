@@ -18,11 +18,11 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
-            'role', 'phone_number', 'address', 'city', 'avatar',
+            'role', 'is_staff', 'is_superuser', 'phone_number', 'address', 'city', 'avatar',
             'created_at', 'profile'
         ]
-        # Prevent privilege escalation: customers cannot change their own role
-        read_only_fields = ['id', 'created_at', 'role']
+        # Prevent privilege escalation: customers cannot change their own role or flags
+        read_only_fields = ['id', 'created_at', 'role', 'is_staff', 'is_superuser']
 
 
 class AdminUserSerializer(serializers.ModelSerializer):

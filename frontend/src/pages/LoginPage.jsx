@@ -21,7 +21,7 @@ const LoginPage = () => {
     setError('');
 
     if (!identifier.trim() || !password) {
-      setError('Please provide your email address and password.');
+      setError('Please provide your registered email address and password.');
       return;
     }
 
@@ -29,7 +29,7 @@ const LoginPage = () => {
       setLoading(true);
       const user = await login(identifier.trim(), password, rememberMe);
 
-      // Check for pending add_to_cart action
+      // Handle pending add_to_cart action if coming from guest click
       const action = searchParams.get('action');
       const productId = searchParams.get('productId');
       const quantity = parseInt(searchParams.get('quantity') || '1', 10);
@@ -78,137 +78,214 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="container py-5">
-      <div className="row justify-content-center">
-        <div className="col-11 col-sm-9 col-md-7 col-lg-5">
-          <div className="card border-0 shadow-xl rounded-4 p-4 p-md-5 bg-white">
-            {/* Header / Brand */}
-            <div className="text-center mb-4">
-              <div
-                className="mx-auto rounded-3 d-flex align-items-center justify-content-center text-white mb-3 shadow-sm"
-                style={{ width: '52px', height: '52px', background: 'var(--gradient-primary)' }}
-              >
-                <i className="bi bi-cpu-fill fs-4"></i>
-              </div>
-              <h3 className="fw-bolder text-slate-900 tracking-tight mb-1">Welcome Back</h3>
-              <p className="text-slate-500 text-xs mb-0">Sign in to your verified NexusStore account</p>
-            </div>
+    <div style={{ backgroundColor: '#f4f6fa', minHeight: 'calc(100vh - 120px)' }} className="d-flex align-items-center py-4 py-md-5">
+      <div className="container" style={{ maxWidth: '980px' }}>
+        <div className="card ethio-card border-0 shadow-lg overflow-hidden" style={{ borderRadius: '1.25rem' }}>
+          <div className="row g-0">
+            
+            {/* Left Panel - Deep Navy Blue (Screenshot 2) */}
+            <div
+              className="col-lg-5 p-4 p-md-5 d-flex flex-column justify-content-between text-white"
+              style={{
+                backgroundColor: '#0b1a2d',
+                background: 'linear-gradient(145deg, #0b1a2d 0%, #0c2340 100%)',
+              }}
+            >
+              <div>
+                {/* Brand Header */}
+                <div className="d-flex align-items-center gap-2 mb-4">
+                  <div
+                    className="rounded-3 d-flex align-items-center justify-content-center text-white"
+                    style={{ width: '38px', height: '38px', backgroundColor: '#1b64da' }}
+                  >
+                    <i className="bi bi-cart3 fs-5"></i>
+                  </div>
+                  <div>
+                    <h5 className="fw-bolder mb-0 text-white tracking-tight lh-1">
+                      EthioTech <span style={{ color: '#60a5fa' }}>Market</span>
+                    </h5>
+                    <small className="text-slate-400" style={{ fontSize: '0.65rem' }}>
+                      Better Tech. Brighter Future.
+                    </small>
+                  </div>
+                </div>
 
-            {/* Error Message Alert */}
-            {error && (
-              <div className="alert alert-danger rounded-3 text-xs mb-4 d-flex align-items-start gap-2 border-danger border-opacity-25" role="alert">
-                <i className="bi bi-exclamation-circle-fill text-danger fs-6 shrink-0 mt-0.5"></i>
-                <div className="flex-grow-1">{error}</div>
-                <button type="button" className="btn-close btn-sm p-1" onClick={() => setError('')} aria-label="Close"></button>
-              </div>
-            )}
+                <h3 className="fw-bold mb-4 text-white" style={{ lineHeight: '1.3' }}>
+                  Sign in to continue your shopping journey
+                </h3>
 
-            {/* Login Form */}
-            <form onSubmit={handleLogin} noValidate>
-              {/* Email Address */}
-              <div className="mb-3">
-                <label className="form-label text-xs fw-bold text-slate-700" htmlFor="login-identifier">
-                  Email Address or Username
-                </label>
-                <div className="input-group">
-                  <span className="input-group-text bg-slate-50 border-slate-200 text-slate-400">
-                    <i className="bi bi-envelope"></i>
-                  </span>
-                  <input
-                    id="login-identifier"
-                    type="text"
-                    className="form-control text-sm py-2"
-                    placeholder="name@example.com"
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    autoComplete="username"
-                    required
-                    disabled={loading}
-                  />
+                {/* 3 Value Props (Screenshot 2) */}
+                <div className="d-flex flex-column gap-3 mb-4">
+                  <div className="d-flex align-items-start gap-3">
+                    <div
+                      className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                      style={{ width: '28px', height: '28px', backgroundColor: 'rgba(27, 100, 218, 0.25)', color: '#60a5fa' }}
+                    >
+                      <i className="bi bi-check-lg fw-bold"></i>
+                    </div>
+                    <div>
+                      <div className="fw-bold text-sm text-white">Best Products</div>
+                      <small className="text-slate-400 text-xs">Genuine warranty-backed electronics and accessories.</small>
+                    </div>
+                  </div>
+
+                  <div className="d-flex align-items-start gap-3">
+                    <div
+                      className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                      style={{ width: '28px', height: '28px', backgroundColor: 'rgba(16, 185, 129, 0.25)', color: '#34d399' }}
+                    >
+                      <i className="bi bi-shield-check fw-bold"></i>
+                    </div>
+                    <div>
+                      <div className="fw-bold text-sm text-white">Secure Payment</div>
+                      <small className="text-slate-400 text-xs">Official Chapa checkout with Telebirr, CBE, and bank cards.</small>
+                    </div>
+                  </div>
+
+                  <div className="d-flex align-items-start gap-3">
+                    <div
+                      className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                      style={{ width: '28px', height: '28px', backgroundColor: 'rgba(245, 158, 11, 0.25)', color: '#fbbf24' }}
+                    >
+                      <i className="bi bi-truck fw-bold"></i>
+                    </div>
+                    <div>
+                      <div className="fw-bold text-sm text-white">Fast Delivery</div>
+                      <small className="text-slate-400 text-xs">Same-day Addis Ababa delivery and regional dispatch.</small>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Password with Show/Hide toggle */}
-              <div className="mb-3">
-                <div className="d-flex justify-content-between align-items-center mb-1">
-                  <label className="form-label text-xs fw-bold text-slate-700 mb-0" htmlFor="login-password">
-                    Password
-                  </label>
-                  <Link
-                    to="/forgot-password"
-                    className="text-primary text-xs text-decoration-none fw-semibold hover:underline"
+              {/* Bottom Notice */}
+              <div className="pt-3 border-top border-white border-opacity-10 text-slate-400 text-xs">
+                Protected by Django backend permissions and server-side RBAC.
+              </div>
+            </div>
+
+            {/* Right Panel - Sign In Form (Screenshot 2) */}
+            <div className="col-lg-7 p-4 p-md-5 bg-white d-flex flex-column justify-content-center">
+              <div style={{ maxWidth: '440px', margin: '0 auto', width: '100%' }}>
+                
+                <h3 className="fw-bolder text-slate-900 mb-1" style={{ letterSpacing: '-0.02em' }}>
+                  Welcome Back
+                </h3>
+                <p className="text-muted text-xs mb-4">
+                  Sign in to your account using your email and password
+                </p>
+
+                {/* Error Alert */}
+                {error && (
+                  <div className="alert alert-danger rounded-3 text-xs mb-3 d-flex align-items-start gap-2 border-danger border-opacity-25" role="alert">
+                    <i className="bi bi-exclamation-triangle-fill text-danger fs-6 shrink-0 mt-0.5"></i>
+                    <div>{error}</div>
+                  </div>
+                )}
+
+                <form onSubmit={handleLogin}>
+                  {/* Email Input */}
+                  <div className="mb-3">
+                    <label className="form-label text-xs fw-semibold text-slate-700 mb-1">
+                      Email address
+                    </label>
+                    <div className="input-group">
+                      <span className="input-group-text bg-slate-50 border-end-0 text-muted">
+                        <i className="bi bi-envelope"></i>
+                      </span>
+                      <input
+                        type="text"
+                        className="form-control form-control-lg text-sm bg-slate-50 border-start-0 ps-0"
+                        placeholder="you@example.com"
+                        value={identifier}
+                        onChange={(e) => setIdentifier(e.target.value)}
+                        autoComplete="email"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Password Input */}
+                  <div className="mb-3">
+                    <div className="d-flex justify-content-between align-items-center mb-1">
+                      <label className="form-label text-xs fw-semibold text-slate-700 mb-0">
+                        Password
+                      </label>
+                      <Link
+                        to="/forgot-password"
+                        className="text-xs text-primary fw-semibold text-decoration-none hover-underline"
+                      >
+                        Forgot password?
+                      </Link>
+                    </div>
+                    <div className="input-group">
+                      <span className="input-group-text bg-slate-50 border-end-0 text-muted">
+                        <i className="bi bi-lock"></i>
+                      </span>
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        className="form-control form-control-lg text-sm bg-slate-50 border-start-0 border-end-0 ps-0"
+                        placeholder="Enter your password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        autoComplete="current-password"
+                        required
+                      />
+                      <button
+                        className="input-group-text bg-slate-50 border-start-0 text-muted"
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      >
+                        <i className={`bi ${showPassword ? 'bi-eye-slash' : 'bi-eye'}`}></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Remember Me */}
+                  <div className="mb-4 d-flex align-items-center">
+                    <div className="form-check">
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        id="rememberMeCheckbox"
+                        checked={rememberMe}
+                        onChange={(e) => setRememberMe(e.target.checked)}
+                      />
+                      <label className="form-check-label text-xs text-slate-600" htmlFor="rememberMeCheckbox">
+                        Remember me
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Sign In Button */}
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="btn btn-ethio-primary w-100 py-2.5 fw-bold text-sm shadow-sm"
+                    style={{ backgroundColor: '#1b64da', color: '#ffffff', borderRadius: '0.5rem' }}
                   >
-                    Forgot Password?
+                    {loading ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        Signing in...
+                      </>
+                    ) : (
+                      'Sign In'
+                    )}
+                  </button>
+                </form>
+
+                {/* Footer Link: Create Account */}
+                <div className="text-center mt-4 pt-2">
+                  <span className="text-muted text-xs">Don't have an account? </span>
+                  <Link to="/register" className="text-primary fw-bold text-xs text-decoration-none">
+                    Create account
                   </Link>
                 </div>
-                <div className="input-group">
-                  <span className="input-group-text bg-slate-50 border-slate-200 text-slate-400">
-                    <i className="bi bi-lock"></i>
-                  </span>
-                  <input
-                    id="login-password"
-                    type={showPassword ? 'text' : 'password'}
-                    className="form-control text-sm py-2"
-                    placeholder="Enter your password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    autoComplete="current-password"
-                    required
-                    disabled={loading}
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary border-slate-200 text-slate-500 hover:text-slate-700"
-                    onClick={() => setShowPassword(!showPassword)}
-                    tabIndex={-1}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    <i className={`bi ${showPassword ? 'bi-eye-slash-fill' : 'bi-eye-fill'}`}></i>
-                  </button>
-                </div>
+
               </div>
-
-              {/* Remember Me Checkbox */}
-              <div className="mb-4 form-check">
-                <input
-                  type="checkbox"
-                  className="form-check-input"
-                  id="remember-me-check"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                />
-                <label className="form-check-label text-xs text-slate-600 user-select-none" htmlFor="remember-me-check">
-                  Keep me signed in on this device
-                </label>
-              </div>
-
-              {/* Sign In Button with loading & disabled state */}
-              <button
-                type="submit"
-                className="btn btn-primary-gradient w-100 rounded-pill py-2.5 fw-bold text-sm mb-3 shadow-md d-flex align-items-center justify-content-center gap-2"
-                disabled={loading || !identifier.trim() || !password}
-              >
-                {loading ? (
-                  <>
-                    <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                    <span>Signing in...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Sign In</span>
-                    <i className="bi bi-arrow-right"></i>
-                  </>
-                )}
-              </button>
-            </form>
-
-            {/* Create Account Link */}
-            <div className="text-center text-xs text-slate-500 pt-3 border-top border-slate-100">
-              Don't have an account yet?{' '}
-              <Link to="/register" className="text-primary fw-bold text-decoration-none hover:underline">
-                Sign Up
-              </Link>
             </div>
+
           </div>
         </div>
       </div>

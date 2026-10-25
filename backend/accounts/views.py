@@ -79,10 +79,10 @@ class CurrentUserView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        return Response(UserSerializer(request.user).data)
+        return Response(UserSerializer(request.user, context={'request': request}).data)
 
     def put(self, request):
-        serializer = UserSerializer(request.user, data=request.data, partial=True)
+        serializer = UserSerializer(request.user, data=request.data, partial=True, context={'request': request})
         if serializer.is_valid():
             serializer.save()
             # Also update profile preferred categories if supplied
@@ -90,8 +90,70 @@ class CurrentUserView(APIView):
                 request.user.profile.preferred_categories = request.data['preferred_categories']
                 request.user.profile.save()
             log_action(request.user, "Profile Updated", "User updated their profile information", request)
-            return Response(UserSerializer(request.user).data)
+            return Response(UserSerializer(request.user, context={'request': request}).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class UserAvatarView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        import os
+        import uuid
+        avatar_file = request.FILES.get('avatar')
+        if not avatar_file:
+            return Response({'error': 'No image file provided. Please choose a photo to upload.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate file size (max 5MB)
+        MAX_SIZE = 5 * 1024 * 1024
+        if avatar_file.size > MAX_SIZE:
+            return Response({'error': f'Image file is too large ({avatar_file.size / (1024*1024):.1f}MB). Maximum allowed size is 5MB.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate content type
+        allowed_types = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg']
+        if avatar_file.content_type.lower() not in allowed_types:
+            return Response({'error': 'Unsupported file format. Please upload a JPEG, PNG, or WebP image.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Safe unique filename
+        ext = os.path.splitext(avatar_file.name)[1].lower()
+        if ext not in ['.jpg', '.jpeg', '.png', '.webp']:
+            ext = '.jpg'
+        new_filename = f"avatars/user_{request.user.id}_{uuid.uuid4().hex[:8]}{ext}"
+
+        # Clean up old avatar if exists and not default
+        old_avatar = request.user.avatar
+        if old_avatar and hasattr(old_avatar, 'path') and os.path.isfile(old_avatar.path):
+            try:
+                os.remove(old_avatar.path)
+            except Exception:
+                pass
+
+        # Save new avatar
+        request.user.avatar.save(new_filename, avatar_file, save=True)
+        log_action(request.user, "Avatar Uploaded", "User updated their profile photo", request)
+
+        return Response({
+            'message': 'Profile photo updated successfully.',
+            'user': UserSerializer(request.user, context={'request': request}).data
+        }, status=status.HTTP_200_OK)
+
+    def delete(self, request):
+        import os
+        old_avatar = request.user.avatar
+        if old_avatar:
+            if hasattr(old_avatar, 'path') and os.path.isfile(old_avatar.path):
+                try:
+                    os.remove(old_avatar.path)
+                except Exception:
+                    pass
+            request.user.avatar = None
+            request.user.save()
+            log_action(request.user, "Avatar Removed", "User removed their profile photo", request)
+
+        return Response({
+            'message': 'Profile photo removed. Restored default avatar.',
+            'user': UserSerializer(request.user, context={'request': request}).data
+        }, status=status.HTTP_200_OK)
 
 
 class AdminUserListView(generics.ListCreateAPIView):
@@ -240,7 +302,8 @@ class PlatformConfigView(APIView):
     def get(self, request):
         chapa_configured = bool(getattr(settings, 'CHAPA_SECRET_KEY', ''))
         return Response({
-            'platform_name': 'NexusStore AI Electronics',
+            'platform_name': 'EthioTech Market',
+            'tagline': 'Better Tech. Brighter Future.',
             'currency': 'ETB',
             'currency_symbol': 'ETB',
             'tax_rate': 0.15,

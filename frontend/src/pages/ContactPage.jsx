@@ -33,9 +33,9 @@ const ContactPage = () => {
         <span className="badge bg-primary bg-opacity-10 text-primary rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wider mb-2">
           <i className="bi bi-headset me-1"></i> Customer Support & Inquiries
         </span>
-        <h1 className="display-6 fw-bolder text-slate-900 mb-2">Contact NexusStore AI</h1>
+        <h1 className="display-6 fw-bolder text-slate-900 mb-2">Contact EthioTech Market</h1>
         <p className="text-slate-500 text-sm">
-          Have questions about your order, bank payment verification, or product specifications? We're here to help.
+          Have questions about your order, Chapa payment verification, or product specifications? We're here to help.
         </p>
       </div>
 
@@ -43,11 +43,11 @@ const ContactPage = () => {
         {/* Contact Info Cards */}
         <div className="col-lg-5">
           <div className="d-flex flex-column gap-3 mb-4">
-            <div className="card border-0 shadow-sm rounded-4 p-4 bg-white border border-slate-100">
+            <div className="card ethio-card p-4">
               <div className="d-flex align-items-center gap-3">
                 <div
                   className="rounded-2xl p-3 d-flex align-items-center justify-content-center text-white"
-                  style={{ width: '48px', height: '48px', background: 'var(--gradient-primary)' }}
+                  style={{ width: '48px', height: '48px', background: 'var(--color-primary)' }}
                 >
                   <i className="bi bi-geo-alt-fill fs-5"></i>
                 </div>
@@ -58,7 +58,7 @@ const ContactPage = () => {
               </div>
             </div>
 
-            <div className="card border-0 shadow-sm rounded-4 p-4 bg-white border border-slate-100">
+            <div className="card ethio-card p-4">
               <div className="d-flex align-items-center gap-3">
                 <div
                   className="rounded-2xl p-3 d-flex align-items-center justify-content-center text-white bg-success"
@@ -74,7 +74,7 @@ const ContactPage = () => {
               </div>
             </div>
 
-            <div className="card border-0 shadow-sm rounded-4 p-4 bg-white border border-slate-100">
+            <div className="card ethio-card p-4">
               <div className="d-flex align-items-center gap-3">
                 <div
                   className="rounded-2xl p-3 d-flex align-items-center justify-content-center text-white bg-info"
@@ -84,23 +84,23 @@ const ContactPage = () => {
                 </div>
                 <div>
                   <h6 className="fw-bold mb-0 text-slate-900">Email & Inquiries</h6>
-                  <p className="text-slate-500 text-xs mb-0">support@nexusstore.ai &bull; sales@nexusstore.ai</p>
+                  <p className="text-slate-500 text-xs mb-0">support@ethiotechmarket.com &bull; sales@ethiotechmarket.com</p>
                   <small className="text-slate-400 text-[10px]">Average response under 2 hours</small>
                 </div>
               </div>
             </div>
 
-            <div className="card border-0 shadow-sm rounded-4 p-4 bg-white border border-slate-100">
+            <div className="card ethio-card p-4">
               <div className="d-flex align-items-center gap-3">
                 <div
-                  className="rounded-2xl p-3 d-flex align-items-center justify-content-center text-white bg-purple-600"
-                  style={{ width: '48px', height: '48px', background: '#7c3aed' }}
+                  className="rounded-2xl p-3 d-flex align-items-center justify-content-center text-white bg-primary"
+                  style={{ width: '48px', height: '48px' }}
                 >
                   <i className="bi bi-telegram fs-5"></i>
                 </div>
                 <div>
-                  <h6 className="fw-bold mb-0 text-slate-900">Telegram Bot Channel</h6>
-                  <p className="text-slate-500 text-xs mb-0">@NexusStoreAIBot &bull; Instant order status checks</p>
+                  <h6 className="fw-bold mb-0 text-slate-900">Telegram Channel</h6>
+                  <p className="text-slate-500 text-xs mb-0">@EthioTechMarket &bull; Order updates & flash drops</p>
                 </div>
               </div>
             </div>
@@ -196,7 +196,7 @@ const ContactPage = () => {
 
               <button
                 type="submit"
-                className="btn btn-primary-gradient rounded-full px-5 py-2.5 font-bold text-xs shadow-md"
+                className="btn btn-ethio-primary px-5 py-2.5 font-bold text-xs shadow-md"
                 disabled={loading}
               >
                 {loading ? 'Sending Message...' : 'Submit Message'}

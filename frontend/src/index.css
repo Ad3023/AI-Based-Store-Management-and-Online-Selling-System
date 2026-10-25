@@ -40,7 +40,7 @@
   --color-violet-glow: rgba(124, 58, 237, 0.35);
   
   --color-border: #e2e8f0;
-  --color-bg-light: #f8fafc;
+  --color-bg-light: #f4f6fa;
   
   --gradient-primary: linear-gradient(135deg, #2563eb 0%, #4f46e5 50%, #06b6d4 100%);
   --gradient-nexus: linear-gradient(135deg, #070d1d 0%, #0b1329 40%, #0f1a36 100%);
@@ -68,16 +68,56 @@
   }
 }
 
+html,
 body {
+  overscroll-behavior: none !important;
+  overscroll-behavior-y: none !important;
+  overscroll-behavior-x: none !important;
   margin: 0;
   padding: 0;
+  min-height: 100%;
+  min-height: 100vh;
+  background-color: #0c1e33;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  overflow-x: clip;
+}
+
+body {
   font-family: var(--font-main);
-  background-color: var(--color-bg-light);
+  background-color: #f4f6fa;
   color: #1e293b;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
+  width: 100%;
+  overflow-x: clip;
   display: flex;
   flex-direction: column;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  width: 100%;
+  flex: 1 0 auto;
+  background-color: #f4f6fa;
+  position: relative;
+}
+
+/* Ensure sticky header stays securely pinned at top: 0 with solid background */
+header.sticky-top,
+.sticky-top {
+  position: -webkit-sticky !important;
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 1030 !important;
+  width: 100%;
+  background-color: #0c1e33;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -435,4 +475,300 @@ a {
   .no-print {
     display: none !important;
   }
+}
+
+/* Responsive Timeline Container */
+.tracking-timeline-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  padding-bottom: 0.5rem;
+}
+
+.tracking-timeline-track {
+  min-width: 580px;
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+@media (max-width: 576px) {
+  .tracking-timeline-track {
+    min-width: 500px;
+  }
+}
+
+/* Text and Reference Overflow Prevention */
+.break-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.min-w-0 {
+  min-width: 0 !important;
+}
+
+/* Pulse animation for current active milestone */
+@keyframes milestone-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(37, 99, 235, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+  }
+}
+
+.milestone-current-pulse {
+  animation: milestone-pulse 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+/* ==========================================================================
+   ETHIOTECH MARKET DESIGN SYSTEM (Inspired by Reference UI)
+   ========================================================================== */
+
+:root {
+  --ethio-navy-dark: #0b1a2d;
+  --ethio-navy-header: #0c1e33;
+  --ethio-navy-hover: #162a45;
+  --ethio-primary-blue: #1b64da;
+  --ethio-primary-blue-hover: #1551b5;
+  --ethio-bg-page: #f4f6fa;
+  --ethio-card-bg: #ffffff;
+  --ethio-text-dark: #0f172a;
+  --ethio-text-muted: #64748b;
+  --ethio-border: #e2e8f0;
+}
+
+/* Fixed Dashboard Layout - Stable Sidebar & Independent Content Scroll */
+.ethio-dashboard-layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--ethio-bg-page);
+  position: relative;
+}
+
+.ethio-sidebar {
+  width: 260px;
+  min-width: 260px;
+  height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  background-color: var(--ethio-navy-dark);
+  color: #ffffff;
+  z-index: 1020;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.ethio-sidebar::-webkit-scrollbar {
+  width: 5px;
+}
+.ethio-sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+.ethio-dashboard-content {
+  margin-left: 260px;
+  flex: 1;
+  min-height: 100vh;
+  background-color: var(--ethio-bg-page);
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* Mobile Sidebar Drawer */
+@media (max-width: 991.98px) {
+  .ethio-sidebar {
+    transform: translateX(-100%);
+    z-index: 1060;
+    box-shadow: 0 0 35px rgba(0, 0, 0, 0.5);
+  }
+  .ethio-sidebar.open {
+    transform: translateX(0);
+  }
+  .ethio-dashboard-content {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+.ethio-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(11, 26, 45, 0.6);
+  backdrop-filter: blur(3px);
+  z-index: 1055;
+  transition: opacity 0.25s ease;
+}
+
+/* Sidebar Nav Links */
+.ethio-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem;
+  margin: 0.2rem 0.75rem;
+  border-radius: 0.5rem;
+  color: #94a3b8;
+  font-size: 0.88rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  width: calc(100% - 1.5rem);
+  text-align: left;
+}
+
+.ethio-nav-item:hover {
+  background-color: var(--ethio-navy-hover);
+  color: #ffffff;
+}
+
+.ethio-nav-item.active {
+  background-color: var(--ethio-primary-blue);
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(27, 100, 218, 0.35);
+}
+
+.ethio-nav-item i {
+  font-size: 1.1rem;
+  width: 20px;
+  text-align: center;
+}
+
+/* User Persona in Sidebar */
+.ethio-persona-card {
+  padding: 1rem 1rem 0.75rem 1rem;
+  margin: 0.5rem 0.75rem 1rem 0.75rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ethio-avatar-circle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--ethio-primary-blue);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+/* EthioTech Cards */
+.ethio-card {
+  background: #ffffff;
+  border: 1px solid var(--ethio-border);
+  border-radius: 0.85rem;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.ethio-card:hover {
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+/* Buttons */
+.btn-ethio-primary {
+  background-color: var(--ethio-primary-blue);
+  color: #ffffff;
+  font-weight: 600;
+  border-radius: 0.5rem;
+  padding: 0.6rem 1.4rem;
+  border: none;
+  transition: background-color 0.2s ease, transform 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.btn-ethio-primary:hover {
+  background-color: var(--ethio-primary-blue-hover);
+  color: #ffffff;
+}
+
+.btn-ethio-outline {
+  border: 1px solid var(--ethio-border);
+  background: #ffffff;
+  color: var(--ethio-text-dark);
+  font-weight: 600;
+  border-radius: 0.5rem;
+  padding: 0.6rem 1.4rem;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.btn-ethio-outline:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: var(--ethio-text-dark);
+}
+
+/* Status Badges */
+.badge-ethio {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.badge-ethio-success {
+  background-color: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.badge-ethio-warning {
+  background-color: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.badge-ethio-danger {
+  background-color: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.badge-ethio-info {
+  background-color: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
 }

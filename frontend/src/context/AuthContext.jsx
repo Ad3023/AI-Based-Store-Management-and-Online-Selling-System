@@ -79,6 +79,28 @@ export const AuthProvider = ({ children }) => {
     return res.data;
   };
 
+  const uploadAvatar = async (file) => {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    const res = await api.post('auth/profile/avatar/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    const updatedUser = res.data.user;
+    setUser(updatedUser);
+    const storage = localStorage.getItem('token') ? localStorage : sessionStorage;
+    storage.setItem('user', JSON.stringify(updatedUser));
+    return updatedUser;
+  };
+
+  const removeAvatar = async () => {
+    const res = await api.delete('auth/profile/avatar/');
+    const updatedUser = res.data.user;
+    setUser(updatedUser);
+    const storage = localStorage.getItem('token') ? localStorage : sessionStorage;
+    storage.setItem('user', JSON.stringify(updatedUser));
+    return updatedUser;
+  };
+
   // Derive roles directly from actual backend user object
   const isCustomer = user?.role === 'customer';
   const isStoreManager = user?.role === 'store_manager' || Boolean(user?.is_superuser);
@@ -95,6 +117,8 @@ export const AuthProvider = ({ children }) => {
         register,
         logout,
         updateProfile,
+        uploadAvatar,
+        removeAvatar,
         isCustomer,
         isStoreManager,
         isAdmin,

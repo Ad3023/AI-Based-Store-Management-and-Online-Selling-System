@@ -3,16 +3,22 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import api from '../api';
 import { formatETB } from '../utils/currency';
 import { getProductImage } from '../utils/productImages';
+import {
+  getPaymentStatusInfo,
+  getFulfillmentStatusInfo,
+  getOrderMilestones,
+} from '../utils/orderStatus';
 
 const OrderDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [initiatingChapa, setInitiatingChapa] = useState(false);
   const [actionMessage, setActionMessage] = useState({ text: '', type: '' });
 
-  // Warranty Claim Modal / Form state
+  // Warranty Claim Form state
   const [selectedItemForClaim, setSelectedItemForClaim] = useState(null);
   const [claimDescription, setClaimDescription] = useState('');
   const [claimEvidence, setClaimEvidence] = useState(null);
@@ -21,10 +27,16 @@ const OrderDetailPage = () => {
   const fetchOrder = async () => {
     try {
       setLoading(true);
+      setError('');
       const res = await api.get(`orders/${id}/`);
       setOrder(res.data);
     } catch (err) {
-      console.error("Order load error", err);
+      console.error('Order load error', err);
+      const msg =
+        err.response?.data?.detail ||
+        err.response?.data?.error ||
+        'The requested order could not be loaded or you do not have permission to view it.';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -51,7 +63,10 @@ const OrderDetailPage = () => {
       }
     } catch (err) {
       setActionMessage({
-        text: err.response?.data?.message || err.response?.data?.error || 'Failed to connect to Chapa payment gateway.',
+        text:
+          err.response?.data?.message ||
+          err.response?.data?.error ||
+          'Failed to connect to Chapa payment gateway.',
         type: 'danger',
       });
     } finally {
@@ -78,7 +93,7 @@ const OrderDetailPage = () => {
       });
 
       setActionMessage({
-        text: `Warranty claim submitted successfully for ${selectedItemForClaim.product_name}! Store staff will review your claim shortly.`,
+        text: `Warranty claim submitted successfully for ${selectedItemForClaim.product_name}! Our support team will review your claim shortly.`,
         type: 'success',
       });
       setSelectedItemForClaim(null);
@@ -97,204 +112,283 @@ const OrderDetailPage = () => {
 
   if (loading) {
     return (
-      <div className="container py-5 text-center">
-        <div className="spinner-border text-primary" role="status">
-          <span className="visually-hidden">Loading order details...</span>
+      <div className="container py-5 text-center min-w-0" style={{ maxWidth: '1140px' }}>
+        <div className="card border-0 shadow-sm rounded-4 p-5 mx-auto bg-white border border-slate-200" style={{ maxWidth: '480px' }}>
+          <div className="spinner-border text-primary mx-auto mb-3" role="status" style={{ width: '3rem', height: '3rem' }}>
+            <span className="visually-hidden">Loading order details...</span>
+          </div>
+          <h5 className="fw-bold text-slate-800 mb-1">Retrieving Order Details</h5>
+          <p className="text-muted text-xs mb-0">Fetching verified records and payment status from server...</p>
         </div>
-        <p className="mt-3 text-muted text-sm">Fetching verified order records...</p>
       </div>
     );
   }
 
-  if (!order) {
+  if (error || !order) {
     return (
-      <div className="container py-5 text-center">
-        <h4 className="fw-bold">Order Not Found</h4>
-        <p className="text-muted">The requested order does not exist or you do not have permission to view it.</p>
-        <Link to="/orders" className="btn btn-primary rounded-pill px-4">View My Orders</Link>
+      <div className="container py-5 text-center min-w-0" style={{ maxWidth: '1140px' }}>
+        <div className="card border-0 shadow-sm rounded-4 p-5 mx-auto bg-white border border-slate-200" style={{ maxWidth: '520px' }}>
+          <div className="rounded-circle bg-amber-50 text-amber-600 d-inline-flex align-items-center justify-content-center mx-auto mb-3" style={{ width: '64px', height: '64px' }}>
+            <i className="bi bi-shield-exclamation fs-2"></i>
+          </div>
+          <h4 className="fw-bolder text-slate-900 mb-2">Order Not Available</h4>
+          <p className="text-slate-600 text-xs mb-4">
+            {error || 'The requested order could not be located. It may belong to another user or does not exist.'}
+          </p>
+          <div className="d-flex justify-content-center gap-2">
+            <Link to="/orders" className="btn btn-primary rounded-pill px-4 text-xs font-bold">
+              <i className="bi bi-bag-check me-1"></i> Back to My Orders
+            </Link>
+            <Link to="/" className="btn btn-outline-secondary rounded-pill px-4 text-xs font-bold">
+              Home
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
 
-  // 6 real operational milestones
-  const steps = [
-    { title: 'Payment Pending', icon: 'bi-hourglass-split', active: true },
-    {
-      title: 'Payment Confirmed',
-      icon: 'bi-patch-check-fill',
-      active: ['PROCESSING', 'SHIPPED', 'DELIVERED'].includes(order.status),
-    },
-    {
-      title: 'Processing',
-      icon: 'bi-box-seam-fill',
-      active: ['PROCESSING', 'SHIPPED', 'DELIVERED'].includes(order.status),
-    },
-    {
-      title: 'Dispatched',
-      icon: 'bi-truck',
-      active: ['SHIPPED', 'DELIVERED'].includes(order.status),
-    },
-    {
-      title: 'Delivered',
-      icon: 'bi-check-circle-fill',
-      active: order.status === 'DELIVERED',
-    },
-  ];
+  // Derive authoritative statuses and milestones
+  const paymentInfo = getPaymentStatusInfo(order);
+  const fulfillmentInfo = getFulfillmentStatusInfo(order);
+  const milestones = getOrderMilestones(order);
+  const hasVerifiedReceipt = Boolean(order.receipt && order.receipt.receipt_number);
 
   return (
-    <div className="container py-4">
-      {/* Navigation Breadcrumb and Safe Back Button */}
-      <div className="d-flex align-items-center justify-content-between mb-4">
+    <div className="container py-3 py-md-4 min-w-0" style={{ maxWidth: '1140px' }}>
+      {/* 1. Breadcrumbs & Return Navigation */}
+      <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
         <nav aria-label="breadcrumb">
           <ol className="breadcrumb mb-0 text-xs">
-            <li className="breadcrumb-item"><Link to="/" className="text-decoration-none text-slate-500">Home</Link></li>
-            <li className="breadcrumb-item"><Link to="/orders" className="text-decoration-none text-slate-500">My Orders</Link></li>
-            <li className="breadcrumb-item active fw-bold text-slate-900" aria-current="page">{order.order_number}</li>
+            <li className="breadcrumb-item">
+              <Link to="/" className="text-decoration-none text-slate-500 hover:text-primary">
+                Home
+              </Link>
+            </li>
+            <li className="breadcrumb-item">
+              <Link to="/orders" className="text-decoration-none text-slate-500 hover:text-primary">
+                My Orders
+              </Link>
+            </li>
+            <li className="breadcrumb-item active fw-bold text-slate-800 text-truncate" style={{ maxWidth: '220px' }} aria-current="page">
+              {order.order_number}
+            </li>
           </ol>
         </nav>
-        <button
-          type="button"
-          onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/orders'))}
-          className="btn btn-outline-secondary btn-sm rounded-full text-xs px-3 d-flex align-items-center gap-1.5"
-        >
-          <i className="bi bi-arrow-left"></i> Back
-        </button>
+
+        <div className="d-flex align-items-center gap-2">
+          <Link
+            to="/orders"
+            className="btn btn-outline-secondary btn-sm rounded-pill text-xs px-3 d-inline-flex align-items-center gap-1.5 shadow-sm"
+          >
+            <i className="bi bi-arrow-left"></i> Back to Orders
+          </Link>
+        </div>
       </div>
 
       {actionMessage.text && (
-        <div className={`alert alert-${actionMessage.type} rounded-3 mb-4 d-flex align-items-center gap-2`}>
-          <i className="bi bi-info-circle-fill fs-5"></i>
+        <div className={`alert alert-${actionMessage.type} rounded-3 mb-4 d-flex align-items-center gap-2 text-xs shadow-sm`}>
+          <i className="bi bi-info-circle-fill fs-6 shrink-0"></i>
           <span>{actionMessage.text}</span>
         </div>
       )}
 
-      {/* Header Summary Card */}
-      <div className="card border-0 shadow-sm rounded-4 p-4 mb-4 bg-white border border-slate-200">
-        <div className="d-flex flex-wrap justify-content-between align-items-center gap-3">
-          <div className="row g-3 flex-grow-1">
-            <div className="col-sm-3 col-6 border-end-sm border-slate-100">
-              <small className="text-slate-400 text-[11px] uppercase font-bold tracking-wider d-block mb-1">
-                Order Number
-              </small>
-              <span className="fw-bolder fs-6 text-slate-900">{order.order_number}</span>
-            </div>
+      {/* 2. Top Order Summary Header Card (Reflows cleanly on narrow screens) */}
+      <div className="card border-0 shadow-sm rounded-4 p-3 p-md-4 mb-4 bg-white border border-slate-200">
+        <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+          <div className="w-100 min-w-0">
+            <div className="row g-2 g-md-3">
+              <div className="col-6 col-md-3 min-w-0">
+                <small className="text-slate-400 text-[10px] uppercase font-bold tracking-wider d-block mb-1">
+                  Order Number
+                </small>
+                <div className="fw-bolder fs-6 text-slate-900 text-break font-monospace">
+                  {order.order_number}
+                </div>
+              </div>
 
-            <div className="col-sm-3 col-6 border-end-sm border-slate-100">
-              <small className="text-slate-400 text-[11px] uppercase font-bold tracking-wider d-block mb-1">
-                Order Date
-              </small>
-              <span className="fw-bold fs-6 text-slate-900">
-                {new Date(order.created_at).toLocaleDateString()}
-              </span>
-            </div>
+              <div className="col-6 col-md-3 min-w-0">
+                <small className="text-slate-400 text-[10px] uppercase font-bold tracking-wider d-block mb-1">
+                  Order Date
+                </small>
+                <div className="fw-bold fs-6 text-slate-800">
+                  {new Date(order.created_at).toLocaleDateString()}
+                </div>
+              </div>
 
-            <div className="col-sm-3 col-6 border-end-sm border-slate-100">
-              <small className="text-slate-400 text-[11px] uppercase font-bold tracking-wider d-block mb-1">
-                Total Amount
-              </small>
-              <span className="fw-bold fs-6 text-primary">{formatETB(order.total_amount)}</span>
-            </div>
+              <div className="col-6 col-md-3 min-w-0">
+                <small className="text-slate-400 text-[10px] uppercase font-bold tracking-wider d-block mb-1">
+                  Total Amount (ETB)
+                </small>
+                <div className="fw-bolder fs-6 text-primary">
+                  {formatETB(order.total_amount)}
+                </div>
+              </div>
 
-            <div className="col-sm-3 col-6">
-              <small className="text-slate-400 text-[11px] uppercase font-bold tracking-wider d-block mb-1">
-                Status
-              </small>
-              <span className={`badge rounded-full px-3 py-1.5 font-bold text-xs ${
-                order.status === 'DELIVERED'
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : order.status === 'PROCESSING' || order.status === 'SHIPPED'
-                  ? 'bg-blue-100 text-blue-800'
-                  : 'bg-amber-100 text-amber-800'
-              }`}>
-                {order.status.replace('_', ' ')}
-              </span>
+              <div className="col-6 col-md-3 min-w-0">
+                <small className="text-slate-400 text-[10px] uppercase font-bold tracking-wider d-block mb-1">
+                  Statuses
+                </small>
+                <div className="d-flex flex-wrap gap-1 align-items-center">
+                  <span className={`badge rounded-pill px-2.5 py-1 text-[10px] font-bold ${fulfillmentInfo.badgeClass}`}>
+                    {fulfillmentInfo.label}
+                  </span>
+                  <span className={`badge rounded-pill px-2.5 py-1 text-[10px] font-bold ${paymentInfo.badgeClass}`}>
+                    {paymentInfo.label}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="shrink-0 d-flex align-items-center gap-2">
-            {order.receipt && (
+          {/* Receipt Action Button: rendered ONLY when verified receipt genuinely exists */}
+          {hasVerifiedReceipt && (
+            <div className="shrink-0 w-100 w-md-auto text-end mt-2 mt-md-0">
               <Link
                 to={`/receipts/${order.id}`}
-                className="btn btn-success rounded-full px-4 py-2 text-xs font-bold shadow-sm d-flex align-items-center gap-2"
+                className="btn btn-success btn-sm rounded-pill px-3 py-2 text-xs font-bold shadow-sm d-inline-flex align-items-center justify-content-center gap-1.5 w-100 w-md-auto text-white"
                 style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', border: 'none' }}
               >
-                <i className="bi bi-file-earmark-pdf-fill fs-6"></i> Official Digital Receipt
+                <i className="bi bi-file-earmark-check-fill fs-6"></i> Official Digital Receipt
               </Link>
-            )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 3. Order Tracking Timeline (Horizontal Scroll Container on mobile, no page overflow) */}
+      <div className="card border-0 shadow-sm rounded-4 p-3 p-md-4 mb-4 bg-white border border-slate-200">
+        <div className="d-flex justify-content-between align-items-center mb-3">
+          <h6 className="fw-bold text-slate-900 mb-0 text-xs uppercase tracking-wider d-flex align-items-center gap-1.5">
+            <i className="bi bi-geo-alt-fill text-primary"></i> Order Tracking Timeline
+          </h6>
+          <span className="text-slate-400 text-[11px]">
+            {order.status === 'CANCELLED'
+              ? 'Status: Cancelled'
+              : paymentInfo.isFailed
+              ? 'Status: Payment Verification Failed'
+              : 'Real-time Milestone Progression'}
+          </span>
+        </div>
+
+        {/* Scrollable Container for Narrow Screens */}
+        <div className="tracking-timeline-scroll">
+          <div className="tracking-timeline-track">
+            {milestones.map((m, idx) => {
+              const isLast = idx === milestones.length - 1;
+              return (
+                <div key={m.id} className="text-center position-relative flex-fill px-2 min-w-0" style={{ maxWidth: `${100 / milestones.length}%` }}>
+                  {/* Connecting Line between milestones */}
+                  {!isLast && (
+                    <div
+                      className="position-absolute top-50 translate-middle-y z-0"
+                      style={{
+                        height: '3px',
+                        left: '50%',
+                        right: '-50%',
+                        background: m.isCompleted
+                          ? 'linear-gradient(90deg, #2563eb, #06b6d4)'
+                          : '#e2e8f0',
+                        marginTop: '-16px',
+                      }}
+                    ></div>
+                  )}
+
+                  {/* Milestone Icon Node */}
+                  <div
+                    className={`mx-auto rounded-circle d-flex align-items-center justify-content-center mb-2 shadow-sm position-relative z-1 transition ${
+                      m.isCancelled
+                        ? 'bg-danger text-white'
+                        : m.isFailed
+                        ? 'bg-danger text-white'
+                        : m.isCompleted
+                        ? 'text-white'
+                        : m.isCurrent
+                        ? 'text-white milestone-current-pulse'
+                        : 'bg-white text-slate-400 border border-slate-300'
+                    }`}
+                    style={{
+                      width: '42px',
+                      height: '42px',
+                      background: m.isCancelled || m.isFailed
+                        ? '#dc2626'
+                        : m.isCompleted
+                        ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                        : m.isCurrent
+                        ? 'linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)'
+                        : '#ffffff',
+                    }}
+                  >
+                    <i className={`bi ${m.icon} fs-5`}></i>
+                  </div>
+
+                  {/* Title & Description */}
+                  <div className={`font-bold text-xs mb-0.5 text-truncate ${
+                    m.isCancelled || m.isFailed
+                      ? 'text-danger'
+                      : m.isCurrent
+                      ? 'text-primary fw-bolder'
+                      : m.isCompleted
+                      ? 'text-slate-800'
+                      : 'text-slate-400'
+                  }`}>
+                    {m.title}
+                  </div>
+                  <div className="text-slate-500 text-[10px] text-truncate">
+                    {m.description}
+                  </div>
+
+                  {m.isCurrent && (
+                    <span className="badge bg-primary bg-opacity-10 text-primary rounded-pill px-2 py-0.5 text-[9px] uppercase font-bold mt-1">
+                      Current Stage
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
 
-      {/* Order Tracking Milestone */}
-      <div className="card border-0 shadow-sm rounded-4 p-4 mb-4 bg-white border border-slate-200">
-        <h6 className="fw-bold text-slate-900 mb-4 text-xs uppercase tracking-wider">
-          <i className="bi bi-geo-alt-fill text-primary me-1"></i> Order Tracking Milestone
-        </h6>
-
-        <div className="d-flex justify-content-between position-relative">
-          <div
-            className="position-absolute start-0 end-0 top-50 translate-middle-y z-0"
-            style={{ height: '3px', background: '#e2e8f0', margin: '0 40px' }}
-          ></div>
-
-          {steps.map((st, i) => (
-            <div key={i} className="text-center position-relative z-1 flex-fill">
-              <div
-                className={`mx-auto rounded-circle d-flex align-items-center justify-content-center mb-2 shadow-sm transition ${
-                  st.active ? 'text-white' : 'bg-white text-slate-400 border border-slate-300'
-                }`}
-                style={{
-                  width: '42px',
-                  height: '42px',
-                  background: st.active ? 'linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)' : '#ffffff',
-                }}
-              >
-                <i className={`bi ${st.icon} fs-5`}></i>
-              </div>
-              <div className={`small font-bold text-xs ${st.active ? 'text-primary' : 'text-slate-400'}`}>
-                {st.title}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="row g-4">
+      {/* 4. Balanced Two-Column Layout (Desktop: 7/5 columns, Mobile/Tablet: stacked vertically) */}
+      <div className="row g-3 g-md-4">
         {/* Left Column: Ordered Items & Warranty Guarantees */}
-        <div className="col-lg-7">
-          <div className="card border-0 shadow-sm rounded-4 p-4 mb-4 bg-white border border-slate-200">
+        <div className="col-12 col-lg-7 min-w-0">
+          <div className="card border-0 shadow-sm rounded-4 p-3 p-md-4 mb-4 bg-white border border-slate-200">
             <h5 className="fw-bolder mb-3 text-slate-900 d-flex align-items-center justify-content-between">
-              <span>Items in this Order</span>
-              <span className="text-slate-500 text-xs fw-normal">{order.items.length} items</span>
+              <span>Ordered Products</span>
+              <span className="badge bg-slate-100 text-slate-700 rounded-pill font-normal text-xs px-2.5 py-1">
+                {order.items?.length || 0} items
+              </span>
             </h5>
 
             <div className="d-flex flex-column gap-3">
-              {order.items.map((item) => (
-                <div key={item.id} className="p-3 rounded-2xl bg-slate-50 border border-slate-100">
-                  <div className="d-flex align-items-center justify-content-between mb-2">
-                    <div className="d-flex align-items-center gap-3">
+              {order.items && order.items.map((item) => (
+                <div key={item.id} className="p-3 rounded-3 bg-slate-50 border border-slate-100">
+                  <div className="d-flex align-items-center justify-content-between gap-2 mb-2">
+                    <div className="d-flex align-items-center gap-3 min-w-0">
                       <img
                         src={getProductImage(item.product)}
                         alt={item.product_name}
-                        className="rounded-xl object-contain bg-white p-1 border"
+                        className="rounded-3 object-contain bg-white p-1 border shrink-0"
                         style={{ width: '56px', height: '56px' }}
                       />
-                      <div>
-                        <div className="fw-bold text-xs text-slate-900">{item.product_name}</div>
-                        <small className="text-slate-500 text-[11px]">
-                          Qty: <strong>{item.quantity}</strong> &bull; {formatETB(item.unit_price)} each
+                      <div className="min-w-0">
+                        <div className="fw-bold text-xs text-slate-900 text-truncate">{item.product_name}</div>
+                        <small className="text-slate-500 text-[11px] d-block">
+                          Quantity: <strong>{item.quantity}</strong> &bull; {formatETB(item.unit_price)} each
                         </small>
                       </div>
                     </div>
-                    <div className="fw-bold text-slate-900 text-sm">
+                    <div className="fw-bold text-slate-900 text-sm shrink-0">
                       {formatETB(item.total_price)}
                     </div>
                   </div>
 
-                  {/* Warranty Snapshot & Claims Card for Item */}
-                  <div className="p-2.5 rounded-xl bg-white border border-slate-200 mt-2">
-                    <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-1.5">
-                      <div className="d-flex align-items-center gap-1.5">
+                  {/* Warranty Snapshot & Policy for Item */}
+                  <div className="p-2.5 rounded-3 bg-white border border-slate-200 mt-2">
+                    <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-1">
+                      <div className="d-flex align-items-center gap-1.5 flex-wrap">
                         <span className="badge bg-blue-50 text-blue-700 border border-blue-200 text-[10px] rounded-pill font-semibold">
                           <i className="bi bi-shield-check me-1"></i> {item.warranty_duration_days}-Day Warranty
                         </span>
@@ -305,41 +399,38 @@ const OrderDetailPage = () => {
                         )}
                       </div>
 
-                      {/* Claim Button */}
-                      {['PROCESSING', 'SHIPPED', 'DELIVERED'].includes(order.status) && (
+                      {/* File claim button when payment verified */}
+                      {paymentInfo.isPaid && (
                         <button
                           type="button"
                           onClick={() => setSelectedItemForClaim(item)}
-                          className="btn btn-outline-primary btn-sm rounded-full text-[10px] px-2.5 py-0.5"
+                          className="btn btn-outline-primary btn-sm rounded-pill text-[10px] px-2.5 py-0.5"
                         >
-                          <i className="bi bi-tools me-1"></i> File Warranty Claim
+                          <i className="bi bi-tools me-1"></i> File Claim
                         </button>
                       )}
                     </div>
 
-                    <div className="text-[11px] text-slate-600 mb-1">
-                      <strong>Coverage:</strong> {item.warranty_coverage || 'Standard hardware and component defects.'}
+                    <div className="text-[11px] text-slate-600">
+                      <strong>Coverage:</strong> {item.warranty_coverage || 'Standard replacement or repair for hardware defects.'}
                     </div>
 
                     {/* Existing Claims on this item */}
                     {item.warranty_claims && item.warranty_claims.length > 0 && (
                       <div className="mt-2 pt-2 border-top border-slate-100">
                         {item.warranty_claims.map((claim) => (
-                          <div key={claim.id} className="p-2 rounded-lg bg-slate-50 border text-[11px] mb-1">
+                          <div key={claim.id} className="p-2 rounded-2 bg-slate-50 border text-[11px] mb-1">
                             <div className="d-flex justify-content-between align-items-center mb-1">
                               <span className="fw-bold text-slate-800">Claim #{claim.claim_number}</span>
-                              <span className={`badge rounded-pill text-[10px] ${
+                              <span className={`badge rounded-pill text-[9px] ${
                                 claim.status === 'APPROVED' ? 'bg-success' : claim.status === 'REJECTED' ? 'bg-danger' : 'bg-warning text-dark'
                               }`}>
                                 {claim.status}
                               </span>
                             </div>
-                            <div className="text-slate-600 mb-0.5"><strong>Issue:</strong> {claim.issue_description}</div>
+                            <div className="text-slate-600"><strong>Issue:</strong> {claim.issue_description}</div>
                             {claim.admin_notes && (
-                              <div className="text-primary"><strong>Staff Note:</strong> {claim.admin_notes}</div>
-                            )}
-                            {claim.resolution_details && (
-                              <div className="text-success"><strong>Resolution:</strong> {claim.resolution_details}</div>
+                              <div className="text-primary mt-0.5"><strong>Staff Response:</strong> {claim.admin_notes}</div>
                             )}
                           </div>
                         ))}
@@ -351,12 +442,12 @@ const OrderDetailPage = () => {
             </div>
           </div>
 
-          {/* Warranty Claim Submission Form (When item selected) */}
+          {/* Warranty Claim Modal / Submission Form */}
           {selectedItemForClaim && (
-            <div className="card border-primary shadow-sm rounded-4 p-4 mb-4 bg-white border">
+            <div className="card border-primary shadow-sm rounded-4 p-3 p-md-4 mb-4 bg-white border">
               <div className="d-flex justify-content-between align-items-center mb-3">
-                <h6 className="fw-bold text-slate-900 mb-0">
-                  <i className="bi bi-tools text-primary me-1"></i> Submit Warranty Claim for: {selectedItemForClaim.product_name}
+                <h6 className="fw-bold text-slate-900 mb-0 text-xs text-truncate">
+                  <i className="bi bi-tools text-primary me-1"></i> Submit Warranty Claim: {selectedItemForClaim.product_name}
                 </h6>
                 <button
                   type="button"
@@ -370,7 +461,7 @@ const OrderDetailPage = () => {
                 <div className="mb-3">
                   <label className="form-label text-xs fw-bold text-slate-700">Detailed Description of Defect / Issue *</label>
                   <textarea
-                    className="form-control rounded-xl text-xs"
+                    className="form-control rounded-3 text-xs"
                     rows="3"
                     placeholder="Describe what occurred, any error codes, or physical defects..."
                     value={claimDescription}
@@ -383,7 +474,7 @@ const OrderDetailPage = () => {
                   <label className="form-label text-xs fw-bold text-slate-700">Upload Photo / Evidence (Optional)</label>
                   <input
                     type="file"
-                    className="form-control rounded-xl text-xs"
+                    className="form-control rounded-3 text-xs"
                     accept="image/*"
                     onChange={(e) => setClaimEvidence(e.target.files[0])}
                   />
@@ -393,16 +484,16 @@ const OrderDetailPage = () => {
                   <button
                     type="button"
                     onClick={() => setSelectedItemForClaim(null)}
-                    className="btn btn-outline-secondary btn-sm rounded-full px-3 text-xs"
+                    className="btn btn-outline-secondary btn-sm rounded-pill px-3 text-xs"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="btn btn-primary-gradient btn-sm rounded-full px-4 text-xs font-bold"
+                    className="btn btn-primary-gradient btn-sm rounded-pill px-4 text-xs font-bold"
                     disabled={submittingClaim}
                   >
-                    {submittingClaim ? 'Submitting Claim...' : 'Submit Official Claim'}
+                    {submittingClaim ? 'Submitting...' : 'Submit Claim'}
                   </button>
                 </div>
               </form>
@@ -410,27 +501,40 @@ const OrderDetailPage = () => {
           )}
         </div>
 
-        {/* Right Column: Chapa Payment Verification & Delivery Summary */}
-        <div className="col-lg-5">
-          {/* Chapa Payment Verification Card */}
-          <div className="card border-0 shadow-sm rounded-4 p-4 mb-4 bg-white border border-slate-200">
-            <h5 className="fw-bolder mb-2 text-slate-900 d-flex align-items-center gap-2">
-              <i className="bi bi-credit-card-2-front text-primary"></i> Payment Status
+        {/* Right Column: Payment Verification Panel & Delivery Summary */}
+        <div className="col-12 col-lg-5 min-w-0">
+          {/* Payment Status Panel */}
+          <div className="card border-0 shadow-sm rounded-4 p-3 p-md-4 mb-4 bg-white border border-slate-200">
+            <h5 className="fw-bolder mb-3 text-slate-900 d-flex align-items-center justify-content-between">
+              <span className="d-flex align-items-center gap-2">
+                <i className="bi bi-credit-card-2-front text-primary"></i> Payment Details
+              </span>
+              <span className={`badge rounded-pill px-2.5 py-1 text-[10px] font-bold ${paymentInfo.badgeClass}`}>
+                {paymentInfo.label}
+              </span>
             </h5>
 
-            {order.status === 'PENDING_PAYMENT' ? (
-              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-center">
-                <p className="text-amber-800 text-xs font-semibold mb-3">
-                  Payment for this order has not been completed yet.
-                </p>
+            {/* When payment is still pending */}
+            {!paymentInfo.isPaid && order.status !== 'CANCELLED' ? (
+              <div className="p-3 rounded-3 bg-amber-50 border border-amber-200">
+                <div className="d-flex align-items-start gap-2 mb-3">
+                  <i className="bi bi-exclamation-triangle-fill text-amber-600 fs-5 shrink-0 mt-0.5"></i>
+                  <div className="text-xs text-amber-800">
+                    <strong>Payment Pending:</strong> This order has not been completed. Settle via Chapa to activate fulfillment and warranty coverage.
+                  </div>
+                </div>
+
                 <button
                   type="button"
                   onClick={handlePayWithChapa}
                   disabled={initiatingChapa}
-                  className="btn btn-primary-gradient w-100 rounded-full font-bold text-xs py-2.5 shadow-sm d-flex align-items-center justify-content-center gap-2"
+                  className="btn btn-primary-gradient w-100 rounded-pill font-bold text-xs py-2.5 shadow-sm d-flex align-items-center justify-content-center gap-2"
                 >
                   {initiatingChapa ? (
-                    <span className="spinner-border spinner-border-sm" role="status"></span>
+                    <>
+                      <span className="spinner-border spinner-border-sm" role="status"></span>
+                      <span>Connecting to Chapa...</span>
+                    </>
                   ) : (
                     <>
                       <i className="bi bi-lock-fill"></i> Pay {formatETB(order.total_amount)} with Chapa
@@ -438,67 +542,84 @@ const OrderDetailPage = () => {
                   )}
                 </button>
               </div>
-            ) : (
-              <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200">
-                <div className="d-flex justify-content-between align-items-center mb-2">
-                  <span className="text-xs text-slate-600 font-semibold">Payment Gateway:</span>
-                  <span className="badge rounded-full px-3 py-1 font-bold text-xs bg-emerald-100 text-emerald-800">
+            ) : paymentInfo.isPaid ? (
+              <div className="p-3 rounded-3 bg-emerald-50 border border-emerald-200">
+                <div className="d-flex align-items-center justify-content-between mb-2">
+                  <span className="text-xs text-slate-600 font-semibold">Gateway:</span>
+                  <span className="badge rounded-pill px-2.5 py-1 font-bold text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300">
                     Chapa Verified
                   </span>
                 </div>
-                <div className="text-xs text-slate-700 mb-1">
-                  <strong>Reference ID:</strong> <code>{order.chapa_tx_ref || `ORD-${order.id}`}</code>
-                </div>
+
                 <div className="text-xs text-slate-700 mb-2">
-                  <strong>Payment Method:</strong> {order.payment_method}
+                  <span className="text-slate-500 d-block mb-0.5 font-semibold">Transaction Reference:</span>
+                  <code className="break-anywhere text-xs p-1.5 bg-white rounded border d-block text-slate-800 font-monospace">
+                    {order.chapa_tx_ref || `ORD-REF-${order.id}`}
+                  </code>
                 </div>
-                {order.receipt && (
+
+                <div className="text-xs text-slate-700 mb-3">
+                  <span className="text-slate-500">Method:</span> <strong>{order.payment_method || 'Chapa Gateway'}</strong>
+                </div>
+
+                {hasVerifiedReceipt && (
                   <Link
                     to={`/receipts/${order.id}`}
-                    className="btn btn-sm btn-outline-success rounded-full w-100 text-xs font-bold"
+                    className="btn btn-sm btn-outline-success rounded-pill w-100 text-xs font-bold d-flex align-items-center justify-content-center gap-1.5 bg-white shadow-sm"
                   >
-                    <i className="bi bi-receipt me-1"></i> View Receipt #{order.receipt.receipt_number}
+                    <i className="bi bi-receipt"></i> View Official Receipt #{order.receipt.receipt_number}
                   </Link>
                 )}
+              </div>
+            ) : (
+              <div className="p-3 rounded-3 bg-slate-50 border border-slate-200 text-xs text-slate-600 text-center">
+                This order was cancelled. No payment was charged.
               </div>
             )}
           </div>
 
           {/* Delivery & Shipping Address Details */}
-          <div className="card border-0 shadow-sm rounded-4 p-4 bg-white border border-slate-200">
-            <h6 className="fw-bolder mb-3 text-slate-900">
-              <i className="bi bi-geo-alt text-primary me-1"></i> Delivery Details
+          <div className="card border-0 shadow-sm rounded-4 p-3 p-md-4 bg-white border border-slate-200">
+            <h6 className="fw-bolder mb-3 text-slate-900 d-flex align-items-center gap-1.5">
+              <i className="bi bi-geo-alt text-primary"></i> Delivery Information
             </h6>
+
             <div className="text-xs text-slate-700 mb-2">
-              <strong>Recipient:</strong> {order.shipping_name}
+              <span className="text-slate-400 d-block text-[10px] uppercase font-bold">Recipient</span>
+              <strong className="text-slate-900">{order.shipping_name || 'Valued Customer'}</strong>
             </div>
+
             <div className="text-xs text-slate-700 mb-2">
-              <strong>Phone:</strong> {order.shipping_phone}
+              <span className="text-slate-400 d-block text-[10px] uppercase font-bold">Phone Number</span>
+              <span className="text-slate-800">{order.shipping_phone || 'Not specified'}</span>
             </div>
+
             <div className="text-xs text-slate-700 mb-2">
-              <strong>Address:</strong> {order.shipping_address}, {order.shipping_city}
+              <span className="text-slate-400 d-block text-[10px] uppercase font-bold">Delivery Address</span>
+              <span className="text-slate-800">{order.shipping_address}, {order.shipping_city}</span>
             </div>
+
             {order.notes && (
-              <div className="text-xs text-slate-500 mt-2 p-2 rounded-xl bg-slate-50 border">
-                <strong>Notes:</strong> {order.notes}
+              <div className="text-xs text-slate-600 mt-2 p-2 rounded-2 bg-slate-50 border">
+                <strong>Delivery Notes:</strong> {order.notes}
               </div>
             )}
 
             <div className="pt-3 mt-3 border-top border-slate-100">
-              <div className="d-flex justify-content-between text-xs text-slate-600 mb-1">
-                <span>Subtotal</span>
+              <div className="d-flex justify-content-between text-xs text-slate-600 mb-1.5">
+                <span>Items Subtotal</span>
                 <span>{formatETB(order.subtotal)}</span>
               </div>
-              <div className="d-flex justify-content-between text-xs text-slate-600 mb-1">
-                <span>Delivery Fee</span>
+              <div className="d-flex justify-content-between text-xs text-slate-600 mb-1.5">
+                <span>Delivery / Shipping Fee</span>
                 <span>{formatETB(order.shipping_fee)}</span>
               </div>
               <div className="d-flex justify-content-between text-xs text-slate-600 mb-2">
                 <span>Tax (15% VAT)</span>
                 <span>{formatETB(order.tax)}</span>
               </div>
-              <div className="d-flex justify-content-between text-sm font-bold text-slate-900 pt-2 border-top">
-                <span>Total Amount</span>
+              <div className="d-flex justify-content-between text-sm font-bold text-slate-900 pt-2 border-top border-slate-200">
+                <span>Total Payable</span>
                 <span className="text-primary fs-6">{formatETB(order.total_amount)}</span>
               </div>
             </div>

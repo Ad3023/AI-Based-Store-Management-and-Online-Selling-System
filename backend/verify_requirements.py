@@ -76,12 +76,12 @@ def verify_all_requirements():
     # ----------------------------------------------------
     # Req 4: Email & Username Dual Authentication
     # ----------------------------------------------------
-    admin_login = client.post('/api/auth/login/', {'username': 'addisuguche68@gmail.com', 'password': 'ad30@17#'}, content_type='application/json')
+    admin_login = client.post('/api/auth/login/', {'username': 'admin@store.com', 'password': 'admin123'}, content_type='application/json')
     assert admin_login.status_code == 200, f"Admin email login failed: {admin_login.content}"
     admin_token = admin_login.json()['token']
     assert admin_login.json()['user']['role'] == 'admin'
 
-    mgr_login = client.post('/api/auth/login/', {'username': 'gucheaddisu5@gmail.com', 'password': 'ad30@17#'}, content_type='application/json')
+    mgr_login = client.post('/api/auth/login/', {'username': 'manager@store.com', 'password': 'manager123'}, content_type='application/json')
     assert mgr_login.status_code == 200, f"Manager email login failed: {mgr_login.content}"
     mgr_token = mgr_login.json()['token']
     assert mgr_login.json()['user']['role'] == 'store_manager'

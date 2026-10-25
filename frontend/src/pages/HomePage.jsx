@@ -1,106 +1,93 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../api';
 import ProductCard from '../components/ProductCard';
 import { useAuth } from '../context/AuthContext';
-import { CATEGORY_ICON_MAP } from '../utils/productImages';
+
+const CATEGORY_ITEMS = [
+  { name: 'Laptops', icon: 'bi-laptop', filter: 'laptop' },
+  { name: 'Smartphones', icon: 'bi-phone', filter: 'smartphone' },
+  { name: 'Accessories', icon: 'bi-mouse', filter: 'accessory' },
+  { name: 'Audio', icon: 'bi-headphones', filter: 'audio' },
+  { name: 'Wearables', icon: 'bi-smartwatch', filter: 'wearable' },
+  { name: 'Tablets', icon: 'bi-tablet', filter: 'tablet' },
+];
 
 const HomePage = () => {
   const { user } = useAuth();
-
-  // Announcement state
-  const [announcement, setAnnouncement] = useState(null);
-  const [isDismissed, setIsDismissed] = useState(() => {
-    return sessionStorage.getItem('nexus_promo_dismissed') === 'true';
-  });
+  const navigate = useNavigate();
 
   // Data states
   const [categories, setCategories] = useState([]);
-  const [newArrivals, setNewArrivals] = useState([]);
-  const [specialOffers, setSpecialOffers] = useState([]);
+  const [featuredProducts, setFeaturedProducts] = useState([]);
   const [aiRecommendations, setAiRecommendations] = useState([]);
-  const [isPersonalized, setIsPersonalized] = useState(false);
+  const [specialOffers, setSpecialOffers] = useState([]);
+  const [announcement, setAnnouncement] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Main catalog state
-  const [catalogProducts, setCatalogProducts] = useState([]);
-  const [catalogLoading, setCatalogLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [sortBy, setSortBy] = useState('-created_at');
+  // Active Category Filter
+  const [activeCategory, setActiveCategory] = useState('All');
 
-  // Dismiss announcement banner
-  const handleDismissAnnouncement = () => {
-    sessionStorage.setItem('nexus_promo_dismissed', 'true');
-    setIsDismissed(true);
-  };
-
-  // Fetch initial home data
   useEffect(() => {
     let isMounted = true;
 
     const fetchHomeData = async () => {
       try {
-        // 1. Fetch active announcement
+        setLoading(true);
+
+        // Fetch announcement
         try {
           const promoRes = await api.get('products/promotions/active/announcement/');
-          if (isMounted && promoRes.data?.active) {
-            setAnnouncement(promoRes.data.announcement || promoRes.data.promotion?.name);
+          if (isMounted && promoRes.data?.banner_announcement) {
+            setAnnouncement(promoRes.data.banner_announcement);
           }
         } catch {
-          // No active announcement
+          // No active promo announcement
         }
 
-        // 2. Fetch categories, new arrivals, and special offers
-        const [catRes, newRes, allRes] = await Promise.all([
+        // Fetch categories & products
+        const [catRes, prodRes] = await Promise.all([
           api.get('products/categories/'),
-          api.get('products/items/?ordering=-created_at&limit=4'),
-          api.get('products/items/?limit=20'),
+          api.get('products/items/?limit=24'),
         ]);
 
         if (isMounted) {
           const catList = catRes.data.results || catRes.data || [];
-          const newList = newRes.data.results || newRes.data || [];
-          const allList = allRes.data.results || allRes.data || [];
-
+          const allList = prodRes.data.results || prodRes.data || [];
           setCategories(catList);
-          setNewArrivals(newList);
+          setFeaturedProducts(allList);
 
-          // Find up to 4 products with genuine promotions or discounts
-          const promoItems = allList
-            .filter((p) => p.has_promotion || (p.compare_at_price && Number(p.compare_at_price) > Number(p.price)))
-            .slice(0, 4);
-          setSpecialOffers(promoItems.length > 0 ? promoItems : allList.slice(0, 4));
+          // Find items with compare_at_price > price
+          const offers = allList.filter(
+            (p) => p.compare_at_price && Number(p.compare_at_price) > Number(p.price)
+          );
+          setSpecialOffers(offers.length > 0 ? offers : allList.slice(0, 4));
         }
 
-        // 3. Fetch AI Recommendations
-        let foundPersonalized = false;
+        // Fetch AI recommendations
         if (user) {
           try {
-            const persRes = await api.get('recommendations/personalized/?limit=4');
-            if (isMounted && persRes.data.results?.length > 0) {
-              setAiRecommendations(persRes.data.results);
-              setIsPersonalized(true);
-              foundPersonalized = true;
+            const recRes = await api.get('recommendations/personalized/?limit=4');
+            if (isMounted && recRes.data.results?.length > 0) {
+              setAiRecommendations(recRes.data.results);
             }
           } catch {
-            // Fallback to trending
+            // fallback
           }
-        }
-
-        // If not authenticated or no personalized results, fetch trending recommendations
-        if (!foundPersonalized) {
+        } else {
           try {
             const trendRes = await api.get('recommendations/trending/?limit=4');
             if (isMounted && trendRes.data.results?.length > 0) {
               setAiRecommendations(trendRes.data.results);
-              setIsPersonalized(false);
             }
           } catch {
-            // Silently fallback
+            // fallback
           }
         }
       } catch (err) {
-        console.error('Error loading home data:', err);
+        console.error('Error fetching home data:', err);
+      } finally {
+        if (isMounted) setLoading(false);
       }
     };
 
@@ -111,418 +98,310 @@ const HomePage = () => {
     };
   }, [user]);
 
-  // Fetch Main Product Catalog dynamically when filter/sort changes
-  useEffect(() => {
-    let isMounted = true;
-    const fetchCatalog = async () => {
-      try {
-        setCatalogLoading(true);
-        const params = new URLSearchParams();
-        if (searchQuery.trim()) params.append('search', searchQuery.trim());
-        if (selectedCategory) params.append('category', selectedCategory);
-        if (sortBy) params.append('ordering', sortBy);
-        params.append('limit', '8');
-
-        const res = await api.get(`products/items/?${params.toString()}`);
-        if (isMounted) {
-          setCatalogProducts(res.data.results || res.data || []);
-        }
-      } catch (err) {
-        console.error('Error fetching catalog:', err);
-      } finally {
-        if (isMounted) setCatalogLoading(false);
-      }
-    };
-
-    fetchCatalog();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [searchQuery, selectedCategory, sortBy]);
+  // Filter products by selected category pill
+  const filteredProducts = activeCategory === 'All'
+    ? featuredProducts
+    : featuredProducts.filter((p) => {
+        const catName = (p.category_name || p.category?.name || '').toLowerCase();
+        return catName.includes(activeCategory.toLowerCase());
+      });
 
   return (
-    <div className="pb-5" style={{ background: '#060b17', color: '#ffffff', minHeight: '100vh' }}>
-      {/* 1. DISMISSIBLE PROMOTION ANNOUNCEMENT */}
-      {announcement && !isDismissed && (
+    <div style={{ backgroundColor: '#f4f6fa', minHeight: '100%', width: '100%' }}>
+      
+      {/* 1. Dismissible Announcement Banner */}
+      {announcement && (
         <div
-          className="py-2 px-3 border-bottom d-flex align-items-center justify-content-between text-white"
-          style={{
-            background: 'linear-gradient(90deg, #1e1b4b 0%, #0f172a 50%, #0c4a6e 100%)',
-            borderColor: 'rgba(56, 189, 248, 0.3)',
-            fontSize: '0.8rem',
-          }}
+          className="py-2 px-3 text-white text-center text-xs fw-semibold border-bottom"
+          style={{ backgroundColor: '#0c1e33', borderColor: 'rgba(255, 255, 255, 0.1)' }}
         >
-          <div className="container d-flex align-items-center justify-content-between">
-            <div className="d-flex align-items-center gap-2">
-              <span className="badge bg-cyan-500 text-slate-900 rounded-pill px-2.5 py-1 text-[11px] fw-bold">
-                PROMOTION
+          <div className="container-fluid max-w-7xl d-flex align-items-center justify-content-between">
+            <div className="mx-auto d-flex align-items-center gap-2">
+              <span className="badge rounded-pill px-2.5 py-0.5 text-white fw-bold" style={{ backgroundColor: '#1b64da' }}>
+                SPECIAL OFFER
               </span>
-              <span className="fw-semibold text-cyan-200">{announcement}</span>
+              <span>{announcement}</span>
             </div>
             <button
               type="button"
-              className="btn btn-link text-slate-400 hover:text-white p-0 border-0 ms-3"
-              onClick={handleDismissAnnouncement}
-              title="Dismiss announcement"
-              aria-label="Dismiss"
+              className="btn btn-sm text-white p-0 border-0"
+              onClick={() => setAnnouncement(null)}
+              aria-label="Dismiss announcement"
             >
-              <i className="bi bi-x-lg"></i>
+              <i className="bi bi-x"></i>
             </button>
           </div>
         </div>
       )}
 
-      {/* 2. CLEAN HERO SECTION */}
-      <section className="py-4 py-lg-5">
-        <div className="container">
+      {/* 2. Hero Section (Screenshot 1 Visuals) */}
+      <section className="py-4 py-lg-4 px-3 px-lg-4">
+        <div className="container-fluid max-w-7xl">
           <div
-            className="p-4 p-md-5 rounded-4 position-relative overflow-hidden"
+            className="p-4 p-md-5 rounded-4 position-relative overflow-hidden text-white"
             style={{
-              background: 'linear-gradient(135deg, #0b152d 0%, #0d1a3a 50%, #081022 100%)',
-              border: '1px solid rgba(6, 182, 212, 0.28)',
-              boxShadow: '0 20px 45px rgba(0, 0, 0, 0.55)',
+              background: 'linear-gradient(135deg, #0b1a2d 0%, #0d2847 60%, #081525 100%)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              boxShadow: '0 12px 30px rgba(11, 26, 45, 0.25)',
             }}
           >
-            {/* Top-Right Corner of Hero Banner: Quick Sign In / Sign Up for Guests */}
-            {!user && (
-              <div
-                className="position-absolute top-0 end-0 m-3 m-md-4 d-flex align-items-center gap-2 p-1.5 px-3 rounded-pill shadow-sm"
-                style={{
-                  background: 'rgba(10, 16, 32, 0.85)',
-                  backdropFilter: 'blur(12px)',
-                  border: '1px solid rgba(56, 189, 248, 0.35)',
-                  zIndex: 2,
-                }}
-              >
-                <span className="text-slate-300 text-xs d-none d-sm-inline">New Shopper?</span>
-                <Link
-                  to="/login"
-                  className="btn btn-sm btn-outline-light rounded-pill px-2.5 py-1 text-xs fw-bold"
-                >
-                  Sign In
-                </Link>
-                <Link
-                  to="/register"
-                  className="btn btn-sm btn-primary-gradient rounded-pill px-3 py-1 text-xs fw-bold text-white shadow-sm"
-                >
-                  Sign Up
-                </Link>
-              </div>
-            )}
-
             <div className="row align-items-center g-4">
               <div className="col-lg-7">
-                <span className="badge rounded-pill px-3 py-1.5 text-xs font-bold uppercase tracking-wider mb-3 bg-cyan-950/80 border border-cyan-400/40 text-cyan-300">
-                  <i className="bi bi-cpu-fill me-1"></i> NexusStore AI
+                <span
+                  className="badge rounded-pill px-3 py-1.5 text-xs fw-bold text-uppercase mb-3 d-inline-flex align-items-center gap-1.5"
+                  style={{ backgroundColor: 'rgba(27, 100, 218, 0.25)', color: '#60a5fa', border: '1px solid rgba(96, 165, 250, 0.3)' }}
+                >
+                  <i className="bi bi-shield-check"></i> Genuine Warranty & Fast Delivery
                 </span>
+                
                 <h1 className="display-5 fw-bolder mb-3 text-white tracking-tight" style={{ lineHeight: '1.2' }}>
-                  Smart Store Management & <br />
-                  <span
-                    style={{
-                      background: 'linear-gradient(135deg, #00f2fe 0%, #38bdf8 50%, #818cf8 100%)',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                    }}
-                  >
-                    Online Selling System
-                  </span>
+                  Discover the Latest Tech <br />
+                  <span style={{ color: '#60a5fa' }}>for a Smarter You</span>
                 </h1>
-                <p className="text-slate-300 text-sm mb-4" style={{ maxWidth: '540px', lineHeight: '1.7' }}>
-                  Browse premium consumer electronics, high-end laptops, and mobile devices in Ethiopian Birr (ETB). Instant Chapa checkout and official warranty tracking.
+                
+                <p className="text-slate-300 text-sm mb-4" style={{ maxWidth: '520px', lineHeight: '1.7' }}>
+                  High-quality electronics, great prices, and fast delivery across Ethiopia. Powered by AI personalized recommendations and secure Chapa checkout.
                 </p>
+
                 <div className="d-flex flex-wrap align-items-center gap-3">
                   <a
-                    href="#main-catalog"
-                    className="btn btn-cyan-glow px-4 py-2.5 rounded-pill font-bold text-xs shadow-lg d-flex align-items-center gap-2"
+                    href="#featured-catalog"
+                    className="btn btn-ethio-primary px-4 py-2.5 rounded-2 font-bold text-sm shadow-md"
+                    style={{ backgroundColor: '#1b64da', color: '#ffffff' }}
                   >
-                    Explore Products <i className="bi bi-arrow-down"></i>
+                    Shop Now <i className="bi bi-arrow-down"></i>
                   </a>
                   <Link
                     to="/shop"
-                    className="btn btn-outline-light px-4 py-2.5 rounded-pill font-semibold text-xs"
+                    className="btn btn-outline-light px-4 py-2.5 rounded-2 font-semibold text-sm"
                   >
-                    Full Catalog
+                    View All Products
                   </Link>
-                  {!user && (
-                    <div className="d-flex align-items-center gap-2 ms-sm-2 border-start border-slate-700 ps-sm-3 mt-2 mt-sm-0">
-                      <Link
-                        to="/login"
-                        className="btn btn-sm btn-outline-info rounded-pill px-3 py-2 text-xs fw-bold d-flex align-items-center gap-1"
-                      >
-                        <i className="bi bi-box-arrow-in-right"></i> Sign In
-                      </Link>
-                      <Link
-                        to="/register"
-                        className="btn btn-sm btn-primary-gradient rounded-pill px-3 py-2 text-xs fw-bold text-white shadow-sm d-flex align-items-center gap-1"
-                      >
-                        <i className="bi bi-person-plus"></i> Sign Up
-                      </Link>
-                    </div>
-                  )}
                 </div>
               </div>
 
-              <div className="col-lg-5 text-center d-none d-lg-block">
-                <img
-                  src="https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80"
-                  alt="Featured Electronics"
-                  className="img-fluid rounded-4"
-                  style={{ maxHeight: '280px', objectFit: 'contain', filter: 'drop-shadow(0 15px 25px rgba(0, 0, 0, 0.6))' }}
-                />
+              {/* Right Hero Visuals: Electronics display */}
+              <div className="col-lg-5 text-center d-none d-lg-block position-relative">
+                <div
+                  className="p-3 rounded-4 d-inline-block"
+                  style={{
+                    background: 'radial-gradient(ellipse at center, rgba(27, 100, 218, 0.2) 0%, rgba(11, 26, 45, 0) 70%)',
+                  }}
+                >
+                  <img
+                    src="https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=600&auto=format&fit=crop&q=80"
+                    alt="High Tech Devices"
+                    className="img-fluid rounded-4 shadow-lg"
+                    style={{
+                      maxHeight: '270px',
+                      objectFit: 'contain',
+                      filter: 'drop-shadow(0 15px 25px rgba(0, 0, 0, 0.4))',
+                    }}
+                  />
+                </div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* 3. COMPACT CATEGORIES SECTION */}
-      {categories.length > 0 && (
-        <section className="py-2 mb-4">
-          <div className="container">
-            <div className="d-flex align-items-center justify-content-between mb-3">
-              <h5 className="fw-bold text-white mb-0 text-sm uppercase tracking-wider text-slate-300">
-                Browse by Category
-              </h5>
-              <Link to="/categories" className="text-cyan-400 small text-decoration-none">
-                All categories &rarr;
-              </Link>
-            </div>
-            <div className="row g-2">
-              {categories.slice(0, 6).map((cat) => {
-                const iconClass = CATEGORY_ICON_MAP[cat.name] || 'bi-cpu';
-                return (
-                  <div key={cat.id} className="col-4 col-md-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedCategory(cat.id.toString());
-                        const el = document.getElementById('main-catalog');
-                        if (el) el.scrollIntoView({ behavior: 'smooth' });
-                      }}
-                      className={`w-100 p-2.5 rounded-3 text-center border transition ${
-                        selectedCategory === cat.id.toString()
-                          ? 'border-cyan-400 bg-cyan-950/40 text-cyan-300'
-                          : 'border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700'
-                      }`}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <i className={`bi ${iconClass} fs-5 text-cyan-400 d-block mb-1`}></i>
-                      <div className="text-xs fw-semibold text-truncate">{cat.name}</div>
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* 4. LIMITED SPECIAL OFFERS & ACTIVE PROMOTIONS */}
-      {specialOffers.length > 0 && (
-        <section className="py-4 mb-4">
-          <div className="container">
-            <div className="d-flex align-items-center justify-content-between mb-3">
-              <div>
-                <span className="badge bg-danger bg-opacity-20 text-danger border border-danger border-opacity-30 rounded-pill px-3 py-1 text-xs fw-bold uppercase tracking-wider mb-1">
-                  <i className="bi bi-tag-fill me-1"></i> Special Offers
-                </span>
-                <h3 className="fw-bolder text-white mb-0">Active Promotional Discounts</h3>
-              </div>
-              <Link to="/deals" className="text-cyan-400 small text-decoration-none fw-semibold">
-                View all deals &rarr;
-              </Link>
-            </div>
-            <div className="row row-cols-1 row-cols-sm-2 row-cols-md-4 g-3">
-              {specialOffers.map((p) => (
-                <div key={`offer-${p.id}`} className="col">
-                  <ProductCard product={p} variant="dark" aiTag="Hot Deal" />
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* 5. SMALL NEW ARRIVALS SECTION */}
-      {newArrivals.length > 0 && (
-        <section className="py-4 mb-4">
-          <div className="container">
-            <div className="d-flex align-items-center justify-content-between mb-3">
-              <div>
-                <span className="badge bg-primary bg-opacity-20 text-cyan-300 border border-primary border-opacity-30 rounded-pill px-3 py-1 text-xs fw-bold uppercase tracking-wider mb-1">
-                  <i className="bi bi-sparkles me-1"></i> Fresh Inventory
-                </span>
-                <h3 className="fw-bolder text-white mb-0">New Arrivals</h3>
-              </div>
-              <Link to="/shop?ordering=-created_at" className="text-cyan-400 small text-decoration-none fw-semibold">
-                More new arrivals &rarr;
-              </Link>
-            </div>
-            <div className="row row-cols-1 row-cols-sm-2 row-cols-md-4 g-3">
-              {newArrivals.map((p) => (
-                <div key={`new-${p.id}`} className="col">
-                  <ProductCard product={p} variant="dark" aiTag="New" />
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* 6. AI RECOMMENDATIONS SECTION */}
-      {aiRecommendations.length > 0 && (
-        <section className="py-4 mb-4">
-          <div className="container">
-            <div
-              className="p-4 rounded-4"
-              style={{
-                background: 'linear-gradient(135deg, rgba(14, 23, 46, 0.95) 0%, rgba(7, 13, 29, 0.98) 100%)',
-                border: '1px solid rgba(6, 182, 212, 0.3)',
-              }}
-            >
-              <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3 gap-2">
-                <div>
-                  <span className="ai-badge mb-1">
-                    <i className="bi bi-stars"></i> {isPersonalized ? 'Personalized For You' : 'AI Highlights'}
-                  </span>
-                  <h4 className="fw-bolder text-white mb-0">
-                    {isPersonalized
-                      ? `Recommended for You, ${user?.first_name || user?.username}`
-                      : 'Recommended by NexusStore AI'}
-                  </h4>
-                </div>
-                {!user && (
-                  <Link to="/login" className="btn btn-sm btn-outline-info rounded-pill px-3">
-                    Sign in for personalized picks
-                  </Link>
-                )}
-              </div>
-              <div className="row row-cols-1 row-cols-sm-2 row-cols-md-4 g-3">
-                {aiRecommendations.map((p) => (
-                  <div key={`ai-${p.id}`} className="col">
-                    <ProductCard product={p} variant="dark" aiTag="AI Match" />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* 7. ONE MAIN PRODUCT CATALOG */}
-      <section id="main-catalog" className="py-4 mb-5">
-        <div className="container">
-          <div className="border-top border-slate-800 pt-4 mb-4">
-            <div className="row align-items-center g-3">
-              <div className="col-lg-4">
-                <h3 className="fw-bolder text-white mb-1">Product Catalog</h3>
-                <p className="text-slate-400 small mb-0">
-                  Search, filter, and view real stock with prices in ETB
-                </p>
-              </div>
-
-              {/* Filters & Sorting */}
-              <div className="col-lg-8">
-                <div className="d-flex flex-wrap gap-2 justify-content-lg-end">
-                  {/* Search Input */}
-                  <div className="input-group input-group-sm" style={{ width: '220px' }}>
-                    <span className="input-group-text bg-slate-900 border-slate-700 text-slate-400">
-                      <i className="bi bi-search"></i>
-                    </span>
-                    <input
-                      type="text"
-                      className="form-control bg-slate-900 border-slate-700 text-white text-xs"
-                      placeholder="Search title, specs..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                  </div>
-
-                  {/* Category Filter */}
-                  <select
-                    className="form-select form-select-sm bg-slate-900 border-slate-700 text-white text-xs"
-                    style={{ width: '160px' }}
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
+      {/* 3. Category Icons Row (Screenshot 1) */}
+      <section className="py-2 px-3 px-lg-4 mb-3">
+        <div className="container-fluid max-w-7xl">
+          <div className="row g-2 g-md-3">
+            {CATEGORY_ITEMS.map((cat) => {
+              const isSelected = activeCategory.toLowerCase() === cat.name.toLowerCase();
+              return (
+                <div key={cat.name} className="col-4 col-sm-4 col-md-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveCategory(isSelected ? 'All' : cat.name)}
+                    className="w-100 p-2.5 p-md-3 rounded-3 text-center border transition d-flex flex-column align-items-center justify-content-center"
+                    style={{
+                      backgroundColor: isSelected ? '#1b64da' : '#ffffff',
+                      color: isSelected ? '#ffffff' : '#0f172a',
+                      borderColor: isSelected ? '#1b64da' : '#e2e8f0',
+                      boxShadow: '0 1px 3px rgba(15, 23, 42, 0.05)',
+                      cursor: 'pointer',
+                      minHeight: '85px',
+                    }}
                   >
-                    <option value="">All Categories</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-
-                  {/* Sorting */}
-                  <select
-                    className="form-select form-select-sm bg-slate-900 border-slate-700 text-white text-xs"
-                    style={{ width: '150px' }}
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                  >
-                    <option value="-created_at">Newest First</option>
-                    <option value="price">Price: Low to High</option>
-                    <option value="-price">Price: High to Low</option>
-                    <option value="-rating_average">Top Customer Rated</option>
-                  </select>
-
-                  {(searchQuery || selectedCategory) && (
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-outline-secondary text-xs rounded-pill px-2.5"
-                      onClick={() => {
-                        setSearchQuery('');
-                        setSelectedCategory('');
-                      }}
-                    >
-                      Clear
-                    </button>
-                  )}
+                    <i className={`bi ${cat.icon} fs-4 mb-1 ${isSelected ? 'text-white' : 'text-primary'}`}></i>
+                    <span className="text-xs fw-bold text-truncate w-100">{cat.name}</span>
+                  </button>
                 </div>
-              </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* 4. Featured Products (Screenshot 1) */}
+      <section id="featured-catalog" className="py-3 px-3 px-lg-4 mb-5">
+        <div className="container-fluid max-w-7xl">
+          
+          {/* Section Header */}
+          <div className="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
+            <div>
+              <h4 className="fw-bolder text-slate-900 mb-0" style={{ letterSpacing: '-0.02em' }}>
+                Featured Products
+              </h4>
+              <p className="text-muted text-xs mb-0">
+                {activeCategory !== 'All' ? `Filtered by ${activeCategory}` : 'Top picks from genuine brands across Ethiopia'}
+              </p>
+            </div>
+
+            <div className="d-flex align-items-center gap-2">
+              {activeCategory !== 'All' && (
+                <button
+                  className="btn btn-sm btn-link text-primary p-0 text-decoration-none text-xs fw-semibold"
+                  onClick={() => setActiveCategory('All')}
+                >
+                  Clear filter
+                </button>
+              )}
+              <Link to="/shop" className="text-primary text-xs fw-bold text-decoration-none d-flex align-items-center gap-1">
+                View All <i className="bi bi-arrow-right"></i>
+              </Link>
             </div>
           </div>
 
-          {/* Catalog Grid */}
-          {catalogLoading ? (
+          {/* Products Grid */}
+          {loading ? (
             <div className="text-center py-5">
-              <div className="spinner-border text-cyan-400" role="status"></div>
-              <p className="text-slate-400 text-xs mt-2">Loading products...</p>
+              <div className="spinner-border text-primary" role="status"></div>
+              <p className="text-muted text-xs mt-2">Loading products...</p>
             </div>
-          ) : catalogProducts.length === 0 ? (
-            <div className="text-center py-5 bg-slate-900/40 rounded-4 border border-slate-800">
-              <i className="bi bi-inbox fs-2 text-slate-500 mb-2 d-block"></i>
-              <h5 className="text-slate-300">No products found</h5>
-              <p className="text-slate-500 text-xs mb-3">Try adjusting your search query or category filter</p>
-              <button
-                type="button"
-                className="btn btn-sm btn-primary rounded-pill px-3"
-                onClick={() => {
-                  setSearchQuery('');
-                  setSelectedCategory('');
-                }}
-              >
-                Reset Filters
-              </button>
+          ) : filteredProducts.length === 0 ? (
+            <div className="card ethio-card text-center p-5">
+              <i className="bi bi-box-seam fs-1 text-muted mb-2"></i>
+              <h6 className="fw-bold text-slate-800">No products found in this category</h6>
+              <p className="text-muted text-xs">Try selecting a different category or browsing our full shop catalog.</p>
+              <div>
+                <button className="btn btn-sm btn-ethio-primary" onClick={() => setActiveCategory('All')}>
+                  Show All Products
+                </button>
+              </div>
             </div>
           ) : (
-            <div className="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-3">
-              {catalogProducts.map((p) => (
-                <div key={`catalog-${p.id}`} className="col">
-                  <ProductCard product={p} variant="dark" />
+            <div className="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-3 g-md-4">
+              {filteredProducts.map((product) => (
+                <div key={product.id} className="col">
+                  <ProductCard product={product} />
                 </div>
               ))}
             </div>
           )}
 
-          <div className="text-center mt-4">
-            <Link to="/shop" className="btn btn-outline-light btn-sm rounded-pill px-4">
-              View All Products in Full Catalog &rarr;
-            </Link>
+        </div>
+      </section>
+
+      {/* 5. Special Promotional Discounts */}
+      {specialOffers.length > 0 && (
+        <section className="py-3 px-3 px-lg-4 mb-5">
+          <div className="container-fluid max-w-7xl">
+            <div className="d-flex align-items-center justify-content-between mb-4">
+              <div>
+                <span className="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-20 rounded-pill px-3 py-1 text-xs fw-bold uppercase tracking-wider mb-1">
+                  <i className="bi bi-tag-fill me-1"></i> Special Offers
+                </span>
+                <h4 className="fw-bolder text-slate-900 mb-0">Discounts & Promotions</h4>
+              </div>
+              <Link to="/deals" className="text-primary text-xs fw-bold text-decoration-none">
+                All Deals &rarr;
+              </Link>
+            </div>
+
+            <div className="row row-cols-1 row-cols-sm-2 row-cols-md-4 g-3">
+              {specialOffers.slice(0, 4).map((p) => (
+                <div key={`offer-${p.id}`} className="col">
+                  <ProductCard product={p} aiTag="Special Deal" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* 6. AI Recommended Picks */}
+      {aiRecommendations.length > 0 && (
+        <section className="py-3 px-3 px-lg-4 mb-5">
+          <div className="container-fluid max-w-7xl">
+            <div className="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
+              <div>
+                <span className="badge rounded-pill px-2.5 py-1 text-xs fw-bold mb-1" style={{ backgroundColor: '#eff6ff', color: '#1b64da', border: '1px solid #bfdbfe' }}>
+                  <i className="bi bi-stars me-1"></i> AI Powered Recommendations
+                </span>
+                <h4 className="fw-bolder text-slate-900 mb-0">Recommended for You</h4>
+              </div>
+              <Link to="/recommendations" className="text-primary text-xs fw-bold text-decoration-none">
+                More AI Picks &rarr;
+              </Link>
+            </div>
+
+            <div className="row row-cols-1 row-cols-sm-2 row-cols-md-4 g-3">
+              {aiRecommendations.slice(0, 4).map((p) => (
+                <div key={`rec-${p.id}`} className="col">
+                  <ProductCard product={p} aiTag="AI Pick" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* 7. Value Props Footer Banner */}
+      <section className="py-4 px-3 px-lg-4 pb-5">
+        <div className="container-fluid max-w-7xl">
+          <div className="row g-3">
+            <div className="col-md-4">
+              <div className="ethio-card p-3.5 d-flex align-items-center gap-3">
+                <div
+                  className="rounded-3 d-flex align-items-center justify-content-center text-white flex-shrink-0"
+                  style={{ width: '44px', height: '44px', backgroundColor: '#1b64da' }}
+                >
+                  <i className="bi bi-shield-check fs-5"></i>
+                </div>
+                <div>
+                  <h6 className="fw-bold text-slate-900 mb-0 text-sm">Official Warranty Protection</h6>
+                  <p className="text-muted text-xs mb-0">1 to 2 years genuine hardware guarantee with in-app claim tracking.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="col-md-4">
+              <div className="ethio-card p-3.5 d-flex align-items-center gap-3">
+                <div
+                  className="rounded-3 d-flex align-items-center justify-content-center text-white flex-shrink-0"
+                  style={{ width: '44px', height: '44px', backgroundColor: '#10b981' }}
+                >
+                  <i className="bi bi-credit-card-2-front fs-5"></i>
+                </div>
+                <div>
+                  <h6 className="fw-bold text-slate-900 mb-0 text-sm">Chapa Verified Payments</h6>
+                  <p className="text-muted text-xs mb-0">Instant checkout via Telebirr, CBE Birr, and Visa/Mastercard cards in ETB.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="col-md-4">
+              <div className="ethio-card p-3.5 d-flex align-items-center gap-3">
+                <div
+                  className="rounded-3 d-flex align-items-center justify-content-center text-white flex-shrink-0"
+                  style={{ width: '44px', height: '44px', backgroundColor: '#f59e0b' }}
+                >
+                  <i className="bi bi-truck fs-5"></i>
+                </div>
+                <div>
+                  <h6 className="fw-bold text-slate-900 mb-0 text-sm">Nationwide Dispatch</h6>
+                  <p className="text-muted text-xs mb-0">Same-day Addis Ababa delivery and regional courier hubs.</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
+
     </div>
   );
 };

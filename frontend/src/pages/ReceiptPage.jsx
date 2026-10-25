@@ -73,7 +73,7 @@ const ReceiptPage = () => {
         >
           <i className="bi bi-arrow-left"></i> Back to Order
         </button>
-        <button className="btn btn-primary-gradient rounded-pill px-4 btn-sm fw-bold shadow-sm d-flex align-items-center gap-2" onClick={handlePrint}>
+        <button className="btn btn-ethio-primary px-4 btn-sm fw-bold shadow-sm d-flex align-items-center gap-2" onClick={handlePrint}>
           <i className="bi bi-printer"></i> Print / Save as PDF
         </button>
       </div>
@@ -86,13 +86,13 @@ const ReceiptPage = () => {
             <div className="d-flex align-items-center gap-2 mb-1">
               <div
                 className="rounded-3 d-flex align-items-center justify-content-center text-white"
-                style={{ width: '38px', height: '38px', background: 'linear-gradient(135deg, #06b6d4, #2563eb)' }}
+                style={{ width: '38px', height: '38px', background: 'var(--color-primary)' }}
               >
                 <i className="bi bi-cpu-fill fs-5"></i>
               </div>
-              <h4 className="mb-0 fw-bold text-dark">NexusStore <span className="text-primary">AI</span></h4>
+              <h4 className="mb-0 fw-bold text-dark">EthioTech <span className="text-primary">Market</span></h4>
             </div>
-            <div className="text-muted small">AI-Powered Store Management System</div>
+            <div className="text-muted small">Better Tech. Brighter Future.</div>
             <div className="text-muted small">TIN: 0049281729 &bull; VAT Reg: 98217381</div>
             <div className="text-muted small">Bole Sub-City, Addis Ababa, Ethiopia</div>
           </div>

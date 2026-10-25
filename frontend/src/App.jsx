@@ -58,11 +58,11 @@ import ManagerCategoriesPage from './pages/manager/ManagerCategoriesPage';
 // Layout with Navbar and Footer for public & customer pages
 const CustomerStoreLayout = () => {
   return (
-    <div className="d-flex flex-column min-vh-100">
+    <div className="d-flex flex-column min-vh-100" style={{ backgroundColor: '#f4f6fa', width: '100%' }}>
       <Navbar />
-      <div className="flex-grow-1">
+      <main className="flex-grow-1" style={{ backgroundColor: '#f4f6fa', width: '100%' }}>
         <Outlet />
-      </div>
+      </main>
       <Footer />
     </div>
   );

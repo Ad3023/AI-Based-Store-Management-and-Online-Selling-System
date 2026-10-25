@@ -60,7 +60,7 @@ class Command(BaseCommand):
             is_staff=True,
             is_superuser=True,
             first_name='Addisu',
-            last_name='Guche (Admin)'
+            last_name='Guche'
         )
 
         # 2. Provision Store Manager
@@ -72,7 +72,7 @@ class Command(BaseCommand):
             is_staff=True,
             is_superuser=False,
             first_name='Addisu',
-            last_name='Guche (Manager)'
+            last_name='Guche'
         )
 
         self.stdout.write(self.style.SUCCESS(
@@ -108,9 +108,9 @@ class Command(BaseCommand):
             user.is_staff = is_staff
             user.is_superuser = is_superuser
             user.is_active = True
-            if not user.first_name:
+            if first_name:
                 user.first_name = first_name
-            if not user.last_name:
+            if last_name:
                 user.last_name = last_name
             self.stdout.write(self.style.WARNING(f"Updating existing account {email} to role {role}"))
 
