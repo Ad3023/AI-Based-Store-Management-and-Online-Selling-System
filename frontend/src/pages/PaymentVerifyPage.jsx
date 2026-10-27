@@ -220,7 +220,7 @@ const PaymentVerifyPage = () => {
                     to={`/orders/${orderId}`}
                     className="btn btn-outline-secondary rounded-full px-4 py-2 text-xs font-bold"
                   >
-                    <i className="bi bi-file-earmark-arrow-up me-1"></i> Upload Evidence Manually
+                    <i className="bi bi-credit-card me-1"></i> Review Order & Pay with Chapa
                   </Link>
                 )}
                 <Link to="/orders" className="btn btn-light rounded-full px-4 py-2 text-xs text-slate-600">

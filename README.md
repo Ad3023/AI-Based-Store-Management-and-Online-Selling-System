@@ -1,23 +1,27 @@
-# AI-Based Store Management & Online Selling System with Intelligent Product Recommendation
+# Ethio Tech Market
+## AI-Based Store Management and Online Selling System with Intelligent Product Recommendations
 
-> **Final-Year University Project in Information Systems / Software Engineering**  
-> *A full-stack, enterprise-grade e-commerce platform integrating Machine Learning recommendation algorithms, multi-role store management, verifiable payment evidence processing, automated digital receipts, and real-time customer segmentation.*
+> **Academic Project in Information Systems / Software Engineering**  
+> *An intelligent Ethiopian online technology marketplace for purchasing electronics, comparing specifications, receiving grounded AI recommendations, and managing store operations with secure Chapa payment processing.*
 
 ---
 
 ## 🌟 Executive Summary
 
-This system bridges the gap between modern online retail and intelligent automation. Beyond standard e-commerce features, the platform integrates **Scikit-learn and Pandas-driven Machine Learning engines** directly with a **PostgreSQL** relational database to deliver personalized shopping experiences, assist inventory managers with data-backed analytics, and provide administrators with granular audit trails.
+**Ethio Tech Market** is an enterprise-grade Ethiopian e-commerce platform built specifically for the Ethiopian tech retail ecosystem. The platform integrates **Machine Learning engines (Scikit-learn and Pandas)** directly with a **PostgreSQL** relational database and **Chapa payment switch** to deliver personalized shopping experiences, dynamic product comparison, an interactive AI personal shopping assistant, and bilingual support (English & Amharic).
 
 ### 🎯 Key System Highlights
 
 - **Role-Based Access Control (RBAC):** Three distinct personas—**Customer**, **Store Manager**, and **Administrator**—with strict backend permission guards and dynamic UI navigation.
-- **AI Recommendation Engine (3 Algorithmic Pillars):**
-  1. **Content-Based Similarity (TF-IDF + Cosine Similarity):** Analyzes natural language product titles, descriptions, categories, and tags to recommend contextually relevant alternatives.
+- **Chapa Payment Gateway (Primary & Default):** Secure, server-side transaction initialization and verification via Chapa API (`ETHIO-{order.id}-{uuid}` references) supporting Telebirr, CBE Birr, Awash Bank, and debit cards without storing financial credentials.
+- **AI Recommendation Engine & Assistant:**
+  1. **Content-Based Similarity (TF-IDF + Cosine Similarity):** Analyzes specs, descriptions, categories, and brands to recommend contextually relevant tech alternatives.
   2. **Collaborative Association ("Frequently Bought Together"):** Co-occurrence matrix built from actual completed customer order histories.
-  3. **Customer Segmentation (RFM + K-Means Clustering):** Computes Recency, Frequency, and Monetary scores across shoppers to categorize them into High-Value VIPs, Frequent Buyers, Potential Loyalists, and At-Risk segments.
-- **Payment Verification Workflow:** Supports manual payment uploads (CBE, Telebirr, Awash Bank receipt screenshots and transaction reference IDs) with Store Manager review, approval/rejection, and audit logging.
-- **Digital Receipt Generator:** Instant generation of formal, verifiable digital receipts with unique receipt codes and a clean, browser-native printable invoice layout.
+  3. **Customer Segmentation (RFM + K-Means Clustering):** Recency, Frequency, and Monetary scores categorizing customers into interpretable behavioral clusters.
+  4. **AI Personal Shopping Assistant:** Grounded natural-language tech assistant answering budget and specification questions without hallucinations.
+  5. **Smart Product Comparison:** Side-by-side spec comparison of up to 4 models with AI synthesis (Best Overall, Best Value, and Verdict).
+- **Bilingual Interface:** Instant language switcher supporting English and Amharic (`🇬🇧 EN` / `🇪🇹 አማ`).
+- **Digital Receipts & Warranty Tracking:** Unique, verifiable digital receipts with itemized specs and warranty validity tracking from payment date.
 - **Instant Role Switcher for Demonstrations:** A floating 1-click persona switcher (`Customer (Abebe)`, `Store Manager`, `Administrator`) designed specifically for project evaluation and defense demonstrations.
 
 ---
@@ -119,7 +123,7 @@ For quick evaluation during viva/presentation, use the floating **"Demo Role Swi
 
 | Role | Username | Password | Access Highlights |
 | :--- | :--- | :--- | :--- |
-| **Customer** | `abebe` | `customer123` | Browse catalog, AI recommendations, Cart, Checkout, Upload CBE/Telebirr receipt, View digital receipts |
+| **Customer** | `abebe` | `customer123` | Browse catalog, AI assistant, Product comparison, Cart, Checkout with Chapa, View digital receipts |
 | **Store Manager** | `manager` | `manager123` | Analytics dashboard, Verify payments, Update order statuses, Adjust inventory, View K-Means customer segments |
 | **Administrator** | `admin` | `admin123` | Manage user accounts, assign roles, view system-wide audit logs |
 
