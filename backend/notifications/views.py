@@ -22,6 +22,11 @@ class NotificationListView(APIView):
         Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
         return Response({'message': 'All notifications marked as read.'})
 
+    def delete(self, request):
+        # Delete all notifications for user
+        Notification.objects.filter(user=request.user).delete()
+        return Response({'message': 'All notifications cleared.'}, status=status.HTTP_200_OK)
+
 
 class NotificationMarkReadView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -32,5 +37,17 @@ class NotificationMarkReadView(APIView):
             notif.is_read = True
             notif.save()
             return Response(NotificationSerializer(notif).data)
+        except Notification.DoesNotExist:
+            return Response({'error': 'Notification not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class NotificationDeleteView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request, pk):
+        try:
+            notif = Notification.objects.get(id=pk, user=request.user)
+            notif.delete()
+            return Response({'message': 'Notification removed successfully.'}, status=status.HTTP_200_OK)
         except Notification.DoesNotExist:
             return Response({'error': 'Notification not found.'}, status=status.HTTP_404_NOT_FOUND)

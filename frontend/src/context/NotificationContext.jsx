@@ -52,6 +52,38 @@ export const NotificationProvider = ({ children }) => {
     }
   };
 
+  const removeNotification = async (id, e) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    // Optimistic removal from state
+    const target = notifications.find((n) => n.id === id);
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    if (target && !target.is_read) {
+      setUnreadCount((c) => Math.max(0, c - 1));
+    }
+    try {
+      await api.delete(`notifications/${id}/`);
+    } catch (err) {
+      console.error('Failed to remove notification on server:', err);
+    }
+  };
+
+  const clearAllNotifications = async (e) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    setNotifications([]);
+    setUnreadCount(0);
+    try {
+      await api.delete('notifications/');
+    } catch (err) {
+      console.error('Failed to clear notifications on server:', err);
+    }
+  };
+
   return (
     <NotificationContext.Provider
       value={{
@@ -60,6 +92,8 @@ export const NotificationProvider = ({ children }) => {
         fetchNotifications,
         markAsRead,
         markAllAsRead,
+        removeNotification,
+        clearAllNotifications,
       }}
     >
       {children}

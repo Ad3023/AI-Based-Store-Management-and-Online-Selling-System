@@ -15,7 +15,14 @@ const Navbar = () => {
   const { user, logout, isManagerOrAdmin } = useAuth();
   const { cartCount } = useCart();
   const { wishlistCount } = useWishlist();
-  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAllAsRead,
+    removeNotification,
+    clearAllNotifications,
+  } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [categories, setCategories] = useState([]);
@@ -271,21 +278,53 @@ const Navbar = () => {
                     style={{ width: '320px', zIndex: 1060 }}
                   >
                     <div className="d-flex justify-content-between align-items-center pb-2 border-bottom">
-                      <span className="fw-bold text-sm text-slate-900">Notifications</span>
-                      {unreadCount > 0 && (
-                        <button className="btn btn-link btn-sm text-primary p-0 text-decoration-none text-xs" onClick={markAllAsRead}>
-                          Mark all as read
-                        </button>
-                      )}
+                      <div className="d-flex align-items-center gap-1.5">
+                        <span className="fw-bold text-sm text-slate-900">Notifications</span>
+                        {unreadCount > 0 && (
+                          <span className="badge rounded-pill bg-primary text-white text-[10px]">
+                            {unreadCount}
+                          </span>
+                        )}
+                      </div>
+                      <div className="d-flex align-items-center gap-2">
+                        {unreadCount > 0 && (
+                          <button
+                            type="button"
+                            className="btn btn-link btn-sm text-primary p-0 text-decoration-none text-xs"
+                            onClick={markAllAsRead}
+                          >
+                            Mark read
+                          </button>
+                        )}
+                        {notifications.length > 0 && (
+                          <button
+                            type="button"
+                            className="btn btn-link btn-sm text-muted p-0 text-decoration-none text-xs"
+                            onClick={clearAllNotifications}
+                            title="Clear all notifications"
+                          >
+                            Clear
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="btn-close ms-1"
+                          style={{ fontSize: '0.65rem' }}
+                          onClick={() => setShowNotifications(false)}
+                          aria-label="Close notifications"
+                        ></button>
+                      </div>
                     </div>
-                    <div style={{ maxHeight: '260px', overflowY: 'auto' }} className="py-2">
+                    <div style={{ maxHeight: '280px', overflowY: 'auto' }} className="py-2">
                       {notifications.length === 0 ? (
                         <div className="text-center py-4 text-muted small">No notifications yet</div>
                       ) : (
                         notifications.map((n) => (
                           <div
                             key={n.id}
-                            className={`p-2.5 rounded-2 mb-1.5 transition ${n.is_read ? 'bg-white hover:bg-slate-50' : 'bg-blue-50'}`}
+                            className={`p-2.5 rounded-2 mb-1.5 transition position-relative border ${
+                              n.is_read ? 'bg-white border-slate-100 hover:bg-slate-50' : 'bg-blue-50/70 border-blue-100'
+                            }`}
                             onClick={() => {
                               markAsRead(n.id);
                               if (n.link) {
@@ -295,11 +334,25 @@ const Navbar = () => {
                             }}
                             style={{ cursor: 'pointer' }}
                           >
-                            <div className="d-flex align-items-center justify-content-between mb-1">
-                              <span className="fw-semibold text-xs text-dark">{n.title}</span>
-                              <small className="text-muted text-[10px]">{new Date(n.created_at).toLocaleDateString()}</small>
+                            <div className="d-flex align-items-start justify-content-between gap-1 mb-1">
+                              <span className="fw-semibold text-xs text-dark pe-1">{n.title}</span>
+                              <div className="d-flex align-items-center gap-1.5 shrink-0">
+                                <small className="text-muted text-[10px]">
+                                  {new Date(n.created_at).toLocaleDateString()}
+                                </small>
+                                <button
+                                  type="button"
+                                  className="btn btn-sm p-0 text-slate-400 hover-text-danger d-inline-flex align-items-center justify-content-center border-0 rounded-circle"
+                                  style={{ width: '18px', height: '18px', background: 'transparent' }}
+                                  onClick={(e) => removeNotification(n.id, e)}
+                                  title="Remove notification"
+                                  aria-label="Remove notification"
+                                >
+                                  <i className="bi bi-x-lg" style={{ fontSize: '10px' }}></i>
+                                </button>
+                              </div>
                             </div>
-                            <p className="text-muted text-xs mb-0" style={{ lineHeight: '1.3' }}>
+                            <p className="text-muted text-xs mb-0" style={{ lineHeight: '1.35' }}>
                               {n.message}
                             </p>
                           </div>
