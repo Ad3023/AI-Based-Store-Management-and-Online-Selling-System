@@ -139,56 +139,83 @@ const AIShoppingAssistant = () => {
       {/* Floating Chat Modal / Drawer */}
       {isOpen && (
         <div
-          className="position-fixed end-0 bottom-0 mb-3 me-3 me-md-4 rounded-4 shadow-2xl overflow-hidden d-flex flex-column z-3 border border-dark border-opacity-20 animate-fadeIn"
+          className="position-fixed end-0 bottom-0 mb-3 me-2 me-md-4 rounded-4 shadow-2xl overflow-hidden d-flex flex-column z-3 border border-dark border-opacity-20 animate-fadeIn"
           style={{
             zIndex: 1050,
-            width: '380px',
-            maxWidth: '94vw',
-            height: '560px',
-            maxHeight: '85vh',
+            width: '390px',
+            maxWidth: 'calc(100vw - 24px)',
+            height: 'min(580px, calc(100vh - 40px))',
+            maxHeight: 'calc(100vh - 40px)',
             backgroundColor: '#ffffff',
             boxShadow: '0 20px 50px rgba(11, 26, 45, 0.35)',
           }}
         >
           {/* Header */}
           <div
-            className="p-3 text-white d-flex align-items-center justify-content-between"
-            style={{ backgroundColor: '#0c1e33', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}
+            className="px-3 py-2.5 text-white d-flex align-items-center justify-content-between shrink-0"
+            style={{
+              backgroundColor: '#0c1e33',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.12)',
+              flexShrink: 0,
+            }}
           >
-            <div className="d-flex align-items-center gap-2.5">
+            {/* Left: Back Button + Title */}
+            <div className="d-flex align-items-center gap-2 min-w-0">
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="btn btn-sm text-white px-2 py-1 rounded-pill d-flex align-items-center gap-1 border border-white border-opacity-25"
+                style={{ background: 'rgba(255, 255, 255, 0.12)', fontSize: '0.72rem', fontWeight: 600 }}
+                title="Back to Store / Close"
+                aria-label="Back to Store"
+              >
+                <i className="bi bi-arrow-left"></i>
+                <span className="d-none d-sm-inline">Back</span>
+              </button>
+
               <div
-                className="rounded-circle d-flex align-items-center justify-content-center text-white"
-                style={{ width: '32px', height: '32px', backgroundColor: '#1b64da' }}
+                className="rounded-circle d-flex align-items-center justify-content-center text-white shrink-0"
+                style={{ width: '30px', height: '30px', backgroundColor: '#1b64da' }}
               >
                 <i className="bi bi-robot text-xs"></i>
               </div>
-              <div>
-                <h6 className="fw-bold text-xs mb-0 text-white">Ethio Tech AI Assistant</h6>
-                <div className="d-flex align-items-center gap-1.5 text-[10px] text-emerald-400">
+
+              <div className="min-w-0">
+                <h6 className="fw-bold text-xs mb-0 text-white text-truncate">AI Assistant</h6>
+                <div className="d-flex align-items-center gap-1 text-[10px] text-emerald-400">
                   <span className="badge rounded-circle p-1 bg-emerald-400"></span>
-                  <span>Grounded in Real Catalog</span>
+                  <span className="text-truncate">Grounded in Real Catalog</span>
                 </div>
               </div>
             </div>
 
-            <div className="d-flex align-items-center gap-1">
+            {/* Right: Reset + Prominent X Button */}
+            <div className="d-flex align-items-center gap-1.5 shrink-0">
               <button
                 type="button"
                 onClick={handleResetChat}
-                className="btn btn-sm text-slate-400 hover:text-white p-1"
+                className="btn btn-sm text-slate-300 hover:text-white p-1 rounded-circle d-flex align-items-center justify-content-center"
+                style={{ width: '28px', height: '28px', background: 'rgba(255, 255, 255, 0.08)' }}
                 title="Reset Conversation"
                 aria-label="Reset Conversation"
               >
-                <i className="bi bi-arrow-counterclockwise fs-6"></i>
+                <i className="bi bi-arrow-counterclockwise" style={{ fontSize: '0.85rem' }}></i>
               </button>
+
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
-                className="btn btn-sm text-slate-400 hover:text-white p-1"
-                title="Close Assistant"
+                className="btn btn-sm text-white p-0 rounded-circle d-flex align-items-center justify-content-center shadow-sm"
+                style={{
+                  width: '28px',
+                  height: '28px',
+                  backgroundColor: '#dc2626',
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
+                }}
+                title="Close Assistant (X)"
                 aria-label="Close Assistant"
               >
-                <i className="bi bi-x-lg fs-6"></i>
+                <i className="bi bi-x-lg" style={{ fontSize: '0.75rem', fontWeight: 800 }}></i>
               </button>
             </div>
           </div>
@@ -320,6 +347,18 @@ const AIShoppingAssistant = () => {
               <i className="bi bi-send-fill text-xs"></i>
             </button>
           </form>
+
+          {/* Footer Back Link */}
+          <div className="d-flex justify-content-between align-items-center px-3 py-1 bg-slate-100 text-[10px] text-slate-500 border-top shrink-0">
+            <span><i className="bi bi-shield-check text-primary me-1"></i> Ethio Tech AI</span>
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="btn btn-link btn-sm p-0 text-slate-600 hover:text-slate-900 text-decoration-none text-[10px] d-flex align-items-center gap-1 fw-semibold"
+            >
+              <i className="bi bi-arrow-left"></i> Back to Shopping
+            </button>
+          </div>
         </div>
       )}
     </>
