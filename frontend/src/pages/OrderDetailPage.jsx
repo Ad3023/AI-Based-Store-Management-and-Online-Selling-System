@@ -499,6 +499,42 @@ const OrderDetailPage = () => {
               </form>
             </div>
           )}
+          {/* Order Status History Timeline */}
+          {order.status_history && order.status_history.length > 0 && (
+            <div className="card border-0 shadow-sm rounded-4 p-3 p-md-4 mb-4 bg-white border border-slate-200">
+              <h6 className="fw-bolder mb-3 text-slate-900 d-flex align-items-center gap-2">
+                <i className="bi bi-clock-history text-primary"></i> Timeline of Order Updates
+              </h6>
+              <div className="position-relative ps-2" style={{ borderLeft: '2px solid #e2e8f0', marginLeft: '8px' }}>
+                {order.status_history.map((hist, idx) => (
+                  <div key={hist.id || idx} className="position-relative mb-3 ps-3">
+                    <div
+                      className="position-absolute rounded-circle bg-primary"
+                      style={{ width: '10px', height: '10px', left: '-15px', top: '4px', border: '2px solid #fff' }}
+                    ></div>
+                    <div className="d-flex flex-wrap justify-content-between align-items-center gap-1 mb-1">
+                      <span className="badge bg-slate-100 text-slate-800 text-[10px] font-bold border border-slate-200">
+                        {hist.previous_status ? `${hist.previous_status} → ${hist.new_status}` : hist.new_status}
+                      </span>
+                      <small className="text-slate-400 text-[11px]">
+                        {new Date(hist.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                      </small>
+                    </div>
+                    {hist.comment && (
+                      <p className="text-secondary text-xs mb-0" style={{ lineHeight: '1.4' }}>
+                        {hist.comment}
+                      </p>
+                    )}
+                    {hist.changed_by_name && (
+                      <small className="text-slate-400 text-[10px] d-block mt-0.5">
+                        Recorded by: {hist.changed_by_name}
+                      </small>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right Column: Payment Verification Panel & Delivery Summary */}
@@ -507,7 +543,7 @@ const OrderDetailPage = () => {
           <div className="card border-0 shadow-sm rounded-4 p-3 p-md-4 mb-4 bg-white border border-slate-200">
             <h5 className="fw-bolder mb-3 text-slate-900 d-flex align-items-center justify-content-between">
               <span className="d-flex align-items-center gap-2">
-                <i className="bi bi-credit-card-2-front text-primary"></i> Payment Details
+                <i className="bi bi-credit-card-2-front text-primary"></i> Payment Verification
               </span>
               <span className={`badge rounded-pill px-2.5 py-1 text-[10px] font-bold ${paymentInfo.badgeClass}`}>
                 {paymentInfo.label}
@@ -515,14 +551,25 @@ const OrderDetailPage = () => {
             </h5>
 
             {/* When payment is still pending */}
-            {!paymentInfo.isPaid && order.status !== 'CANCELLED' ? (
+            {paymentInfo.isPending && order.status !== 'CANCELLED' ? (
               <div className="p-3 rounded-3 bg-amber-50 border border-amber-200">
                 <div className="d-flex align-items-start gap-2 mb-3">
-                  <i className="bi bi-exclamation-triangle-fill text-amber-600 fs-5 shrink-0 mt-0.5"></i>
-                  <div className="text-xs text-amber-800">
-                    <strong>Payment Pending:</strong> This order has not been completed. Settle via Chapa to activate fulfillment and warranty coverage.
+                  <i className="bi bi-hourglass-split text-amber-600 fs-5 shrink-0 mt-0.5"></i>
+                  <div className="text-xs text-amber-900">
+                    <strong className="d-block mb-1">Payment Verification Pending:</strong>
+                    Your payment is currently being verified. We do not mark orders as paid until the transaction is confirmed by Chapa's official gateway.
+                    <span className="d-block text-slate-600 mt-1">
+                      If you already submitted payment on Chapa, our server verifies transactions automatically upon webhook/callback arrival. If you have not paid yet, please complete payment below.
+                    </span>
                   </div>
                 </div>
+
+                {order.chapa_tx_ref && (
+                  <div className="mb-3 p-2 bg-white rounded border border-amber-200 text-xs text-slate-700">
+                    <span className="text-slate-400 d-block text-[10px] uppercase font-bold">Transaction Reference</span>
+                    <code className="font-monospace text-slate-800">{order.chapa_tx_ref}</code>
+                  </div>
+                )}
 
                 <button
                   type="button"
@@ -537,7 +584,7 @@ const OrderDetailPage = () => {
                     </>
                   ) : (
                     <>
-                      <i className="bi bi-lock-fill"></i> Pay {formatETB(order.total_amount)} with Chapa
+                      <i className="bi bi-shield-lock-fill"></i> Pay {formatETB(order.total_amount)} with Chapa
                     </>
                   )}
                 </button>
@@ -545,22 +592,31 @@ const OrderDetailPage = () => {
             ) : paymentInfo.isPaid ? (
               <div className="p-3 rounded-3 bg-emerald-50 border border-emerald-200">
                 <div className="d-flex align-items-center justify-content-between mb-2">
-                  <span className="text-xs text-slate-600 font-semibold">Gateway:</span>
+                  <span className="text-xs text-slate-600 font-semibold">Verification Status:</span>
                   <span className="badge rounded-pill px-2.5 py-1 font-bold text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300">
-                    Chapa Verified
+                    <i className="bi bi-check-circle-fill me-1"></i>Verified Paid
                   </span>
                 </div>
 
                 <div className="text-xs text-slate-700 mb-2">
-                  <span className="text-slate-500 d-block mb-0.5 font-semibold">Transaction Reference:</span>
+                  <span className="text-slate-500 d-block mb-0.5 font-semibold">Chapa Transaction Reference:</span>
                   <code className="break-anywhere text-xs p-1.5 bg-white rounded border d-block text-slate-800 font-monospace">
                     {order.chapa_tx_ref || `ORD-REF-${order.id}`}
                   </code>
                 </div>
 
-                <div className="text-xs text-slate-700 mb-3">
-                  <span className="text-slate-500">Method:</span> <strong>{order.payment_method || 'Chapa Gateway'}</strong>
+                <div className="text-xs text-slate-700 mb-2">
+                  <span className="text-slate-500">Verified Amount:</span>{' '}
+                  <strong className="text-emerald-700 font-monospace">
+                    {order.verified_amount ? formatETB(order.verified_amount) : formatETB(order.total_amount)}
+                  </strong>
                 </div>
+
+                {order.payment_verified_at && (
+                  <div className="text-xs text-slate-500 mb-3">
+                    <span>Verified At:</span> {new Date(order.payment_verified_at).toLocaleString()}
+                  </div>
+                )}
 
                 {hasVerifiedReceipt && (
                   <Link
@@ -570,6 +626,29 @@ const OrderDetailPage = () => {
                     <i className="bi bi-receipt"></i> View Official Receipt #{order.receipt.receipt_number}
                   </Link>
                 )}
+              </div>
+            ) : paymentInfo.isFailed ? (
+              <div className="p-3 rounded-3 bg-rose-50 border border-rose-200">
+                <div className="d-flex align-items-start gap-2 mb-2">
+                  <i className="bi bi-x-circle-fill text-rose-600 fs-5 shrink-0 mt-0.5"></i>
+                  <div className="text-xs text-rose-900">
+                    <strong className="d-block mb-1">Payment Verification Failed:</strong>
+                    {order.verification_mismatch_message || 'Payment could not be verified by Chapa. Your card was not charged.'}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handlePayWithChapa}
+                  disabled={initiatingChapa}
+                  className="btn btn-outline-danger w-100 rounded-pill font-bold text-xs py-2 mt-2"
+                >
+                  <i className="bi bi-arrow-repeat me-1"></i> Retry Payment with Chapa
+                </button>
+              </div>
+            ) : order.payment_status === 'REFUNDED' ? (
+              <div className="p-3 rounded-3 bg-purple-50 border border-purple-200 text-xs text-purple-900">
+                <i className="bi bi-arrow-counterclockwise fs-5 text-purple-600 me-2 align-middle"></i>
+                <strong>Payment Refunded:</strong> This order payment has been refunded in full.
               </div>
             ) : (
               <div className="p-3 rounded-3 bg-slate-50 border border-slate-200 text-xs text-slate-600 text-center">

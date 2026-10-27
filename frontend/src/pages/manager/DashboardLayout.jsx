@@ -178,7 +178,7 @@ const DashboardLayout = () => {
                 className={({ isActive }) => `dashboard-nav-item py-1.5 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 text-decoration-none transition ${isActive && !location.search ? 'active bg-primary text-white font-bold' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
                 onClick={() => setMobileDrawerOpen(false)}
               >
-                <i className="bi bi-cart-check"></i> Customer Orders
+                <i className="bi bi-receipt-cutoff"></i> Order Management
               </NavLink>
 
               {/* 8. Update Order Status */}
@@ -298,7 +298,7 @@ const DashboardLayout = () => {
                 className={({ isActive }) => `dashboard-nav-item py-1.5 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 text-decoration-none transition ${isActive ? 'active bg-primary text-white font-bold' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
                 onClick={() => setMobileDrawerOpen(false)}
               >
-                <i className="bi bi-credit-card-2-front text-cyan-400"></i> Orders and Payments
+                <i className="bi bi-receipt-cutoff text-cyan-400"></i> Order Management
               </NavLink>
 
               {/* 8. Customer Feedback */}
@@ -310,13 +310,13 @@ const DashboardLayout = () => {
                 <i className="bi bi-chat-dots-fill text-primary"></i> Customer Feedback
               </NavLink>
 
-              {/* 9. Promotions and Advertisements */}
+              {/* 9. Discount and Promotion Management */}
               <NavLink
                 to="/manager/promotions"
                 className={({ isActive }) => `dashboard-nav-item py-1.5 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 text-decoration-none transition ${isActive ? 'active bg-primary text-white font-bold' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
                 onClick={() => setMobileDrawerOpen(false)}
               >
-                <i className="bi bi-megaphone-fill text-warning"></i> Promotions and Advertisements
+                <i className="bi bi-percent text-warning"></i> Discount and Promotion Management
               </NavLink>
 
               {/* 10. Reports and Analytics */}

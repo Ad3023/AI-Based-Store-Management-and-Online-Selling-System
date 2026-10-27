@@ -284,13 +284,30 @@ class PromotionListCreateView(generics.ListCreateAPIView):
         from .models import Promotion
         from django.utils import timezone
         now = timezone.now()
+        status_param = (self.request.query_params.get('status') or '').strip().lower()
         active_only = self.request.query_params.get('active_only') == 'true'
+        search = (self.request.query_params.get('search') or '').strip()
         user = self.request.user
         is_staff = user.is_authenticated and (getattr(user, 'is_store_manager', lambda: False)() or getattr(user, 'is_admin', lambda: False)())
 
         if not is_staff or active_only:
-            return Promotion.objects.filter(is_active=True, start_date__lte=now, end_date__gte=now)
-        return Promotion.objects.all()
+            queryset = Promotion.objects.filter(is_active=True, start_date__lte=now, end_date__gte=now)
+        else:
+            queryset = Promotion.objects.all()
+
+        if status_param == 'active':
+            queryset = queryset.filter(is_active=True, start_date__lte=now, end_date__gte=now)
+        elif status_param == 'scheduled':
+            queryset = queryset.filter(is_active=True, start_date__gt=now)
+        elif status_param == 'expired':
+            queryset = queryset.filter(end_date__lt=now)
+        elif status_param == 'inactive':
+            queryset = queryset.filter(is_active=False)
+
+        if search:
+            queryset = queryset.filter(Q(title__icontains=search) | Q(description__icontains=search))
+
+        return queryset
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -311,6 +328,7 @@ class ActivePromotionAnnouncementView(APIView):
         from .models import Promotion
         from django.utils import timezone
         now = timezone.now()
+        # Find active promotions within validity window
         promo = Promotion.objects.filter(
             is_active=True,
             start_date__lte=now,
@@ -326,14 +344,19 @@ class ActivePromotionAnnouncementView(APIView):
 
         if promo:
             return Response({
+                'active': True,
                 'id': promo.id,
                 'title': promo.title,
-                'banner_announcement': promo.banner_announcement or f"Special Promotion: {promo.title}! Limited time genuine discounts.",
+                'name': promo.title,
+                'description': promo.description or '',
+                'banner_announcement': promo.banner_announcement or f"Special Promotion: {promo.title}! Limited-time genuine store discounts.",
                 'discount_type': promo.discount_type,
                 'discount_value': str(promo.discount_value),
+                'apply_to_all': promo.apply_to_all,
+                'start_date': promo.start_date,
                 'end_date': promo.end_date,
             })
-        return Response({'banner_announcement': None})
+        return Response({'active': False, 'banner_announcement': None})
 
 
 class WarrantyPolicyListCreateView(generics.ListCreateAPIView):

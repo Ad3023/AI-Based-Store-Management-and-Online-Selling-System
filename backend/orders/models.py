@@ -47,17 +47,56 @@ class Order(models.Model):
         DELIVERED = 'DELIVERED', 'Delivered'
         CANCELLED = 'CANCELLED', 'Cancelled'
 
+    class PaymentStatus(models.TextChoices):
+        PENDING = 'PENDING', 'Pending'
+        PAID = 'PAID', 'Paid'
+        FAILED = 'FAILED', 'Failed'
+        CANCELLED = 'CANCELLED', 'Cancelled'
+        EXPIRED = 'EXPIRED', 'Expired'
+        REFUND_PENDING = 'REFUND_PENDING', 'Refund Pending'
+        PARTIALLY_REFUNDED = 'PARTIALLY_REFUNDED', 'Partially Refunded'
+        REFUNDED = 'REFUNDED', 'Refunded'
+
+    class FulfillmentStatus(models.TextChoices):
+        PENDING = 'PENDING', 'Pending'
+        CONFIRMED = 'CONFIRMED', 'Confirmed'
+        PROCESSING = 'PROCESSING', 'Processing'
+        SHIPPED = 'SHIPPED', 'Shipped'
+        DELIVERED = 'DELIVERED', 'Delivered'
+        CANCELLED = 'CANCELLED', 'Cancelled'
+        REFUNDED = 'REFUNDED', 'Refunded'
+
     order_number = models.CharField(max_length=32, unique=True, editable=False)
     customer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='orders')
     status = models.CharField(max_length=24, choices=Status.choices, default=Status.PENDING_PAYMENT)
     
+    payment_status = models.CharField(
+        max_length=32,
+        choices=PaymentStatus.choices,
+        default=PaymentStatus.PENDING,
+        db_index=True
+    )
+    fulfillment_status = models.CharField(
+        max_length=32,
+        choices=FulfillmentStatus.choices,
+        default=FulfillmentStatus.PENDING,
+        db_index=True
+    )
+    currency = models.CharField(max_length=10, default='ETB')
+
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
     tax = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     shipping_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
 
-    payment_method = models.CharField(max_length=50, default='MANUAL_BANK')
-    chapa_tx_ref = models.CharField(max_length=120, blank=True, null=True)
+    payment_method = models.CharField(max_length=50, default='CHAPA')
+    chapa_tx_ref = models.CharField(max_length=120, blank=True, null=True, db_index=True)
+
+    verified_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    payment_initiated_at = models.DateTimeField(null=True, blank=True)
+    payment_verified_at = models.DateTimeField(null=True, blank=True)
+    last_verification_result = models.CharField(max_length=100, blank=True, null=True)
+    verification_mismatch_message = models.TextField(blank=True, null=True)
 
     shipping_name = models.CharField(max_length=150)
     shipping_phone = models.CharField(max_length=25)
@@ -76,6 +115,18 @@ class Order(models.Model):
             import datetime
             now_str = datetime.datetime.now().strftime('%Y%m%d')
             self.order_number = f"ORD-{now_str}-{uuid.uuid4().hex[:6].upper()}"
+
+        # Keep legacy status field in sync with payment_status & fulfillment_status
+        if self.payment_status == self.PaymentStatus.PAID:
+            if self.fulfillment_status == self.FulfillmentStatus.DELIVERED:
+                self.status = self.Status.DELIVERED
+            elif self.fulfillment_status == self.FulfillmentStatus.SHIPPED:
+                self.status = self.Status.SHIPPED
+            else:
+                self.status = self.Status.PROCESSING
+        elif self.fulfillment_status == self.FulfillmentStatus.CANCELLED or self.payment_status == self.PaymentStatus.CANCELLED:
+            self.status = self.Status.CANCELLED
+
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -214,3 +265,25 @@ class Receipt(models.Model):
 
     def __str__(self):
         return f"Receipt {self.receipt_number} for {self.order.order_number}"
+
+
+class OrderStatusHistory(models.Model):
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='status_history')
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='order_status_changes'
+    )
+    status_type = models.CharField(max_length=30, default='FULFILLMENT')  # 'FULFILLMENT' or 'PAYMENT'
+    previous_status = models.CharField(max_length=50)
+    new_status = models.CharField(max_length=50)
+    comment = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.order.order_number}: {self.previous_status} -> {self.new_status} at {self.created_at}"

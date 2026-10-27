@@ -94,7 +94,73 @@ export const getPaymentStatusInfo = (order) => {
     };
   }
 
-  // Check if payment evidence was rejected
+  const rawPay = order.payment_status ? String(order.payment_status).toUpperCase() : null;
+
+  if (rawPay === 'PAID') {
+    return {
+      label: 'Paid / Verified',
+      badgeClass: 'bg-emerald-100 text-emerald-800 border border-emerald-300',
+      isPaid: true,
+      isFailed: false,
+      isPending: false,
+    };
+  }
+  if (rawPay === 'FAILED') {
+    return {
+      label: 'Payment Failed',
+      badgeClass: 'bg-rose-100 text-rose-800 border border-rose-300',
+      isPaid: false,
+      isFailed: true,
+      isPending: false,
+    };
+  }
+  if (rawPay === 'CANCELLED') {
+    return {
+      label: 'Cancelled',
+      badgeClass: 'bg-slate-100 text-slate-700 border border-slate-300',
+      isPaid: false,
+      isFailed: false,
+      isPending: false,
+    };
+  }
+  if (rawPay === 'EXPIRED') {
+    return {
+      label: 'Expired',
+      badgeClass: 'bg-slate-100 text-slate-700 border border-slate-300',
+      isPaid: false,
+      isFailed: false,
+      isPending: false,
+    };
+  }
+  if (rawPay === 'REFUND_PENDING') {
+    return {
+      label: 'Refund Pending',
+      badgeClass: 'bg-purple-100 text-purple-800 border border-purple-300',
+      isPaid: false,
+      isFailed: false,
+      isPending: true,
+    };
+  }
+  if (rawPay === 'PARTIALLY_REFUNDED') {
+    return {
+      label: 'Partially Refunded',
+      badgeClass: 'bg-purple-100 text-purple-800 border border-purple-300',
+      isPaid: true,
+      isFailed: false,
+      isPending: false,
+    };
+  }
+  if (rawPay === 'REFUNDED') {
+    return {
+      label: 'Refunded',
+      badgeClass: 'bg-purple-100 text-purple-800 border border-purple-300',
+      isPaid: false,
+      isFailed: false,
+      isPending: false,
+    };
+  }
+
+  // Fallback for legacy objects:
   if (order.payment_evidence && order.payment_evidence.verification_status === 'REJECTED') {
     return {
       label: 'Payment Failed',
@@ -105,7 +171,6 @@ export const getPaymentStatusInfo = (order) => {
     };
   }
 
-  // If order is cancelled and unpaid
   if (order.status === 'CANCELLED' && !order.receipt && !['PROCESSING', 'SHIPPED', 'DELIVERED'].includes(order.status)) {
     return {
       label: 'Cancelled (Unpaid)',
@@ -116,7 +181,6 @@ export const getPaymentStatusInfo = (order) => {
     };
   }
 
-  // Payment is genuinely verified if a receipt exists or status is PROCESSING/SHIPPED/DELIVERED
   const isPaid = Boolean(order.receipt) || ['PROCESSING', 'SHIPPED', 'DELIVERED'].includes(order.status);
   if (isPaid) {
     return {
@@ -128,20 +192,8 @@ export const getPaymentStatusInfo = (order) => {
     };
   }
 
-  // Under review
-  if (order.status === 'PAYMENT_SUBMITTED' || order.payment_evidence?.verification_status === 'PENDING') {
-    return {
-      label: 'Under Review',
-      badgeClass: 'bg-blue-100 text-blue-800 border border-blue-300',
-      isPaid: false,
-      isFailed: false,
-      isPending: true,
-    };
-  }
-
-  // Default: Pending payment
   return {
-    label: 'Pending Payment',
+    label: 'Pending Verification',
     badgeClass: 'bg-amber-100 text-amber-800 border border-amber-300',
     isPaid: false,
     isFailed: false,
@@ -157,7 +209,11 @@ export const getPaymentStatusInfo = (order) => {
 export const getFulfillmentStatusInfo = (order) => {
   if (!order) return { label: 'Pending', badgeClass: 'bg-slate-100 text-slate-800' };
 
-  switch (order.status) {
+  const rawFul = order.fulfillment_status
+    ? String(order.fulfillment_status).toUpperCase()
+    : String(order.status || 'PENDING').toUpperCase();
+
+  switch (rawFul) {
     case 'DELIVERED':
       return {
         label: 'Delivered',
@@ -173,20 +229,26 @@ export const getFulfillmentStatusInfo = (order) => {
         label: 'Processing',
         badgeClass: 'bg-blue-100 text-blue-800 border border-blue-300',
       };
-    case 'PAYMENT_SUBMITTED':
+    case 'CONFIRMED':
       return {
-        label: 'Payment Submitted',
-        badgeClass: 'bg-indigo-100 text-indigo-800 border border-indigo-200',
+        label: 'Confirmed',
+        badgeClass: 'bg-indigo-100 text-indigo-800 border border-indigo-300',
       };
     case 'CANCELLED':
       return {
         label: 'Cancelled',
         badgeClass: 'bg-rose-100 text-rose-800 border border-rose-300',
       };
+    case 'REFUNDED':
+      return {
+        label: 'Refunded',
+        badgeClass: 'bg-purple-100 text-purple-800 border border-purple-300',
+      };
+    case 'PENDING':
     case 'PENDING_PAYMENT':
     default:
       return {
-        label: 'Order Placed',
+        label: 'Pending Confirmation',
         badgeClass: 'bg-amber-100 text-amber-800 border border-amber-200',
       };
   }
@@ -252,10 +314,16 @@ export const getOrderMilestones = (order) => {
   }
 
   // Standard Milestone Progression
-  const isPaid = Boolean(order.receipt) || ['PROCESSING', 'SHIPPED', 'DELIVERED'].includes(order.status);
-  const isProcessing = ['PROCESSING', 'SHIPPED', 'DELIVERED'].includes(order.status);
-  const isShipped = ['SHIPPED', 'DELIVERED'].includes(order.status);
-  const isDelivered = order.status === 'DELIVERED';
+  const payStatus = order.payment_status ? String(order.payment_status).toUpperCase() : null;
+  const fulStatus = order.fulfillment_status
+    ? String(order.fulfillment_status).toUpperCase()
+    : String(order.status || '').toUpperCase();
+
+  const isPaid = payStatus === 'PAID' || Boolean(order.receipt) || ['PROCESSING', 'SHIPPED', 'DELIVERED'].includes(fulStatus);
+  const isConfirmed = isPaid || ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED'].includes(fulStatus);
+  const isProcessing = ['PROCESSING', 'SHIPPED', 'DELIVERED'].includes(fulStatus);
+  const isShipped = ['SHIPPED', 'DELIVERED'].includes(fulStatus);
+  const isDelivered = fulStatus === 'DELIVERED';
 
   return [
     {
@@ -264,7 +332,7 @@ export const getOrderMilestones = (order) => {
       description: new Date(order.created_at).toLocaleDateString(),
       icon: 'bi-bag-check-fill',
       isCompleted: true,
-      isCurrent: order.status === 'PENDING_PAYMENT' && !isPaid,
+      isCurrent: !isPaid && fulStatus === 'PENDING',
       isPending: false,
     },
     {
@@ -272,26 +340,28 @@ export const getOrderMilestones = (order) => {
       title: 'Payment Verified',
       description: isPaid
         ? 'Chapa Confirmed'
-        : order.status === 'PAYMENT_SUBMITTED'
-        ? 'Verification in Review'
-        : 'Awaiting Payment',
+        : payStatus === 'FAILED'
+        ? 'Verification Failed'
+        : 'Awaiting Chapa Payment',
       icon: isPaid ? 'bi-patch-check-fill' : 'bi-credit-card-2-front',
       isCompleted: isPaid,
-      isCurrent: order.status === 'PAYMENT_SUBMITTED',
-      isPending: !isPaid && order.status !== 'PAYMENT_SUBMITTED',
+      isCurrent: !isPaid && payStatus === 'PENDING',
+      isPending: !isPaid,
     },
     {
       id: 'processing',
       title: 'Processing',
       description: isShipped
-        ? 'Items Inspected & Packed'
+        ? 'Inspected & Packed'
         : isProcessing
         ? 'Preparing in Warehouse'
-        : 'Pending Activation',
+        : isConfirmed
+        ? 'Confirmed by Admin'
+        : 'Pending Confirmation',
       icon: 'bi-box-seam-fill',
       isCompleted: isShipped,
-      isCurrent: order.status === 'PROCESSING',
-      isPending: !isProcessing,
+      isCurrent: isProcessing || (isConfirmed && !isShipped),
+      isPending: !isConfirmed,
     },
     {
       id: 'shipped',
@@ -303,7 +373,7 @@ export const getOrderMilestones = (order) => {
         : 'Pending Courier Dispatch',
       icon: 'bi-truck',
       isCompleted: isDelivered,
-      isCurrent: order.status === 'SHIPPED',
+      isCurrent: isShipped,
       isPending: !isShipped,
     },
     {

@@ -86,6 +86,10 @@ class Promotion(models.Model):
         null=True,
         help_text="Short dismissible announcement text for storefront header"
     )
+    apply_to_all = models.BooleanField(
+        default=False,
+        help_text="Apply promotion store-wide to all eligible products"
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -97,6 +101,14 @@ class Promotion(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+
+    @property
+    def name(self):
+        return self.title
+
+    @name.setter
+    def name(self, val):
+        self.title = val
 
     @property
     def is_currently_active(self):
@@ -157,7 +169,11 @@ class Product(models.Model):
         if promo:
             return promo
         # Category-level promotion
-        return self.category.promotions.filter(is_active=True, start_date__lte=now, end_date__gte=now).first()
+        promo = self.category.promotions.filter(is_active=True, start_date__lte=now, end_date__gte=now).first()
+        if promo:
+            return promo
+        # Store-wide promotion (apply_to_all=True)
+        return Promotion.objects.filter(apply_to_all=True, is_active=True, start_date__lte=now, end_date__gte=now).first()
 
     @property
     def current_price(self):

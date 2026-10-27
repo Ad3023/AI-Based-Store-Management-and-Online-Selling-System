@@ -1,5 +1,8 @@
 from rest_framework import serializers
-from .models import Cart, CartItem, Order, OrderItem, PaymentEvidence, Receipt, WarrantyClaim
+from .models import (
+    Cart, CartItem, Order, OrderItem, PaymentEvidence,
+    Receipt, WarrantyClaim, OrderStatusHistory
+)
 from products.serializers import ProductSerializer
 
 
@@ -108,20 +111,46 @@ class ReceiptSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'receipt_number', 'issued_at']
 
 
+class OrderStatusHistorySerializer(serializers.ModelSerializer):
+    changed_by_username = serializers.CharField(source='changed_by.username', read_only=True)
+
+    class Meta:
+        model = OrderStatusHistory
+        fields = [
+            'id', 'order', 'changed_by', 'changed_by_username',
+            'status_type', 'previous_status', 'new_status', 'comment', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+
+
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     payment_evidence = PaymentEvidenceSerializer(read_only=True)
     receipt = ReceiptSerializer(read_only=True)
+    status_history = OrderStatusHistorySerializer(many=True, read_only=True)
     customer_name = serializers.CharField(source='customer.username', read_only=True)
     customer_email = serializers.CharField(source='customer.email', read_only=True)
+    payment_status_display = serializers.CharField(source='get_payment_status_display', read_only=True)
+    fulfillment_status_display = serializers.CharField(source='get_fulfillment_status_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
 
     class Meta:
         model = Order
         fields = [
             'id', 'order_number', 'customer', 'customer_name', 'customer_email',
-            'status', 'subtotal', 'tax', 'shipping_fee', 'total_amount',
+            'status', 'status_display',
+            'payment_status', 'payment_status_display',
+            'fulfillment_status', 'fulfillment_status_display',
+            'currency', 'subtotal', 'tax', 'shipping_fee', 'total_amount',
             'payment_method', 'chapa_tx_ref',
+            'verified_amount', 'payment_initiated_at', 'payment_verified_at',
+            'last_verification_result', 'verification_mismatch_message',
             'shipping_name', 'shipping_phone', 'shipping_address', 'shipping_city',
-            'notes', 'created_at', 'updated_at', 'items', 'payment_evidence', 'receipt'
+            'notes', 'created_at', 'updated_at', 'items', 'payment_evidence', 'receipt',
+            'status_history'
         ]
-        read_only_fields = ['id', 'order_number', 'customer', 'subtotal', 'tax', 'shipping_fee', 'total_amount', 'created_at', 'updated_at']
+        read_only_fields = [
+            'id', 'order_number', 'customer', 'subtotal', 'tax', 'shipping_fee',
+            'total_amount', 'created_at', 'updated_at', 'verified_amount',
+            'payment_verified_at', 'last_verification_result', 'verification_mismatch_message'
+        ]

@@ -20,7 +20,7 @@ const CustomerDashboardPage = () => {
   const { user, loading: authLoading, updateProfile, logout, isAdmin, isStoreManager } = useAuth();
   const { cartCount } = useCart();
   const { wishlistCount } = useWishlist();
-  const { notifications, markAsRead, markAllAsRead } = useNotifications();
+  const { notifications, unreadCount, markAsRead, markAllAsRead, removeNotification, clearAllNotifications } = useNotifications();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -843,42 +843,109 @@ const CustomerDashboardPage = () => {
         {/* TAB 6: NOTIFICATIONS */}
         {activeTab === 'notifications' && (
           <div className="card border-0 shadow-sm rounded-4 p-3 p-md-4 bg-white border border-slate-200">
-            <div className="d-flex justify-content-between align-items-center mb-3">
+            <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 pb-3 border-bottom">
               <div>
-                <h5 className="fw-bolder text-slate-900 mb-0.5">In-App Notifications</h5>
-                <p className="text-slate-500 text-xs mb-0">Alerts for payments, order milestones, and warranty updates</p>
+                <div className="d-flex align-items-center gap-2">
+                  <h5 className="fw-bolder text-slate-900 mb-0">In-App Notification Center</h5>
+                  {unreadCount > 0 && (
+                    <span className="badge rounded-pill bg-primary text-white text-xs">
+                      {unreadCount} unread
+                    </span>
+                  )}
+                </div>
+                <p className="text-slate-500 text-xs mb-0">Verified order lifecycle updates, Chapa payment receipts, and dispatch milestones</p>
               </div>
-              {notifications.length > 0 && (
-                <button onClick={markAllAsRead} className="btn btn-sm btn-outline-primary rounded-pill px-3 text-xs">
-                  Mark All as Read
-                </button>
-              )}
+              <div className="d-flex align-items-center gap-2">
+                {unreadCount > 0 && (
+                  <button onClick={markAllAsRead} className="btn btn-sm btn-outline-primary rounded-pill px-3 text-xs font-semibold">
+                    <i className="bi bi-check2-all me-1"></i> Mark All as Read
+                  </button>
+                )}
+                {notifications.length > 0 && (
+                  <button onClick={clearAllNotifications} className="btn btn-sm btn-outline-secondary rounded-pill px-3 text-xs">
+                    <i className="bi bi-trash3 me-1"></i> Clear All
+                  </button>
+                )}
+              </div>
             </div>
 
             {notifications.length === 0 ? (
-              <div className="text-center py-5 bg-slate-50 rounded-3 text-muted small">
+              <div className="text-center py-5 bg-slate-50 rounded-4 text-muted small border border-dashed border-slate-200">
                 <i className="bi bi-bell-slash fs-1 text-slate-400 mb-2 d-block"></i>
-                No notifications yet.
+                <h6 className="fw-bold text-slate-700">No Notifications</h6>
+                <p className="text-slate-500 text-xs mb-0">
+                  When you place an order, complete payment via Chapa, or when your package is dispatched, event updates will appear here.
+                </p>
               </div>
             ) : (
-              <div className="d-flex flex-column gap-2">
+              <div className="d-flex flex-column gap-2.5">
                 {notifications.map((n) => (
                   <div
                     key={n.id}
                     className={`p-3 rounded-3 border transition ${
-                      n.is_read ? 'bg-white' : 'bg-blue-50 border-blue-200'
+                      n.is_read ? 'bg-white border-slate-200' : 'bg-blue-50/70 border-blue-200 shadow-sm'
                     }`}
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => {
-                      markAsRead(n.id);
-                      if (n.link) navigate(n.link);
-                    }}
                   >
-                    <div className="d-flex justify-content-between align-items-center mb-1">
-                      <strong className="text-slate-900 small">{n.title}</strong>
-                      <small className="text-muted text-[11px]">{new Date(n.created_at).toLocaleString()}</small>
+                    <div className="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+                      <div className="d-flex align-items-center gap-2 flex-wrap">
+                        <span className={`badge rounded-pill text-[10px] px-2 py-0.5 ${
+                          n.is_read ? 'bg-slate-100 text-slate-600' : 'bg-primary text-white font-bold'
+                        }`}>
+                          {n.is_read ? 'Read' : 'Unread'}
+                        </span>
+                        <strong className="text-slate-900 small">{n.title}</strong>
+                        {n.order_number && (
+                          <span className="badge bg-slate-100 text-slate-800 border border-slate-200 font-monospace text-[10px]">
+                            <i className="bi bi-receipt me-1 text-primary"></i>Order: {n.order_number}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="d-flex align-items-center gap-2 shrink-0">
+                        <small className="text-slate-400 text-[11px]">
+                          <i className="bi bi-clock me-1"></i>
+                          {new Date(n.created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                        </small>
+                        <button
+                          type="button"
+                          className="btn btn-sm p-0 text-slate-400 hover-text-danger border-0"
+                          onClick={() => removeNotification(n.id)}
+                          title="Dismiss notification"
+                        >
+                          <i className="bi bi-x-lg text-xs"></i>
+                        </button>
+                      </div>
                     </div>
-                    <p className="text-secondary text-xs mb-0">{n.message}</p>
+
+                    <p className="text-secondary text-xs mb-2" style={{ lineHeight: '1.45' }}>
+                      {n.message}
+                    </p>
+
+                    <div className="d-flex justify-content-between align-items-center pt-2 border-top border-slate-100">
+                      <div>
+                        {!n.is_read && (
+                          <button
+                            type="button"
+                            className="btn btn-link p-0 text-primary text-xs text-decoration-none"
+                            onClick={() => markAsRead(n.id)}
+                          >
+                            Mark as read
+                          </button>
+                        )}
+                      </div>
+                      {n.link && (
+                        <button
+                          type="button"
+                          className="btn btn-primary-gradient btn-sm rounded-pill px-3 py-1 text-xs font-bold"
+                          onClick={() => {
+                            markAsRead(n.id);
+                            navigate(n.link);
+                          }}
+                        >
+                          View Order Details &rarr;
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

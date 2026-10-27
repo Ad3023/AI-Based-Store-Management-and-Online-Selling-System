@@ -275,14 +275,14 @@ const Navbar = () => {
                 {showNotifications && (
                   <div
                     className="card shadow-lg border-0 rounded-3 p-3 position-absolute end-0 mt-2 bg-white text-dark"
-                    style={{ width: '320px', zIndex: 1060 }}
+                    style={{ width: '360px', zIndex: 1060 }}
                   >
                     <div className="d-flex justify-content-between align-items-center pb-2 border-bottom">
                       <div className="d-flex align-items-center gap-1.5">
                         <span className="fw-bold text-sm text-slate-900">Notifications</span>
                         {unreadCount > 0 && (
                           <span className="badge rounded-pill bg-primary text-white text-[10px]">
-                            {unreadCount}
+                            {unreadCount} unread
                           </span>
                         )}
                       </div>
@@ -293,7 +293,7 @@ const Navbar = () => {
                             className="btn btn-link btn-sm text-primary p-0 text-decoration-none text-xs"
                             onClick={markAllAsRead}
                           >
-                            Mark read
+                            Mark all read
                           </button>
                         )}
                         {notifications.length > 0 && (
@@ -315,15 +315,18 @@ const Navbar = () => {
                         ></button>
                       </div>
                     </div>
-                    <div style={{ maxHeight: '280px', overflowY: 'auto' }} className="py-2">
+                    <div style={{ maxHeight: '340px', overflowY: 'auto' }} className="py-2">
                       {notifications.length === 0 ? (
-                        <div className="text-center py-4 text-muted small">No notifications yet</div>
+                        <div className="text-center py-4 text-muted small">
+                          <i className="bi bi-bell-slash d-block fs-3 text-slate-300 mb-1"></i>
+                          No notifications yet
+                        </div>
                       ) : (
                         notifications.map((n) => (
                           <div
                             key={n.id}
-                            className={`p-2.5 rounded-2 mb-1.5 transition position-relative border ${
-                              n.is_read ? 'bg-white border-slate-100 hover:bg-slate-50' : 'bg-blue-50/70 border-blue-100'
+                            className={`p-2.5 rounded-2 mb-2 transition position-relative border ${
+                              n.is_read ? 'bg-white border-slate-100 hover:bg-slate-50' : 'bg-blue-50/70 border-blue-200'
                             }`}
                             onClick={() => {
                               markAsRead(n.id);
@@ -335,10 +338,15 @@ const Navbar = () => {
                             style={{ cursor: 'pointer' }}
                           >
                             <div className="d-flex align-items-start justify-content-between gap-1 mb-1">
-                              <span className="fw-semibold text-xs text-dark pe-1">{n.title}</span>
+                              <div className="d-flex align-items-center gap-1.5 flex-wrap">
+                                {!n.is_read && (
+                                  <span className="badge bg-primary rounded-circle p-1" style={{ width: '6px', height: '6px' }}></span>
+                                )}
+                                <span className="fw-semibold text-xs text-dark">{n.title}</span>
+                              </div>
                               <div className="d-flex align-items-center gap-1.5 shrink-0">
                                 <small className="text-muted text-[10px]">
-                                  {new Date(n.created_at).toLocaleDateString()}
+                                  {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} &bull; {new Date(n.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
                                 </small>
                                 <button
                                   type="button"
@@ -352,9 +360,23 @@ const Navbar = () => {
                                 </button>
                               </div>
                             </div>
-                            <p className="text-muted text-xs mb-0" style={{ lineHeight: '1.35' }}>
+                            {n.order_number && (
+                              <div className="mb-1">
+                                <span className="badge bg-slate-100 text-slate-700 text-[10px] font-monospace border border-slate-200">
+                                  <i className="bi bi-box me-1"></i>{n.order_number}
+                                </span>
+                              </div>
+                            )}
+                            <p className="text-secondary text-xs mb-1" style={{ lineHeight: '1.35' }}>
                               {n.message}
                             </p>
+                            {n.link && (
+                              <div className="text-end">
+                                <span className="text-primary text-[11px] fw-semibold">
+                                  View Order &rarr;
+                                </span>
+                              </div>
+                            )}
                           </div>
                         ))
                       )}

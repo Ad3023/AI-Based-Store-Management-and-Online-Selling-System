@@ -175,3 +175,4 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Chapa Payment Gateway Settings
 CHAPA_SECRET_KEY = os.getenv('CHAPA_SECRET_KEY', '')
 CHAPA_API_URL = os.getenv('CHAPA_API_URL', 'https://api.chapa.co/v1').rstrip('/')
+CHAPA_WEBHOOK_SECRET = os.getenv('CHAPA_WEBHOOK_SECRET', '')

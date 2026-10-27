@@ -3,8 +3,9 @@ from .views import (
     CartView, CheckoutView, OrderListView, OrderDetailView,
     PaymentEvidenceUploadView, StoreManagerPaymentVerificationView,
     StoreManagerOrderStatusUpdateView, ReceiptDetailView,
-    ChapaInitializePaymentView, ChapaVerifyPaymentView, ChapaWebhookView,
-    WarrantyClaimListCreateView, WarrantyClaimDetailView, CustomerDashboardSummaryView
+    ChapaInitializePaymentView, ChapaVerifyPaymentView, AdminVerifyPaymentView,
+    ChapaWebhookView, WarrantyClaimListCreateView, WarrantyClaimDetailView,
+    CustomerDashboardSummaryView
 )
 from .dashboard_views import DashboardAnalyticsView, ExportSalesReportView, ExportInventoryReportView
 
@@ -16,6 +17,7 @@ urlpatterns = [
     path('<int:order_id>/chapa/initialize/', ChapaInitializePaymentView.as_view(), name='chapa-order-initialize'),
     path('chapa/verify/', ChapaVerifyPaymentView.as_view(), name='chapa-verify'),
     path('<int:order_id>/chapa/verify/', ChapaVerifyPaymentView.as_view(), name='chapa-order-verify'),
+    path('<int:order_id>/admin-verify-chapa/', AdminVerifyPaymentView.as_view(), name='admin-verify-chapa'),
     path('chapa/webhook/', ChapaWebhookView.as_view(), name='chapa-webhook'),
     path('analytics/dashboard/', DashboardAnalyticsView.as_view(), name='dashboard-analytics'),
     path('analytics/export-sales/', ExportSalesReportView.as_view(), name='export-sales'),

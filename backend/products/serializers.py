@@ -30,6 +30,7 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class PromotionSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source='title', required=False)
     created_by_username = serializers.CharField(source='created_by.username', read_only=True)
     is_currently_active = serializers.BooleanField(read_only=True)
     product_count = serializers.IntegerField(source='products.count', read_only=True)
@@ -38,12 +39,49 @@ class PromotionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Promotion
         fields = [
-            'id', 'title', 'description', 'discount_type', 'discount_value',
+            'id', 'title', 'name', 'description', 'discount_type', 'discount_value',
             'start_date', 'end_date', 'is_active', 'is_currently_active',
-            'products', 'categories', 'banner_announcement',
+            'apply_to_all', 'products', 'categories', 'banner_announcement',
             'created_by', 'created_by_username', 'product_count', 'category_count', 'created_at'
         ]
         read_only_fields = ['id', 'created_by', 'created_at']
+
+    def to_internal_value(self, data):
+        data = data.copy() if hasattr(data, 'copy') else dict(data)
+        if 'name' in data and not data.get('title'):
+            data['title'] = data['name']
+        return super().to_internal_value(data)
+
+    def validate(self, attrs):
+        title = attrs.get('title')
+        if not title and not self.instance:
+            raise serializers.ValidationError({'title': 'Promotion title is required.'})
+
+        discount_type = attrs.get('discount_type', getattr(self.instance, 'discount_type', None))
+        discount_value = attrs.get('discount_value', getattr(self.instance, 'discount_value', None))
+
+        if discount_value is not None:
+            from decimal import Decimal
+            try:
+                val = Decimal(str(discount_value))
+            except Exception:
+                raise serializers.ValidationError({'discount_value': 'Invalid numerical discount value.'})
+
+            if val <= Decimal('0.00'):
+                raise serializers.ValidationError({'discount_value': 'Discount value must be greater than zero.'})
+
+            if discount_type == Promotion.DiscountType.PERCENTAGE:
+                if val > Decimal('100.00'):
+                    raise serializers.ValidationError({'discount_value': 'Percentage discount cannot exceed 100%.'})
+                if val < Decimal('0.01'):
+                    raise serializers.ValidationError({'discount_value': 'Percentage discount must be at least 0.01%.'})
+
+        start_date = attrs.get('start_date', getattr(self.instance, 'start_date', None))
+        end_date = attrs.get('end_date', getattr(self.instance, 'end_date', None))
+        if start_date and end_date and start_date >= end_date:
+            raise serializers.ValidationError({'end_date': 'Promotion expiration date must be after start date.'})
+
+        return attrs
 
 
 class ProductReviewSerializer(serializers.ModelSerializer):
