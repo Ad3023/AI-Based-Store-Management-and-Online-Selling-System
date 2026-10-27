@@ -7,7 +7,9 @@ export const getMediaUrl = (path) => {
   if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:') || path.startsWith('blob:')) {
     return path;
   }
-  const backendOrigin = 'http://127.0.0.1:8000';
+  const envBackend = import.meta.env.VITE_BACKEND_URL || 
+    (import.meta.env.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL.replace(/\/api\/?$/, '') : '');
+  const backendOrigin = (envBackend || 'http://127.0.0.1:8000').replace(/\/+$/, '');
   return `${backendOrigin}${path.startsWith('/') ? '' : '/'}${path}`;
 };
 

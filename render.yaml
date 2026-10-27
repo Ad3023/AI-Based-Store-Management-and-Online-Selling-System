@@ -1,0 +1,63 @@
+# Render Blueprint Specification for AI-Based Store Management & Online Selling System
+# https://render.com/docs/blueprint-spec
+
+services:
+  # -------------------------------------------------------------
+  # 1. Django REST Backend API Web Service
+  # -------------------------------------------------------------
+  - type: web
+    name: ai-online-selling-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: bash build.sh
+    startCommand: gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
+    healthCheckPath: /api/products/
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: "*"
+      - key: CORS_ALLOW_ALL_ORIGINS
+        value: "True"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ai-online-selling-db
+          property: connectionString
+      - key: CHAPA_SECRET_KEY
+        sync: false
+      - key: CHAPA_API_URL
+        value: "https://api.chapa.co/v1"
+
+  # -------------------------------------------------------------
+  # 2. React + Vite Frontend Static Site
+  # -------------------------------------------------------------
+  - type: web
+    name: ai-online-selling-web
+    runtime: static
+    plan: free
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_BASE_URL
+        sync: false
+
+# ---------------------------------------------------------------
+# 3. Managed PostgreSQL Database
+# ---------------------------------------------------------------
+databases:
+  - name: ai-online-selling-db
+    databaseName: ai_online_selling_db
+    user: postgres
+    plan: free

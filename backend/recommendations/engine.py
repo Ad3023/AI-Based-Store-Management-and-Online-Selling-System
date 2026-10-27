@@ -15,10 +15,14 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timezone
 from django.db.models import Count, Sum, Q
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
+try:
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity
+    from sklearn.cluster import KMeans
+    from sklearn.preprocessing import StandardScaler
+    SKLEARN_AVAILABLE = True
+except (ImportError, Exception):
+    SKLEARN_AVAILABLE = False
 
 from products.models import Product
 from orders.models import Order, OrderItem
@@ -49,6 +53,8 @@ class AIRecommendationEngine:
         target_idx = product_ids.index(product_id)
 
         try:
+            if not SKLEARN_AVAILABLE:
+                return AIRecommendationEngine.get_trending_products(top_n=top_n)
             vectorizer = TfidfVectorizer(stop_words='english', min_df=1, max_features=3000)
             tfidf_matrix = vectorizer.fit_transform(corpus)
             similarity_scores = cosine_similarity(tfidf_matrix[target_idx], tfidf_matrix).flatten()
@@ -254,11 +260,16 @@ class AIRecommendationEngine:
             return {"status": "Updated", "total_segmented": len(customer_data)}
 
         # Scaling and K-Means
-        scaler = StandardScaler()
-        scaled_features = scaler.fit_transform(features)
-
-        kmeans = KMeans(n_clusters=num_clusters, random_state=42, n_init=10)
-        df['cluster'] = kmeans.fit_predict(scaled_features)
+        if SKLEARN_AVAILABLE:
+            scaler = StandardScaler()
+            scaled_features = scaler.fit_transform(features)
+            kmeans = KMeans(n_clusters=num_clusters, random_state=42, n_init=10)
+            df['cluster'] = kmeans.fit_predict(scaled_features)
+        else:
+            # Robust quantile-based clustering fallback when sklearn is unavailable
+            df = df.sort_values(by=['total_spent', 'order_count'], ascending=False).reset_index(drop=True)
+            chunk_size = max(1, len(df) // num_clusters)
+            df['cluster'] = [min(i // chunk_size, num_clusters - 1) for i in range(len(df))]
 
         # Label clusters based on cluster centroids
         cluster_summaries = df.groupby('cluster')[feature_cols].mean()

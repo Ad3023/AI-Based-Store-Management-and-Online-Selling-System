@@ -140,6 +140,7 @@ cd backend
 
 - [System Architecture & ML Model Details](file:///documentation/ARCHITECTURE.md)
 - [Step-by-Step Run & Installation Guide](file:///documentation/RUN_INSTRUCTIONS.md)
+- [Full Cloud Deployment Guide (Render)](file:///documentation/DEPLOYMENT_GUIDE.md)
 - [University Viva & Presentation Defense Guide](file:///documentation/PRESENTATION_GUIDE.md)
 
 ---
