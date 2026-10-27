@@ -59,11 +59,11 @@ const HomePage = () => {
           setCategories(catList);
           setFeaturedProducts(allList);
 
-          // Find items with genuine discount (compare_at_price > price)
+          // Find items with genuine discount (authorized active admin promotion only)
           const offers = allList.filter(
-            (p) => p.compare_at_price && Number(p.compare_at_price) > Number(p.price)
+            (p) => p.has_promotion && Number(p.current_price) < Number(p.price)
           );
-          setSpecialOffers(offers.length > 0 ? offers : allList.slice(0, 4));
+          setSpecialOffers(offers);
         }
 
         // Fetch AI recommendations (Personalized for logged in users, Trending for guests)
@@ -323,7 +323,7 @@ const HomePage = () => {
             <div className="row row-cols-1 row-cols-sm-2 row-cols-md-4 g-3">
               {specialOffers.slice(0, 4).map((p) => (
                 <div key={`offer-${p.id}`} className="col">
-                  <ProductCard product={p} aiTag="Special Deal" />
+                  <ProductCard product={p} />
                 </div>
               ))}
             </div>

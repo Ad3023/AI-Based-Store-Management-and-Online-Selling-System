@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { formatETB } from '../utils/currency';
+import { getProductPricing } from '../utils/pricing';
 
 const CartPage = () => {
   const { cart, updateQuantity, removeFromCart, clearCart, loading } = useCart();
@@ -123,7 +124,21 @@ const CartPage = () => {
                             </div>
                           </div>
                         </td>
-                        <td className="fw-semibold small">{formatETB(item.product.price)}</td>
+                        <td>
+                          {(() => {
+                            const pricing = getProductPricing(item.product);
+                            return (
+                              <div>
+                                <span className="fw-semibold small">{formatETB(pricing.price)}</span>
+                                {pricing.hasDiscount && pricing.originalPrice && (
+                                  <span className="text-muted text-decoration-line-through text-[11px] d-block">
+                                    {formatETB(pricing.originalPrice)}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </td>
                         <td>
                           <div className="input-group input-group-sm" style={{ width: '105px' }}>
                             <button

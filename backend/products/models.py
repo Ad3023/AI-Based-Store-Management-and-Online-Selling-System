@@ -190,7 +190,10 @@ class Product(models.Model):
 
     @property
     def has_active_promotion(self):
-        return self.get_current_promotion() is not None
+        promo = self.get_current_promotion()
+        if not promo:
+            return False
+        return self.current_price < self.price
 
     @property
     def resolved_warranty(self):

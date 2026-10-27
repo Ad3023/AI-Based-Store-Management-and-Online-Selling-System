@@ -25,9 +25,9 @@ const DealsPage = () => {
 
         const res = await api.get('products/items/');
         const allItems = res.data.results || res.data || [];
-        // Genuine discounts only: compare_at_price > price
+        // Genuine discounts only: authorized active admin promotions
         const discounted = allItems.filter(
-          (p) => p.compare_at_price && Number(p.compare_at_price) > Number(p.price)
+          (p) => p.has_promotion && Number(p.current_price) < Number(p.price)
         );
         setDealProducts(discounted);
       } catch (err) {
@@ -127,7 +127,7 @@ const DealsPage = () => {
         <div className="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-4">
           {dealProducts.map((product) => (
             <div key={product.id} className="col">
-              <ProductCard product={product} aiTag="Promotional Offer" />
+              <ProductCard product={product} />
             </div>
           ))}
         </div>

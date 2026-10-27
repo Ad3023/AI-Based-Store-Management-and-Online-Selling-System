@@ -5,6 +5,7 @@ import { useCompare } from '../context/CompareContext';
 import { useCart } from '../context/CartContext';
 import { formatETB } from '../utils/currency';
 import { getProductImage } from '../utils/productImages';
+import { getProductPricing } from '../utils/pricing';
 
 const ComparePage = () => {
   const { compareList, removeFromCompare, clearCompare, addToCompare } = useCompare();
@@ -291,19 +292,22 @@ const ComparePage = () => {
                 ))}
               </tr>
 
-              {/* Price & Savings */}
+              {/* Price & Savings (Admin Promotions Only) */}
               <tr>
                 <td className="fw-bold text-slate-700 text-xs p-3">Pricing in ETB</td>
-                {compareList.map((p) => (
-                  <td key={`price-${p.id}`} className="text-center text-xs p-3">
-                    <div className="fw-bold text-slate-900">{formatETB(p.current_price || p.price)}</div>
-                    {p.compare_at_price && Number(p.compare_at_price) > Number(p.price) && (
-                      <div className="text-muted text-[11px] text-decoration-line-through">
-                        {formatETB(p.compare_at_price)} (Save {formatETB(p.compare_at_price - p.price)})
-                      </div>
-                    )}
-                  </td>
-                ))}
+                {compareList.map((p) => {
+                  const pricing = getProductPricing(p);
+                  return (
+                    <td key={`price-${p.id}`} className="text-center text-xs p-3">
+                      <div className="fw-bold text-slate-900">{formatETB(pricing.price)}</div>
+                      {pricing.hasDiscount && pricing.originalPrice && (
+                        <div className="text-muted text-[11px] text-decoration-line-through">
+                          {formatETB(pricing.originalPrice)} (Save {formatETB(pricing.savingsAmount)})
+                        </div>
+                      )}
+                    </td>
+                  );
+                })}
               </tr>
 
               {/* Availability & Stock */}

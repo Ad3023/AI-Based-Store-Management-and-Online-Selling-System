@@ -310,9 +310,9 @@ const ManagerInventoryPage = () => {
                   <td>{formatETB(p.cost_price)}</td>
                   <td className="fw-bold text-dark">
                     {formatETB(p.price)}
-                    {p.compare_at_price && (
-                      <div className="text-muted text-decoration-line-through text-[11px]">
-                        {formatETB(p.compare_at_price)}
+                    {p.has_promotion && p.current_price && Number(p.current_price) < Number(p.price) && (
+                      <div className="text-success text-[11px] fw-bold">
+                        Promo: {formatETB(p.current_price)} ({p.discount_label})
                       </div>
                     )}
                   </td>

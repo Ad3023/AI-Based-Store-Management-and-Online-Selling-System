@@ -6,6 +6,7 @@ import { useWishlist } from '../context/WishlistContext';
 import { useCompare } from '../context/CompareContext';
 import { formatETB } from '../utils/currency';
 import { getProductImage } from '../utils/productImages';
+import { getProductPricing } from '../utils/pricing';
 
 const ProductCard = ({ product, aiTag }) => {
   const { addToCart } = useCart();
@@ -16,7 +17,7 @@ const ProductCard = ({ product, aiTag }) => {
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState(false);
 
-  const isWishlisted = isInWishlist(product.id);
+  const isWishlisted = isInWishlist(product?.id);
   const isAdmin = user?.role === 'admin';
 
   const handleAddToCart = async (e) => {
@@ -52,13 +53,11 @@ const ProductCard = ({ product, aiTag }) => {
     toggleWishlistCtx(product);
   };
 
-  const discountPercent =
-    product.compare_at_price && Number(product.compare_at_price) > Number(product.price)
-      ? Math.round(((Number(product.compare_at_price) - Number(product.price)) / Number(product.compare_at_price)) * 100)
-      : null;
+  // Shared Authoritative Pricing Service (Admin Promotions Only)
+  const pricing = getProductPricing(product);
 
   const imageUrl = getProductImage(product);
-  const isOutOfStock = product.stock === 0;
+  const isOutOfStock = product?.stock === 0;
 
   return (
     <div
@@ -75,16 +74,15 @@ const ProductCard = ({ product, aiTag }) => {
         <div className="position-relative p-3 pb-0">
           <div className="d-flex justify-content-between align-items-center w-100 position-absolute top-0 start-0 p-3" style={{ zIndex: 2 }}>
             <div>
-              {discountPercent && (
-                <span className="badge bg-danger rounded-pill px-2.5 py-1 text-white fw-bold" style={{ fontSize: '0.72rem' }}>
-                  -{discountPercent}%
+              {pricing.hasDiscount ? (
+                <span className="badge bg-danger rounded-pill px-2.5 py-1 text-white fw-bold shadow-sm" style={{ fontSize: '0.72rem' }}>
+                  {pricing.discountLabel}
                 </span>
-              )}
-              {aiTag && !discountPercent && (
+              ) : aiTag ? (
                 <span className="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 rounded-pill px-2 py-1 text-[11px] fw-bold">
                   {aiTag}
                 </span>
-              )}
+              ) : null}
             </div>
 
             <div className="d-flex align-items-center gap-1.5">
@@ -191,11 +189,11 @@ const ProductCard = ({ product, aiTag }) => {
           <div>
             <div className="d-flex align-items-baseline gap-2 mb-2.5">
               <span className="fw-bolder text-slate-900" style={{ fontSize: '1.05rem' }}>
-                {formatETB(product.price)}
+                {formatETB(pricing.price)}
               </span>
-              {product.compare_at_price && Number(product.compare_at_price) > Number(product.price) && (
+              {pricing.hasDiscount && pricing.originalPrice && (
                 <span className="text-muted text-decoration-line-through text-xs">
-                  {formatETB(product.compare_at_price)}
+                  {formatETB(pricing.originalPrice)}
                 </span>
               )}
             </div>

@@ -90,6 +90,18 @@ class ProductListView(generics.ListCreateAPIView):
         if max_price:
             queryset = queryset.filter(price__lte=max_price)
 
+        has_discount = self.request.query_params.get('has_discount') or self.request.query_params.get('on_sale')
+        if has_discount and has_discount.lower() in ('true', '1'):
+            from django.utils import timezone
+            from .models import Promotion
+            now = timezone.now()
+            # If storewide promo is active, all active products are discounted
+            if not Promotion.objects.filter(apply_to_all=True, is_active=True, start_date__lte=now, end_date__gte=now).exists():
+                queryset = queryset.filter(
+                    Q(promotions__is_active=True, promotions__start_date__lte=now, promotions__end_date__gte=now) |
+                    Q(category__promotions__is_active=True, category__promotions__start_date__lte=now, category__promotions__end_date__gte=now)
+                ).distinct()
+
         valid_orderings = ['price', '-price', 'created_at', '-created_at', 'rating_average', '-rating_average']
         if ordering in valid_orderings:
             queryset = queryset.order_by(ordering)

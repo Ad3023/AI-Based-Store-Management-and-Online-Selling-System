@@ -120,7 +120,7 @@ const AIRecommendationsPage = () => {
               {personalized.length > 0 ? (
                 personalized.map((p) => (
                   <div key={p.id} className="col">
-                    <ProductCard product={p} aiTag="98% Match" />
+                    <ProductCard product={p} aiTag="Personalized" />
                   </div>
                 ))
               ) : (

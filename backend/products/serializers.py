@@ -106,6 +106,7 @@ class ProductSerializer(serializers.ModelSerializer):
     current_price = serializers.SerializerMethodField()
     has_promotion = serializers.SerializerMethodField()
     discount_label = serializers.SerializerMethodField()
+    compare_at_price = serializers.SerializerMethodField()
     promotion_title = serializers.SerializerMethodField()
     warranty_info = serializers.SerializerMethodField()
 
@@ -126,6 +127,12 @@ class ProductSerializer(serializers.ModelSerializer):
 
     def get_has_promotion(self, obj):
         return obj.has_active_promotion
+
+    def get_compare_at_price(self, obj):
+        # Authoritative discount rule: only present when an active admin promotion is in effect
+        if obj.has_active_promotion and obj.current_price < obj.price:
+            return str(obj.price)
+        return None
 
     def get_discount_label(self, obj):
         promo = obj.get_current_promotion()

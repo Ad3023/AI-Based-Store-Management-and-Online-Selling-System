@@ -8,6 +8,7 @@ import { useCompare } from '../context/CompareContext';
 import ProductCard from '../components/ProductCard';
 import { formatETB } from '../utils/currency';
 import { getProductImage } from '../utils/productImages';
+import { getProductPricing } from '../utils/pricing';
 
 const ProductDetailPage = () => {
   const { id } = useParams();
@@ -242,32 +243,27 @@ const ProductDetailPage = () => {
                 </span>
               </div>
 
-              {/* Price Area with Discount Strikethrough (Screen 8) */}
-              <div className="d-flex flex-wrap align-items-baseline gap-3 mb-4 p-3 rounded-3" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                <span className="display-6 fw-bolder text-primary">
-                  {formatETB(product.current_price || product.price)}
-                </span>
-                {product.has_promotion && product.current_price && Number(product.current_price) < Number(product.price) && (
-                  <>
-                    <span className="text-slate-400 text-decoration-line-through fs-5">
-                      {formatETB(product.price)}
+              {/* Price Area with Discount Strikethrough (Admin Verified Only) */}
+              {(() => {
+                const pricing = getProductPricing(product);
+                return (
+                  <div className="d-flex flex-wrap align-items-baseline gap-3 mb-4 p-3 rounded-3" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <span className="display-6 fw-bolder text-primary">
+                      {formatETB(pricing.price)}
                     </span>
-                    <span className="badge bg-danger rounded-pill px-2.5 py-1 text-xs">
-                      {product.discount_label || `Save ${formatETB(Number(product.price) - Number(product.current_price))}`}
-                    </span>
-                  </>
-                )}
-                {!product.has_promotion && product.compare_at_price && Number(product.compare_at_price) > Number(product.price) && (
-                  <>
-                    <span className="text-slate-400 text-decoration-line-through fs-5">
-                      {formatETB(product.compare_at_price)}
-                    </span>
-                    <span className="badge bg-danger rounded-pill px-2.5 py-1 text-xs">
-                      Save {formatETB(product.compare_at_price - product.price)}
-                    </span>
-                  </>
-                )}
-              </div>
+                    {pricing.hasDiscount && pricing.originalPrice && (
+                      <>
+                        <span className="text-slate-400 text-decoration-line-through fs-5">
+                          {formatETB(pricing.originalPrice)}
+                        </span>
+                        <span className="badge bg-danger rounded-pill px-2.5 py-1 text-xs fw-bold">
+                          {pricing.discountLabel || `Save ${formatETB(pricing.savingsAmount)}`}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Stock Status Badge */}
               <div className="mb-4">
