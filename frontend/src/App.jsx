@@ -4,6 +4,8 @@ import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
 import { NotificationProvider } from './context/NotificationContext';
+import { CompareProvider } from './context/CompareContext';
+import { LanguageProvider } from './context/LanguageContext';
 
 // Route Guards
 import { ProtectedRoute, ManagerRoute, AdminRoute } from './components/ProtectedRoute';
@@ -11,6 +13,8 @@ import { ProtectedRoute, ManagerRoute, AdminRoute } from './components/Protected
 // Shared Components
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
+import FloatingCompareBar from './components/FloatingCompareBar';
+import AIShoppingAssistant from './components/AIShoppingAssistant';
 
 // Customer & Public Pages
 import HomePage from './pages/HomePage';
@@ -40,6 +44,7 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import AIRecommendationsPage from './pages/AIRecommendationsPage';
 import TrackOrderPage from './pages/TrackOrderPage';
+import ComparePage from './pages/ComparePage';
 
 // Manager & Admin Portal
 import DashboardLayout from './pages/manager/DashboardLayout';
@@ -63,6 +68,8 @@ const CustomerStoreLayout = () => {
       <main className="flex-grow-1" style={{ backgroundColor: '#f4f6fa', width: '100%' }}>
         <Outlet />
       </main>
+      <FloatingCompareBar />
+      <AIShoppingAssistant />
       <Footer />
     </div>
   );
@@ -70,12 +77,14 @@ const CustomerStoreLayout = () => {
 
 function App() {
   return (
-    <AuthProvider>
-      <CartProvider>
-        <WishlistProvider>
-          <NotificationProvider>
-            <Router>
-              <Routes>
+    <LanguageProvider>
+      <AuthProvider>
+        <CartProvider>
+          <WishlistProvider>
+            <NotificationProvider>
+              <CompareProvider>
+                <Router>
+                <Routes>
                 {/* Storefront Layout */}
                 <Route element={<CustomerStoreLayout />}>
                   {/* Public Browsing Routes */}
@@ -95,6 +104,7 @@ function App() {
                   <Route path="/terms" element={<TermsPage />} />
                   <Route path="/track" element={<TrackOrderPage />} />
                   <Route path="/recommendations" element={<AIRecommendationsPage />} />
+                  <Route path="/compare" element={<ComparePage />} />
 
                   {/* Authentication Routes */}
                   <Route path="/login" element={<LoginPage />} />
@@ -244,10 +254,12 @@ function App() {
                 />
               </Routes>
             </Router>
+            </CompareProvider>
           </NotificationProvider>
         </WishlistProvider>
       </CartProvider>
     </AuthProvider>
+    </LanguageProvider>
   );
 }
 

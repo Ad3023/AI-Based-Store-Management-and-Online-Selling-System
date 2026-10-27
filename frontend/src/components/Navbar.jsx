@@ -5,10 +5,13 @@ import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useNotifications } from '../context/NotificationContext';
+import { useLanguage } from '../context/LanguageContext';
 import { cleanDisplayName, getUserRoleLabel, getUserRoleBadgeClass } from '../utils/orderStatus';
 import { getMediaUrl, getDefaultAvatar } from '../utils/imageUrl';
+import EthioTechLogo from './EthioTechLogo';
 
 const Navbar = () => {
+  const { language, setLanguage, t } = useLanguage();
   const { user, logout, isManagerOrAdmin } = useAuth();
   const { cartCount } = useCart();
   const { wishlistCount } = useWishlist();
@@ -118,22 +121,7 @@ const Navbar = () => {
         <div className="container-fluid max-w-7xl d-flex align-items-center justify-content-between gap-2 gap-md-4">
           
           {/* Logo & Brand */}
-          <Link to="/" className="d-flex align-items-center gap-2 text-decoration-none flex-shrink-0">
-            <div
-              className="rounded-3 d-flex align-items-center justify-content-center text-white"
-              style={{ width: '38px', height: '38px', backgroundColor: '#1b64da', boxShadow: '0 2px 8px rgba(27, 100, 218, 0.4)' }}
-            >
-              <i className="bi bi-cart3 fs-5"></i>
-            </div>
-            <div className="d-flex flex-column">
-              <span className="fw-bolder fs-5 text-white tracking-tight lh-1" style={{ letterSpacing: '-0.02em' }}>
-                EthioTech <span style={{ color: '#60a5fa' }}>Market</span>
-              </span>
-              <span className="text-slate-400 d-none d-sm-inline" style={{ fontSize: '0.68rem', letterSpacing: '0.02em' }}>
-                Better Tech. Brighter Future.
-              </span>
-            </div>
-          </Link>
+          <EthioTechLogo size={38} isDark={true} />
 
           {/* Search Bar with Category Dropdown (Screenshot 1) */}
           <form className="d-none d-md-flex align-items-center flex-grow-1 mx-2 mx-xl-4" onSubmit={handleSearch} style={{ maxWidth: '620px' }}>
@@ -169,7 +157,7 @@ const Navbar = () => {
               <input
                 type="text"
                 className="form-control border-0 py-2 text-sm bg-white"
-                placeholder="Search products, brands, and categories..."
+                placeholder={t('searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -187,13 +175,50 @@ const Navbar = () => {
           {/* Right Header Navigation Controls */}
           <div className="d-flex align-items-center gap-2 gap-sm-3 flex-shrink-0">
             
+            {/* Language Switcher (English & Amharic) */}
+            <div className="dropdown">
+              <button
+                className="btn btn-sm text-white px-2 py-1 rounded-pill d-flex align-items-center gap-1 border border-white border-opacity-25"
+                style={{ background: 'rgba(255, 255, 255, 0.1)', fontSize: '0.72rem', fontWeight: 600 }}
+                type="button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+                title="Switch Language / ቋንቋ ይቀይሩ"
+              >
+                <span>{language === 'am' ? '🇪🇹 አማ' : '🇬🇧 EN'}</span>
+                <i className="bi bi-chevron-down" style={{ fontSize: '0.6rem' }}></i>
+              </button>
+              <ul className="dropdown-menu dropdown-menu-end shadow-sm border-0 rounded-3 p-1" style={{ minWidth: '125px', zIndex: 1060 }}>
+                <li>
+                  <button
+                    type="button"
+                    className={`dropdown-item rounded-2 text-xs py-1.5 d-flex align-items-center justify-content-between ${language === 'en' ? 'fw-bold text-primary bg-blue-50' : ''}`}
+                    onClick={() => setLanguage('en')}
+                  >
+                    <span>🇬🇧 English</span>
+                    {language === 'en' && <i className="bi bi-check2"></i>}
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    className={`dropdown-item rounded-2 text-xs py-1.5 d-flex align-items-center justify-content-between ${language === 'am' ? 'fw-bold text-primary bg-blue-50' : ''}`}
+                    onClick={() => setLanguage('am')}
+                  >
+                    <span>🇪🇹 አማርኛ</span>
+                    {language === 'am' && <i className="bi bi-check2"></i>}
+                  </button>
+                </li>
+              </ul>
+            </div>
+
             {/* Wishlist Icon (hidden for admins) */}
             {user?.role !== 'admin' && (
               <Link
                 to="/wishlist"
                 className="text-white text-decoration-none position-relative p-2 rounded-circle hover-bg-navy d-flex align-items-center justify-content-center"
                 style={{ width: '38px', height: '38px', background: 'rgba(255, 255, 255, 0.08)' }}
-                title="My Wishlist"
+                title={t('wishlist')}
               >
                 <i className="bi bi-heart fs-5"></i>
                 {wishlistCount > 0 && (
@@ -210,10 +235,10 @@ const Navbar = () => {
                 to="/cart"
                 className="text-white text-decoration-none position-relative px-2.5 py-1.5 rounded-3 d-flex align-items-center gap-1.5"
                 style={{ background: 'rgba(255, 255, 255, 0.08)' }}
-                title="Shopping Cart"
+                title={t('cart')}
               >
                 <i className="bi bi-cart3 fs-5" style={{ color: '#60a5fa' }}></i>
-                <span className="fw-semibold text-xs d-none d-sm-inline">Cart</span>
+                <span className="fw-semibold text-xs d-none d-sm-inline">{t('cart')}</span>
                 {cartCount > 0 && (
                   <span className="badge rounded-pill text-white" style={{ backgroundColor: '#1b64da', fontSize: '0.7rem' }}>
                     {cartCount}
@@ -386,14 +411,14 @@ const Navbar = () => {
                   className="btn btn-sm text-white px-3 py-1.5 rounded-2 fw-semibold text-xs text-decoration-none"
                   style={{ background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255, 255, 255, 0.2)' }}
                 >
-                  Sign In
+                  {t('signIn')}
                 </Link>
                 <Link
                   to="/register"
                   className="btn btn-sm text-white px-3 py-1.5 rounded-2 fw-bold text-xs text-decoration-none"
                   style={{ backgroundColor: '#1b64da' }}
                 >
-                  Create Account
+                  {t('createAccount')}
                 </Link>
               </div>
             )}
@@ -419,25 +444,25 @@ const Navbar = () => {
           {/* Quick Category / Page Links */}
           <div className="d-flex flex-wrap align-items-center gap-1 gap-md-3 text-xs fw-semibold">
             <Link to="/" className="text-slate-700 hover-text-blue px-2 py-1 rounded text-decoration-none" onClick={() => setMobileMenuOpen(false)}>
-              Home
+              {t('home')}
             </Link>
             <Link to="/shop" className="text-slate-700 hover-text-blue px-2 py-1 rounded text-decoration-none" onClick={() => setMobileMenuOpen(false)}>
-              All Products
+              {t('allProducts')}
             </Link>
             <Link to="/categories" className="text-slate-700 hover-text-blue px-2 py-1 rounded text-decoration-none" onClick={() => setMobileMenuOpen(false)}>
-              Categories
+              {t('categories')}
             </Link>
             <Link to="/deals" className="text-rose-600 hover-text-blue px-2 py-1 rounded text-decoration-none d-flex align-items-center gap-1" onClick={() => setMobileMenuOpen(false)}>
-              <i className="bi bi-lightning-charge-fill text-danger"></i> Featured Deals
+              <i className="bi bi-lightning-charge-fill text-danger"></i> {t('deals')}
             </Link>
             <Link to="/recommendations" className="text-slate-700 hover-text-blue px-2 py-1 rounded text-decoration-none d-flex align-items-center gap-1" onClick={() => setMobileMenuOpen(false)}>
-              <i className="bi bi-stars text-primary"></i> AI Picks
+              <i className="bi bi-stars text-primary"></i> {t('aiPicks')}
             </Link>
             <Link to="/track" className="text-slate-700 hover-text-blue px-2 py-1 rounded text-decoration-none" onClick={() => setMobileMenuOpen(false)}>
-              Order Tracking
+              {t('orderTracking')}
             </Link>
             <Link to="/contact" className="text-slate-700 hover-text-blue px-2 py-1 rounded text-decoration-none" onClick={() => setMobileMenuOpen(false)}>
-              Help & Support
+              {t('helpSupport')}
             </Link>
           </div>
 
@@ -451,7 +476,7 @@ const Navbar = () => {
                 onClick={() => setMobileMenuOpen(false)}
               >
                 <i className="bi bi-shield-lock-fill text-warning"></i>
-                {user?.role === 'admin' ? 'Admin Console' : 'Manager Console'}
+                {user?.role === 'admin' ? t('adminConsole') : t('managerConsole')}
               </Link>
             </div>
           )}

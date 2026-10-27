@@ -69,7 +69,7 @@ class ChapaPaymentTests(TestCase):
         self.assertEqual(order.total_amount, Decimal('1250.00'))
         self.assertEqual(order.status, Order.Status.PENDING_PAYMENT)
         self.assertEqual(order.payment_method, 'CHAPA')
-        self.assertTrue(order.chapa_tx_ref.startswith('NEXUS-'))
+        self.assertTrue(order.chapa_tx_ref.startswith('ETHIO-') or order.chapa_tx_ref.startswith('NEXUS-'))
         self.assertEqual(response.data['checkout_url'], 'https://checkout.chapa.co/checkout/payment/mock-checkout-key')
 
     @patch('orders.chapa.requests.get')

@@ -1,0 +1,122 @@
+// Ethiopian Tech Market - Bilingual Translations (English & Amharic)
+
+export const translations = {
+  en: {
+    // Brand
+    brandName: 'Ethio Tech Market',
+    brandTagline: 'Intelligent Ethiopian Tech Marketplace',
+    
+    // Header & Navigation
+    home: 'Home',
+    allProducts: 'All Products',
+    categories: 'Categories',
+    deals: 'Featured Deals',
+    aiPicks: 'AI Picks',
+    orderTracking: 'Order Tracking',
+    helpSupport: 'Help & Support',
+    searchPlaceholder: 'Search products, brands, and categories...',
+    allCategories: 'All Categories',
+    cart: 'Cart',
+    wishlist: 'Wishlist',
+    compare: 'Compare',
+    signIn: 'Sign In',
+    createAccount: 'Create Account',
+    signOut: 'Sign Out',
+    dashboard: 'Dashboard',
+    myProfile: 'My Profile',
+    myOrders: 'My Orders',
+    adminConsole: 'Admin Console',
+    managerConsole: 'Manager Console',
+    notifications: 'Notifications',
+    markAllRead: 'Mark all as read',
+    
+    // Currency & Checkout
+    currency: 'ETB',
+    deliveryService: 'Delivery Service',
+    standardDelivery: 'Standard City Dispatch',
+    expressDelivery: 'Addis Ababa Express',
+    regionalDelivery: 'Regional Courier',
+    payWithChapa: 'Pay securely with Chapa',
+    officialGateway: 'Official Chapa Gateway',
+    orderSummary: 'Order Summary',
+    subtotal: 'Subtotal',
+    vatTax: 'Applicable VAT (15%)',
+    total: 'Final Total',
+    placeOrder: 'Pay with Chapa',
+    
+    // AI Features
+    aiAssistantTitle: 'Ethio Tech AI Assistant',
+    aiAssistantPrompt: 'Ask about laptops, smartphones, specs, or compatibility...',
+    aiCompareTitle: 'Smart Product Comparison',
+    aiComparisonSummary: 'AI Grounded Analysis & Specs Comparison',
+    frequentlyBoughtTogether: 'Frequently Bought Together',
+    personalizedPicks: 'Recommended For You',
+    
+    // Footer & Policies
+    aboutUs: 'About Ethio Tech Market',
+    contactUs: 'Contact Us',
+    privacyPolicy: 'Privacy Policy',
+    termsOfService: 'Terms of Service',
+    returnsPolicy: 'Returns & Warranty',
+    allRightsReserved: 'All rights reserved.',
+  },
+  am: {
+    // Brand
+    brandName: 'ኢትዮ ቴክ ማርኬት',
+    brandTagline: 'ዘመናዊ የኢትዮጵያ ቴክኖሎጂ እና ኤሌክትሮኒክስ መገበያያ',
+    
+    // Header & Navigation
+    home: 'መነሻ',
+    allProducts: 'ሁሉም ምርቶች',
+    categories: 'ምድቦች',
+    deals: 'ልዩ ቅናሾች',
+    aiPicks: 'የአይአይ ምርጫዎች',
+    orderTracking: 'ትዕዛዝ መከታተያ',
+    helpSupport: 'እርዳታና ድጋፍ',
+    searchPlaceholder: 'ምርቶችን፣ ብራንዶችን እና ምድቦችን ይፈልጉ...',
+    allCategories: 'ሁሉም ምድቦች',
+    cart: 'ቅርጫት',
+    wishlist: 'ምኞት ዝርዝር',
+    compare: 'አወዳድር',
+    signIn: 'ይግቡ',
+    createAccount: 'ይመዝገቡ',
+    signOut: 'ይውጡ',
+    dashboard: 'ዳሽቦርድ',
+    myProfile: 'የግል መገለጫ',
+    myOrders: 'የእኔ ትዕዛዞች',
+    adminConsole: 'የአስተዳዳሪ ክፍል',
+    managerConsole: 'የሥራ አስኪያጅ ክፍል',
+    notifications: 'ማሳወቂያዎች',
+    markAllRead: 'ሁሉንም የተነበቡ አድርግ',
+    
+    // Currency & Checkout
+    currency: 'ብር',
+    deliveryService: 'የማድረሻ አገልግሎት',
+    standardDelivery: 'መደበኛ የከተማ ማድረሻ (1-2 ቀናት)',
+    expressDelivery: 'አዲስ አበባ ፈጣን ማድረሻ (በዕለቱ)',
+    regionalDelivery: 'የክልል መላኪያ (2-3 ቀናት)',
+    payWithChapa: 'በቻፓ በደህንነት ይክፈሉ',
+    officialGateway: 'ኦፊሴላዊ የቻፓ መክፈያ',
+    orderSummary: 'የትዕዛዝ ማጠቃለያ',
+    subtotal: 'ድምር',
+    vatTax: 'ተጨማሪ እሴት ታክስ (15%)',
+    total: 'አጠቃላይ ድምር',
+    placeOrder: 'በቻፓ ይክፈሉ',
+    
+    // AI Features
+    aiAssistantTitle: 'የኢትዮ ቴክ አይአይ ረዳት',
+    aiAssistantPrompt: 'ስለ ላፕቶፖች፣ ስልኮች፣ ስፔሲፊኬሽን ወይም ተኳኋኝነት ይጠይቁ...',
+    aiCompareTitle: 'ብልጥ የምርት ንጽጽር',
+    aiComparisonSummary: 'በመረጃ የተደገፈ የአይአይ ትንታኔ እና ንጽጽር',
+    frequentlyBoughtTogether: 'አብረው የሚገዙ ምርቶች',
+    personalizedPicks: 'ለእርስዎ የተመረጡ',
+    
+    // Footer & Policies
+    aboutUs: 'ስለ ኢትዮ ቴክ ማርኬት',
+    contactUs: 'ያግኙን',
+    privacyPolicy: 'የግላዊነት ፖሊሲ',
+    termsOfService: 'የአገልግሎት ውሎች',
+    returnsPolicy: 'የመልስና ዋስትና መመሪያ',
+    allRightsReserved: 'መብቱ በህግ የተጠበቀ ነው።',
+  }
+};

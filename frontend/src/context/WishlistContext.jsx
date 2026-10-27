@@ -5,7 +5,7 @@ const WishlistContext = createContext();
 export const WishlistProvider = ({ children }) => {
   const [wishlist, setWishlist] = useState(() => {
     try {
-      const saved = localStorage.getItem('nexus_wishlist');
+      const saved = localStorage.getItem('ethio_wishlist') || localStorage.getItem('nexus_wishlist');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -14,7 +14,7 @@ export const WishlistProvider = ({ children }) => {
 
   useEffect(() => {
     try {
-      localStorage.setItem('nexus_wishlist', JSON.stringify(wishlist));
+      localStorage.setItem('ethio_wishlist', JSON.stringify(wishlist));
     } catch (err) {
       console.error('Failed to persist wishlist to localStorage', err);
     }

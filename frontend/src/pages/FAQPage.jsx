@@ -8,21 +8,21 @@ const FAQPage = () => {
     payments: [
       {
         q: 'How does payment with Chapa work?',
-        a: 'When you select "Pay with Chapa" during checkout, NexusStore AI connects to the secure Chapa payment gateway. You are redirected to a verified payment interface supporting local banks and Telebirr. Once completed, Chapa immediately notifies our Django backend, our server validates the transaction amount and currency (ETB), marks your order as paid, and issues your verifiable digital receipt instantly.'
+        a: 'When you select "Pay with Chapa" during checkout, Ethio Tech Market connects directly to the secure Chapa payment gateway. You are redirected to a verified payment interface supporting Ethiopian local banks, cards, and Telebirr. Once completed, Chapa immediately notifies our Django backend, our server authoritatively validates the transaction amount and currency (ETB), marks your order as paid, and issues your verifiable digital receipt instantly.'
       },
       {
-        q: 'Can I pay via manual CBE or Telebirr transfer?',
-        a: 'Yes! NexusStore AI supports manual bank transfers as an intentional alternative payment method. After placing your order, visit your Order Detail page, upload your transfer screenshot, enter your transaction reference ID, and submit. A Store Manager will review your evidence and approve it.'
+        q: 'What payment methods does Chapa support?',
+        a: 'Chapa supports all major Ethiopian payment channels including Telebirr, CBE Birr, Awash Bank, Bank of Abyssinia, and debit/credit cards in Ethiopian Birr (ETB).'
       },
       {
         q: 'How do digital receipts work?',
-        a: 'Once your payment is confirmed (either automatically by Chapa or verified by a Store Manager), the system generates an official tamper-proof digital receipt with a unique receipt code (e.g., RCP-20261021-XXXXXX). You can view, download, or print it anytime from your Orders page.'
+        a: 'Once your payment is confirmed and verified by Chapa, the system generates an official tamper-proof digital receipt with a unique receipt code (e.g., RCP-20261021-XXXXXX). You can view, download, or print it anytime from your Orders page.'
       }
     ],
     shipping: [
       {
         q: 'What are the delivery options and fees?',
-        a: 'We offer three shipping tiers: 1) Standard Addis Ababa City Dispatch (50 ETB, 1-2 business days), 2) Addis Ababa Express Same-Day Delivery (100 ETB), and 3) Regional Insured Courier to Hawassa, Adama, Bahir Dar, and regional hubs (150 ETB, 2-3 business days).'
+        a: 'We offer three shipping tiers: 1) Standard City Dispatch (50 ETB, 1-2 business days), 2) Addis Ababa Express Same-Day Delivery (100 ETB), and 3) Regional Insured Courier to Hawassa, Adama, Bahir Dar, Dire Dawa, and regional hubs (150 ETB, 2-3 business days).'
       },
       {
         q: 'How can I track my package?',
@@ -31,7 +31,7 @@ const FAQPage = () => {
     ],
     ai: [
       {
-        q: 'How do AI recommendations work on NexusStore AI?',
+        q: 'How do AI recommendations work on Ethio Tech Market?',
         a: 'Our recommendation engine uses three algorithmic models built with Scikit-learn: 1) Content-Based TF-IDF and Cosine Similarity, which analyzes product specs and descriptions to suggest contextually similar tech, 2) Order Item Co-occurrence Matrix, which computes what previous customers bought together, and 3) RFM K-Means clustering, which helps managers group customer buying habits into VIP, regular, and growing shopper segments.'
       },
       {
@@ -46,7 +46,7 @@ const FAQPage = () => {
       },
       {
         q: 'What is the return and warranty policy?',
-        a: 'All electronics purchased through NexusStore AI carry an official 7-day hassle-free replacement warranty for defective hardware. Visit our Returns page for full instructions.'
+        a: 'All electronics purchased through Ethio Tech Market carry an official 7-day hassle-free replacement warranty for defective hardware. Visit our Returns page for full instructions.'
       }
     ]
   };

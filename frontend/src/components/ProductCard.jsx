@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useWishlist } from '../context/WishlistContext';
+import { useCompare } from '../context/CompareContext';
 import { formatETB } from '../utils/currency';
 import { getProductImage } from '../utils/productImages';
 
@@ -10,6 +11,7 @@ const ProductCard = ({ product, aiTag }) => {
   const { addToCart } = useCart();
   const { user } = useAuth();
   const { isInWishlist, toggleWishlist: toggleWishlistCtx } = useWishlist();
+  const { isInCompare, toggleCompare } = useCompare();
   const navigate = useNavigate();
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState(false);
@@ -85,23 +87,47 @@ const ProductCard = ({ product, aiTag }) => {
               )}
             </div>
 
-            {!isAdmin && (
+            <div className="d-flex align-items-center gap-1.5">
               <button
                 type="button"
-                onClick={toggleWishlist}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  toggleCompare(product);
+                }}
                 className="btn btn-sm rounded-circle p-1 d-flex align-items-center justify-content-center shadow-sm"
                 style={{
                   width: '32px',
                   height: '32px',
-                  backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                  backgroundColor: isInCompare(product.id) ? '#1b64da' : 'rgba(255, 255, 255, 0.9)',
                   border: '1px solid #e2e8f0',
-                  color: isWishlisted ? '#ef4444' : '#94a3b8',
+                  color: isInCompare(product.id) ? '#ffffff' : '#64748b',
                 }}
-                title={isWishlisted ? 'Remove from Wishlist' : 'Add to Wishlist'}
+                title={isInCompare(product.id) ? 'Remove from Compare' : 'Add to Compare'}
+                aria-label="Compare Product"
               >
-                <i className={`bi ${isWishlisted ? 'bi-heart-fill' : 'bi-heart'} fs-6`}></i>
+                <i className="bi bi-arrow-left-right text-xs"></i>
               </button>
-            )}
+
+              {!isAdmin && (
+                <button
+                  type="button"
+                  onClick={toggleWishlist}
+                  className="btn btn-sm rounded-circle p-1 d-flex align-items-center justify-content-center shadow-sm"
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                    border: '1px solid #e2e8f0',
+                    color: isWishlisted ? '#ef4444' : '#94a3b8',
+                  }}
+                  title={isWishlisted ? 'Remove from Wishlist' : 'Add to Wishlist'}
+                  aria-label="Wishlist"
+                >
+                  <i className={`bi ${isWishlisted ? 'bi-heart-fill' : 'bi-heart'} fs-6`}></i>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Product Image */}

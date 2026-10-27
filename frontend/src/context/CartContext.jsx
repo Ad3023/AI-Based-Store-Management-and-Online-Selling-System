@@ -4,11 +4,11 @@ import { useAuth } from './AuthContext';
 
 const CartContext = createContext();
 
-const GUEST_CART_STORAGE_KEY = 'nexus_guest_cart';
+const GUEST_CART_STORAGE_KEY = 'ethio_guest_cart';
 
 const loadGuestCart = () => {
   try {
-    const saved = localStorage.getItem(GUEST_CART_STORAGE_KEY);
+    const saved = localStorage.getItem(GUEST_CART_STORAGE_KEY) || localStorage.getItem('nexus_guest_cart');
     if (saved) {
       return JSON.parse(saved);
     }

@@ -2,7 +2,8 @@ from django.urls import path
 from .views import (
     PersonalizedRecommendationsView, SimilarProductsView,
     FrequentlyBoughtTogetherView, TrendingProductsView,
-    CustomerSegmentationView, TrackActivityView
+    CustomerSegmentationView, TrackActivityView,
+    AIAssistantView, AIProductComparisonView
 )
 
 urlpatterns = [
@@ -12,4 +13,6 @@ urlpatterns = [
     path('trending/', TrendingProductsView.as_view(), name='trending-products'),
     path('segmentation/', CustomerSegmentationView.as_view(), name='customer-segmentation'),
     path('track/', TrackActivityView.as_view(), name='track-activity'),
+    path('assistant/', AIAssistantView.as_view(), name='ai-shopping-assistant'),
+    path('compare/', AIProductComparisonView.as_view(), name='ai-product-comparison'),
 ]

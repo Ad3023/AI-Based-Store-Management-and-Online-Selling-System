@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import EthioTechLogo from './EthioTechLogo';
 
 const Footer = () => {
   const [email, setEmail] = useState('');
@@ -21,17 +22,8 @@ const Footer = () => {
         <div className="row g-4 mb-4">
           {/* Brand & Mission */}
           <div className="col-lg-4 col-md-6">
-            <div className="d-flex align-items-center gap-2 mb-3">
-              <div
-                className="rounded-3 d-flex align-items-center justify-content-center text-white shadow-sm"
-                style={{ width: '40px', height: '40px', background: 'var(--color-primary)' }}
-              >
-                <i className="bi bi-cpu-fill fs-5"></i>
-              </div>
-              <div className="d-flex align-items-center">
-                <span className="fw-bolder fs-4 text-white tracking-tight">EthioTech</span>
-                <span className="text-info fw-bolder fs-4 tracking-tight ms-1">Market</span>
-              </div>
+            <div className="mb-3">
+              <EthioTechLogo size={40} isDark={true} />
             </div>
             <p className="text-slate-300 text-xs mb-3" style={{ lineHeight: '1.7' }}>
               Better Tech. Brighter Future. Premium consumer electronics, laptops, wearables, and audio gear delivered across Ethiopia with verified Chapa checkout and official warranty coverage.

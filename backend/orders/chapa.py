@@ -36,7 +36,7 @@ class ChapaService:
         url = f"{api_url}/transaction/initialize"
 
         # Generate a unique transaction reference for Chapa
-        tx_ref = f"NEXUS-{order.id}-{uuid.uuid4().hex[:10]}"
+        tx_ref = f"ETHIO-{order.id}-{uuid.uuid4().hex[:10]}"
 
         # Resolve customer details
         name_parts = (order.shipping_name or order.customer.username or 'Customer').strip().split()
@@ -64,7 +64,7 @@ class ChapaService:
             'phone_number': phone,
             'tx_ref': tx_ref,
             'return_url': return_url,
-            'customization[title]': 'NexusStore AI Electronics',
+            'customization[title]': 'Ethio Tech Market',
             'customization[description]': f'Order #{order.order_number} Checkout'
         }
 
@@ -100,7 +100,7 @@ class ChapaService:
                 # generate an instant sandbox checkout session so that presentation evaluations work smoothly.
                 if 'invalid api key' in str(err_msg).lower() or 'demo' in str(secret_key).lower():
                     logger.info("Chapa sandbox simulation activated for academic demonstration.")
-                    demo_tx_ref = f"NEXUS-DEMO-{order.id}-{uuid.uuid4().hex[:8]}"
+                    demo_tx_ref = f"ETHIO-DEMO-{order.id}-{uuid.uuid4().hex[:8]}"
                     order.chapa_tx_ref = demo_tx_ref
                     order.payment_method = 'CHAPA'
                     order.save(update_fields=['chapa_tx_ref', 'payment_method'])
@@ -128,7 +128,7 @@ class ChapaService:
         Calls Chapa server-to-server verification endpoint to verify payment authenticity.
         """
         # Academic / Defense sandbox simulation handler
-        if tx_ref and (tx_ref.startswith('NEXUS-DEMO-') or 'DEMO' in tx_ref):
+        if tx_ref and (tx_ref.startswith('ETHIO-DEMO-') or tx_ref.startswith('NEXUS-DEMO-') or 'DEMO' in tx_ref):
             try:
                 from .models import Order
                 parts = tx_ref.split('-')

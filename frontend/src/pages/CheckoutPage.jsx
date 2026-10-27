@@ -72,9 +72,9 @@ const CheckoutPage = () => {
 
   // Delivery methods and rates
   const DELIVERY_OPTIONS = {
-    standard: { name: 'Standard City Delivery', cost: 50.0, timeframe: '1-2 Days' },
-    express: { name: 'Addis Ababa Express (Same-Day)', cost: 100.0, timeframe: 'Today' },
-    regional: { name: 'Regional Courier (Hawassa, Adama, Bahir Dar)', cost: 150.0, timeframe: '2-3 Days' },
+    standard: { name: 'Standard City Dispatch', cost: 50.0, timeframe: '1-2 Days' },
+    express: { name: 'Addis Ababa Express', cost: 100.0, timeframe: 'Same-Day' },
+    regional: { name: 'Regional Courier', cost: 150.0, timeframe: '2-3 Days (Hawassa, Adama, Bahir Dar, etc.)' },
   };
 
   const selectedDelivery = DELIVERY_OPTIONS[deliveryMethod];
@@ -224,6 +224,8 @@ const CheckoutPage = () => {
                     <option value="Adama">Adama (Nazret)</option>
                     <option value="Bahir Dar">Bahir Dar</option>
                     <option value="Dire Dawa">Dire Dawa</option>
+                    <option value="Mekelle">Mekelle</option>
+                    <option value="Jimma">Jimma</option>
                     <option value="Bishoftu">Bishoftu</option>
                   </select>
                 </div>

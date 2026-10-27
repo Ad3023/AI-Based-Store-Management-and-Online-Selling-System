@@ -4,6 +4,7 @@ import api from '../api';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useWishlist } from '../context/WishlistContext';
+import { useCompare } from '../context/CompareContext';
 import ProductCard from '../components/ProductCard';
 import { formatETB } from '../utils/currency';
 import { getProductImage } from '../utils/productImages';
@@ -13,6 +14,7 @@ const ProductDetailPage = () => {
   const { addToCart } = useCart();
   const { user } = useAuth();
   const { isInWishlist, toggleWishlist } = useWishlist();
+  const { isInCompare, toggleCompare } = useCompare();
   const navigate = useNavigate();
 
   const [product, setProduct] = useState(null);
@@ -381,6 +383,19 @@ const ProductDetailPage = () => {
                   >
                     <i className={`bi ${isInWishlist(product.id) ? 'bi-heart-fill' : 'bi-heart'}`}></i>
                     <span className="small fw-semibold">{isInWishlist(product.id) ? 'Wishlisted' : 'Wishlist'}</span>
+                  </button>
+
+                  {/* Add to Compare */}
+                  <button
+                    type="button"
+                    className={`btn btn-lg rounded-3 px-3 d-flex align-items-center gap-2 ${
+                      isInCompare(product.id) ? 'btn-primary text-white' : 'btn-outline-secondary'
+                    }`}
+                    onClick={() => toggleCompare(product)}
+                    title={isInCompare(product.id) ? "Remove from Comparison" : "Add to Comparison"}
+                  >
+                    <i className="bi bi-arrow-left-right"></i>
+                    <span className="small fw-semibold">{isInCompare(product.id) ? 'Comparing' : 'Compare'}</span>
                   </button>
                 </div>
               )}

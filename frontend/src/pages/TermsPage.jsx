@@ -9,14 +9,14 @@ const TermsPage = () => {
         </span>
         <h1 className="display-6 fw-bolder text-slate-900 mb-2">Terms of Service</h1>
         <p className="text-slate-500 text-sm">
-          Please read these terms carefully before placing orders or using services on NexusStore AI.
+          Please read these terms carefully before placing orders or using services on Ethio Tech Market.
         </p>
       </div>
 
       <div className="card border-0 shadow-sm rounded-4 p-4 p-md-5 bg-white mb-4">
         <h5 className="fw-bolder text-slate-900 mb-2">1. Acceptance of Terms</h5>
         <p className="text-slate-600 text-xs mb-4" style={{ lineHeight: '1.8' }}>
-          By accessing NexusStore AI, browsing our catalog, or purchasing items, you agree to be bound by these Terms of Service. If you do not agree to any part of these terms, you should discontinue use of the platform.
+          By accessing Ethio Tech Market, browsing our catalog, or purchasing items, you agree to be bound by these Terms of Service. If you do not agree to any part of these terms, you should discontinue use of the platform.
         </p>
 
         <h5 className="fw-bolder text-slate-900 mb-2">2. Pricing & Currency</h5>

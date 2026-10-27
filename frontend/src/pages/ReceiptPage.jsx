@@ -200,11 +200,11 @@ const ReceiptPage = () => {
         <div className="border-top pt-4 d-flex flex-column flex-sm-row justify-content-between align-items-center text-muted small">
           <div>
             <i className="bi bi-shield-check text-success fs-5 me-1 align-middle"></i>
-            <span>Digitally verified and stamped by NexusStore AI & Chapa Gateway</span>
+            <span>Digitally verified and stamped by Ethio Tech Market &amp; Chapa Gateway</span>
           </div>
           <div className="mt-2 mt-sm-0 text-center text-sm-end">
             <div className="fw-bold text-dark">Authorized Electronic Seal</div>
-            <div className="text-primary font-monospace" style={{ fontSize: '0.75rem' }}>NEXUS-CHAPA-OFFICIAL-VERIFIED</div>
+            <div className="text-primary font-monospace" style={{ fontSize: '0.75rem' }}>ETHIO-TECH-CHAPA-OFFICIAL-VERIFIED</div>
           </div>
         </div>
       </div>

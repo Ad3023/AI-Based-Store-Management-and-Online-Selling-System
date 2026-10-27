@@ -9,19 +9,19 @@ const PrivacyPage = () => {
         </span>
         <h1 className="display-6 fw-bolder text-slate-900 mb-2">Privacy Policy</h1>
         <p className="text-slate-500 text-sm">
-          How NexusStore AI collects, processes, and safeguards your personal information and transaction records.
+          How Ethio Tech Market collects, processes, and safeguards your personal information and transaction records.
         </p>
       </div>
 
       <div className="card border-0 shadow-sm rounded-4 p-4 p-md-5 bg-white mb-4">
         <h5 className="fw-bolder text-slate-900 mb-2">1. Information We Collect</h5>
         <p className="text-slate-600 text-xs mb-4" style={{ lineHeight: '1.8' }}>
-          When you browse NexusStore AI as an anonymous guest, we do not require account creation. We only capture anonymous browsing signals (product view counts) to power non-personalized trending recommendations. When you register or place an order, we collect your name, email address, phone number, delivery address, and bank transfer reference.
+          When you browse Ethio Tech Market as an anonymous guest, we do not require account creation. We only capture anonymous browsing signals (product view counts) to power non-personalized trending recommendations. When you register or place an order, we collect your name, email address, phone number, and delivery address.
         </p>
 
         <h5 className="fw-bolder text-slate-900 mb-2">2. Payment Confidentiality</h5>
         <p className="text-slate-600 text-xs mb-4" style={{ lineHeight: '1.8' }}>
-          We never store credit card numbers or banking PINs. For online payments, transaction processing is handled directly by Chapa under PCI-DSS standards. For manual transfers, receipt screenshots are stored securely in encrypted storage accessible only to authorized Store Managers for verification purposes.
+          We never store credit card numbers or banking PINs. All online checkout payments are handled directly by Chapa under PCI-DSS standards.
         </p>
 
         <h5 className="fw-bolder text-slate-900 mb-2">3. Machine Learning Usage</h5>
@@ -31,7 +31,7 @@ const PrivacyPage = () => {
 
         <h5 className="fw-bolder text-slate-900 mb-2">4. Your Data Rights</h5>
         <p className="text-slate-600 text-xs mb-0" style={{ lineHeight: '1.8' }}>
-          You can inspect, update, or remove your personal profile information at any time from your account settings. For permanent account deletion or audit history queries, contact our privacy officer at <code>privacy@nexusstore.ai</code>.
+          You can inspect, update, or remove your personal profile information at any time from your account settings. For permanent account deletion or audit history queries, contact our privacy officer at <code>privacy@ethiotechmarket.et</code>.
         </p>
       </div>
     </div>

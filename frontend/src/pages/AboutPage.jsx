@@ -7,13 +7,13 @@ const AboutPage = () => {
       {/* Hero Section */}
       <div className="text-center max-w-3xl mx-auto mb-5 pb-3">
         <span className="badge bg-primary bg-opacity-10 text-primary rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wider mb-3">
-          <i className="bi bi-cpu-fill me-1"></i> About NexusStore AI
+          <i className="bi bi-cpu-fill me-1"></i> About Ethio Tech Market
         </span>
         <h1 className="display-5 fw-bolder text-slate-900 mb-3 tracking-tight">
           Next-Generation Store Management & Online Commerce in Ethiopia
         </h1>
         <p className="text-slate-600 text-sm md:text-base" style={{ lineHeight: '1.8' }}>
-          NexusStore AI is an enterprise-grade full-stack electronic commerce platform. It integrates Machine Learning recommendation algorithms, role-based store management, automated digital receipt generation, and verified Ethiopian payment gateways (Chapa, CBE, and Telebirr) to modernize retail across Ethiopia.
+          Ethio Tech Market is an enterprise-grade full-stack electronic commerce platform. It integrates Machine Learning recommendation algorithms, role-based store management, automated digital receipt generation, and verified Chapa payments to modernize online tech shopping across Ethiopia.
         </p>
       </div>
 

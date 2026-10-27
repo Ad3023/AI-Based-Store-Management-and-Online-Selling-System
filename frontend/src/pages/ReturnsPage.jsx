@@ -10,7 +10,7 @@ const ReturnsPage = () => {
         </span>
         <h1 className="display-6 fw-bolder text-slate-900 mb-2">Returns & Warranty Policy</h1>
         <p className="text-slate-500 text-sm">
-          Clear, transparent warranty terms, return requirements, and refund processes for NexusStore AI shoppers.
+          Clear, transparent warranty terms, return requirements, and refund processes for Ethio Tech Market shoppers.
         </p>
       </div>
 
@@ -18,7 +18,7 @@ const ReturnsPage = () => {
         <div className="alert alert-info rounded-3 p-3 text-xs mb-4 d-flex align-items-center gap-2">
           <i className="bi bi-shield-check fs-5"></i>
           <div>
-            <strong>7-Day Defect Replacement Guarantee:</strong> All electronics purchased from NexusStore AI include 7-day hassle-free replacement for factory hardware issues.
+            <strong>7-Day Defect Replacement Guarantee:</strong> All electronics purchased from Ethio Tech Market include 7-day hassle-free replacement for factory hardware issues.
           </div>
         </div>
 
