@@ -47,11 +47,11 @@ export const translations = {
     moreAiPicks: 'More AI Picks',
     clearFilter: 'Clear filter',
     warrantyProtection: 'Store Warranty Protection',
-    warrantyDesc: 'Hardware warranty coverage with digital claim submissions on verified orders.',
+    warrantyDesc: 'Hardware warranty coverage where configured, with digital claim submissions on verified orders.',
     chapaPayments: 'Chapa Verified Payments',
     chapaDesc: 'Instant checkout via Telebirr, CBE Birr, Awash, and debit cards in ETB.',
     nationwideDispatch: 'Nationwide Delivery',
-    nationwideDesc: 'Same-day Addis Ababa delivery and reliable regional courier options across Ethiopia.',
+    nationwideDesc: 'Next-day express delivery to Addis Ababa, local Debre Birhan pickup, and reliable regional courier options across Ethiopia.',
     
     // Category Names
     catLaptops: 'Laptops',
@@ -141,7 +141,7 @@ export const translations = {
     chapaPayments: 'በቻፓ የተረጋገጠ ክፍያ',
     chapaDesc: 'በቴሌብር፣ በሲቢኢ ብር፣ በአዋሽ እና በባንክ ካርዶች በብር የሚፈፀም ፈጣን ክፍያ።',
     nationwideDispatch: 'አገር አቀፍ የማድረሻ አገልግሎት',
-    nationwideDesc: 'በዕለቱ የሚደርስ የአዲስ አበባ እና አስተማማኝ የክልል መላኪያ አማራጮች።',
+    nationwideDesc: 'ወደ አዲስ አበባ የሚደርስ ፈጣን መላኪያ፣ የደብረ ብርሃን መረከቢያ እና አስተማማኝ የክልል አማራጮች።',
     
     // Category Names
     catLaptops: 'ላፕቶፖች',

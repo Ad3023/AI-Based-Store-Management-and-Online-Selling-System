@@ -13,13 +13,15 @@ const ManagerPromotionsPage = () => {
   const [feedback, setFeedback] = useState({ type: '', text: '' });
   const [statusFilter, setStatusFilter] = useState('all'); // all, active, scheduled, expired, inactive
   const [searchQuery, setSearchQuery] = useState('');
+  const [targetType, setTargetType] = useState('all'); // 'all', 'category', 'products'
+  const [productSearch, setProductSearch] = useState('');
 
   const [form, setForm] = useState({
     title: '',
     description: '',
     discount_type: 'PERCENTAGE',
     discount_value: '',
-    apply_to_all: false,
+    apply_to_all: true,
     start_date: new Date().toISOString().slice(0, 16),
     end_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16),
     is_active: true,
@@ -61,6 +63,8 @@ const ManagerPromotionsPage = () => {
 
   const handleOpenCreateModal = () => {
     setEditingPromo(null);
+    setTargetType('all');
+    setProductSearch('');
     setForm({
       title: '',
       description: '',
@@ -79,12 +83,18 @@ const ManagerPromotionsPage = () => {
 
   const handleOpenEditModal = (promo) => {
     setEditingPromo(promo);
+    const isAll = Boolean(promo.apply_to_all);
+    const hasProds = (promo.products || []).length > 0;
+    const hasCats = (promo.categories || []).length > 0;
+    const computedTarget = isAll ? 'all' : hasProds ? 'products' : hasCats ? 'category' : 'all';
+    setTargetType(computedTarget);
+    setProductSearch('');
     setForm({
       title: promo.title || promo.name || '',
       description: promo.description || '',
       discount_type: promo.discount_type || 'PERCENTAGE',
       discount_value: String(promo.discount_value || ''),
-      apply_to_all: Boolean(promo.apply_to_all),
+      apply_to_all: isAll,
       start_date: promo.start_date ? new Date(promo.start_date).toISOString().slice(0, 16) : '',
       end_date: promo.end_date ? new Date(promo.end_date).toISOString().slice(0, 16) : '',
       is_active: Boolean(promo.is_active),
@@ -145,18 +155,28 @@ const ManagerPromotionsPage = () => {
       return;
     }
 
+    if (targetType === 'products' && form.products.length === 0) {
+      alert('Please select at least one specific product for this promotion.');
+      return;
+    }
+
+    if (targetType === 'category' && form.categories.length === 0) {
+      alert('Please select at least one category for this promotion.');
+      return;
+    }
+
     const payload = {
       title: form.title.trim(),
       description: form.description.trim(),
       discount_type: form.discount_type,
       discount_value: numVal,
-      apply_to_all: Boolean(form.apply_to_all),
+      apply_to_all: targetType === 'all',
       start_date: new Date(form.start_date).toISOString(),
       end_date: new Date(form.end_date).toISOString(),
       is_active: Boolean(form.is_active),
       banner_announcement: form.banner_announcement.trim(),
-      products: form.apply_to_all ? [] : form.products.map(Number),
-      categories: form.apply_to_all ? [] : form.categories.map(Number),
+      products: targetType === 'products' ? form.products.map(Number) : [],
+      categories: targetType === 'category' ? form.categories.map(Number) : [],
     };
 
     try {
@@ -198,6 +218,16 @@ const ManagerPromotionsPage = () => {
           <p className="text-muted small mb-0" style={{ maxWidth: '680px' }}>
             Configure authoritative store promotions, fixed and percentage discounts, product or category scopes, and dynamic homepage banners. All discounts are securely calculated on the server.
           </p>
+          <div className="d-flex flex-wrap align-items-center gap-2 mt-2">
+            <span className="badge rounded-pill bg-slate-100 text-slate-700 border border-slate-200 text-[11px] fw-semibold d-inline-flex align-items-center gap-1.5">
+              <i className="bi bi-shield-check text-primary"></i>
+              Conflict Rule: Highest Eligible Discount Wins (No Stacking)
+            </span>
+            <span className="badge rounded-pill bg-slate-100 text-slate-700 border border-slate-200 text-[11px] fw-semibold d-inline-flex align-items-center gap-1.5">
+              <i className="bi bi-lock-fill text-success"></i>
+              Server-Validated Pricing Only
+            </span>
+          </div>
         </div>
         <button
           onClick={handleOpenCreateModal}
@@ -558,73 +588,217 @@ const ManagerPromotionsPage = () => {
                       />
                     </div>
 
-                    {/* Promotion Scope: Store-Wide Checkbox */}
+                    {/* Targeting Options: 3 Explicit Scopes */}
                     <div className="col-12">
-                      <div className="p-3 rounded-3 bg-light border">
-                        <div className="form-check form-switch mb-2">
-                          <input
-                            className="form-check-input"
-                            type="checkbox"
-                            id="applyToAllSwitch"
-                            checked={form.apply_to_all}
-                            onChange={(e) => setForm({ ...form, apply_to_all: e.target.checked })}
-                          />
-                          <label className="form-check-label fw-bold small text-slate-900" htmlFor="applyToAllSwitch">
-                            Apply Store-Wide to All Products
-                          </label>
+                      <label className="form-label small fw-bold text-slate-800 d-block mb-1">
+                        Targeting Scope *
+                      </label>
+                      <small className="text-muted text-xs d-block mb-2">
+                        Choose whether this discount applies store-wide, to all products within specific categories, or to hand-picked items.
+                      </small>
+
+                      <div className="row g-2 mb-3">
+                        <div className="col-md-4">
+                          <div
+                            onClick={() => {
+                              setTargetType('all');
+                              setForm({ ...form, apply_to_all: true });
+                            }}
+                            className={`p-3 rounded-3 border text-center transition ${
+                              targetType === 'all'
+                                ? 'border-primary bg-primary bg-opacity-10 shadow-sm'
+                                : 'bg-light border-slate-200'
+                            }`}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <i className={`bi bi-shop fs-4 d-block mb-1 ${targetType === 'all' ? 'text-primary' : 'text-muted'}`}></i>
+                            <span className="fw-bold small d-block">All Products</span>
+                            <span className="text-muted text-[11px]">Store-Wide Discount</span>
+                          </div>
                         </div>
-                        <small className="text-muted text-xs d-block">
-                          When checked, this promotion applies automatically to every active product in the catalog unless overridden by a product-specific promotion.
-                        </small>
+
+                        <div className="col-md-4">
+                          <div
+                            onClick={() => {
+                              setTargetType('category');
+                              setForm({ ...form, apply_to_all: false });
+                            }}
+                            className={`p-3 rounded-3 border text-center transition ${
+                              targetType === 'category'
+                                ? 'border-primary bg-primary bg-opacity-10 shadow-sm'
+                                : 'bg-light border-slate-200'
+                            }`}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <i className={`bi bi-grid-fill fs-4 d-block mb-1 ${targetType === 'category' ? 'text-primary' : 'text-muted'}`}></i>
+                            <span className="fw-bold small d-block">By Category</span>
+                            <span className="text-muted text-[11px]">All items in Category ({form.categories.length})</span>
+                          </div>
+                        </div>
+
+                        <div className="col-md-4">
+                          <div
+                            onClick={() => {
+                              setTargetType('products');
+                              setForm({ ...form, apply_to_all: false });
+                            }}
+                            className={`p-3 rounded-3 border text-center transition ${
+                              targetType === 'products'
+                                ? 'border-primary bg-primary bg-opacity-10 shadow-sm'
+                                : 'bg-light border-slate-200'
+                            }`}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <i className={`bi bi-box-seam-fill fs-4 d-block mb-1 ${targetType === 'products' ? 'text-primary' : 'text-muted'}`}></i>
+                            <span className="fw-bold small d-block">Specific Products</span>
+                            <span className="text-muted text-[11px]">Hand-picked items ({form.products.length})</span>
+                          </div>
+                        </div>
                       </div>
+
+                      {/* Store-Wide Information Banner */}
+                      {targetType === 'all' && (
+                        <div className="alert alert-info py-2.5 px-3 text-xs mb-0 d-flex align-items-center gap-2 rounded-3 border-info border-opacity-25">
+                          <i className="bi bi-info-circle-fill fs-6 shrink-0 text-info"></i>
+                          <div>
+                            <strong>Store-Wide Scope:</strong> This discount applies automatically to every active product in the catalog. In accordance with the conflict rule, if an item qualifies for another promotion offering a larger discount, the highest discount will apply.
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Category Selector */}
+                      {targetType === 'category' && (
+                        <div className="p-3 bg-light rounded-3 border">
+                          <label className="form-label small fw-bold text-slate-800 mb-1">
+                            Select Eligible Product Categories ({form.categories.length} selected)
+                          </label>
+                          <div className="row g-2 mt-1">
+                            {categories.map((c) => {
+                              const isChecked = form.categories.includes(String(c.id));
+                              return (
+                                <div key={c.id} className="col-sm-6">
+                                  <label
+                                    className={`d-flex align-items-center justify-content-between p-2 rounded-2 border w-100 ${
+                                      isChecked ? 'bg-white border-primary shadow-sm' : 'bg-white border-slate-200'
+                                    }`}
+                                    style={{ cursor: 'pointer' }}
+                                  >
+                                    <div className="d-flex align-items-center gap-2">
+                                      <input
+                                        type="checkbox"
+                                        className="form-check-input mt-0"
+                                        checked={isChecked}
+                                        onChange={(e) => {
+                                          const idStr = String(c.id);
+                                          const next = e.target.checked
+                                            ? [...form.categories, idStr]
+                                            : form.categories.filter((x) => x !== idStr);
+                                          setForm({ ...form, categories: next });
+                                        }}
+                                      />
+                                      <span className="text-xs fw-semibold">{c.name}</span>
+                                    </div>
+                                    <span className="badge bg-slate-100 text-slate-600 text-[10px]">
+                                      {c.products_count ?? ''}
+                                    </span>
+                                  </label>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Specific Products Selector */}
+                      {targetType === 'products' && (
+                        <div className="p-3 bg-light rounded-3 border">
+                          <div className="d-flex justify-content-between align-items-center mb-2">
+                            <label className="form-label small fw-bold text-slate-800 mb-0">
+                              Choose Specific Products ({form.products.length} selected)
+                            </label>
+                            <div className="d-flex gap-2">
+                              <button
+                                type="button"
+                                className="btn btn-link p-0 text-xs text-primary text-decoration-none fw-semibold"
+                                onClick={() => setForm({ ...form, products: products.map((p) => String(p.id)) })}
+                              >
+                                Select All ({products.length})
+                              </button>
+                              <span className="text-muted">·</span>
+                              <button
+                                type="button"
+                                className="btn btn-link p-0 text-xs text-muted text-decoration-none"
+                                onClick={() => setForm({ ...form, products: [] })}
+                              >
+                                Clear Selection
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="mb-2">
+                            <input
+                              type="text"
+                              className="form-control form-control-sm text-xs"
+                              placeholder="Search products by name or SKU..."
+                              value={productSearch}
+                              onChange={(e) => setProductSearch(e.target.value)}
+                            />
+                          </div>
+
+                          <div
+                            className="bg-white rounded-2 border p-2 overflow-y-auto"
+                            style={{ maxHeight: '180px' }}
+                          >
+                            {products
+                              .filter((p) => {
+                                if (!productSearch.trim()) return true;
+                                const q = productSearch.toLowerCase();
+                                return (
+                                  p.name.toLowerCase().includes(q) ||
+                                  (p.sku && p.sku.toLowerCase().includes(q)) ||
+                                  (p.category_name && p.category_name.toLowerCase().includes(q))
+                                );
+                              })
+                              .map((p) => {
+                                const isChecked = form.products.includes(String(p.id));
+                                return (
+                                  <label
+                                    key={p.id}
+                                    className={`d-flex align-items-center justify-content-between p-1.5 px-2 rounded-2 mb-1 ${
+                                      isChecked ? 'bg-primary bg-opacity-10 text-primary' : 'hover-bg-slate-50'
+                                    }`}
+                                    style={{ cursor: 'pointer' }}
+                                  >
+                                    <div className="d-flex align-items-center gap-2 text-truncate me-2">
+                                      <input
+                                        type="checkbox"
+                                        className="form-check-input mt-0"
+                                        checked={isChecked}
+                                        onChange={(e) => {
+                                          const idStr = String(p.id);
+                                          const next = e.target.checked
+                                            ? [...form.products, idStr]
+                                            : form.products.filter((x) => x !== idStr);
+                                          setForm({ ...form, products: next });
+                                        }}
+                                      />
+                                      <span className="text-xs text-truncate text-slate-800 fw-medium">
+                                        {p.name}
+                                      </span>
+                                    </div>
+                                    <div className="d-flex align-items-center gap-2 shrink-0">
+                                      <span className="text-slate-400 font-monospace text-[11px]">{p.sku}</span>
+                                      <span className="badge bg-slate-100 text-slate-700 text-xs">
+                                        {formatETB(p.price)}
+                                      </span>
+                                    </div>
+                                  </label>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      )}
                     </div>
-
-                    {/* Category & Product Selectors (if not store-wide) */}
-                    {!form.apply_to_all && (
-                      <>
-                        <div className="col-md-6">
-                          <label className="form-label small fw-bold text-slate-800">Apply to Specific Categories</label>
-                          <select
-                            multiple
-                            className="form-select"
-                            style={{ height: '115px' }}
-                            value={form.categories}
-                            onChange={(e) => {
-                              const selected = Array.from(e.target.selectedOptions, (option) => option.value);
-                              setForm({ ...form, categories: selected });
-                            }}
-                          >
-                            {categories.map((c) => (
-                              <option key={c.id} value={String(c.id)}>
-                                {c.name}
-                              </option>
-                            ))}
-                          </select>
-                          <small className="text-muted text-[11px]">Hold Ctrl/Cmd to select multiple categories</small>
-                        </div>
-
-                        <div className="col-md-6">
-                          <label className="form-label small fw-bold text-slate-800">Apply to Specific Products</label>
-                          <select
-                            multiple
-                            className="form-select"
-                            style={{ height: '115px' }}
-                            value={form.products}
-                            onChange={(e) => {
-                              const selected = Array.from(e.target.selectedOptions, (option) => option.value);
-                              setForm({ ...form, products: selected });
-                            }}
-                          >
-                            {products.map((p) => (
-                              <option key={p.id} value={String(p.id)}>
-                                {p.name} ({formatETB(p.price)})
-                              </option>
-                            ))}
-                          </select>
-                          <small className="text-muted text-[11px]">Hold Ctrl/Cmd to select multiple products</small>
-                        </div>
-                      </>
-                    )}
 
                     {/* Banner Announcement */}
                     <div className="col-12">

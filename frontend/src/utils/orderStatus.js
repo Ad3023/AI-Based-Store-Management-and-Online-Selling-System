@@ -14,35 +14,65 @@ export const cleanDisplayName = (user) => {
     ? `${user.first_name} ${user.last_name || ''}`.trim()
     : (user.username || '');
   
-  // Strip any accidental "(Admin)", "(Customer)", "(Manager)" etc. appended to display names
+  // Strip any accidental "(Admin)", "(Customer)", "(Manager)", "(Order Manager)" etc. appended to display names
   return fullName
-    .replace(/\s*\((?:Admin|Administrator|Customer|Store Manager|Manager|Staff)\)/gi, '')
+    .replace(/\s*\((?:Admin|Administrator|Customer|Store Manager|Order Manager|Manager|Staff)\)/gi, '')
     .trim();
 };
 
 /**
  * Normalizes and extracts user role from either a user object or a raw string.
+ * Strictly maps to application roles: 'admin', 'store_manager', 'order_manager', 'customer'.
  * @param {Object|string} input 
  * @returns {string}
  */
 export const extractUserRole = (input) => {
-  if (!input) return 'guest';
+  if (!input) return 'customer';
   if (typeof input === 'string') {
     const s = input.trim().toLowerCase().replace(/[\s-]+/g, '_');
-    if (s === 'admin' || s === 'administrator' || s === 'superuser') return 'admin';
-    if (s === 'store_manager' || s === 'manager') return 'store_manager';
-    if (s === 'customer') return 'customer';
-    return s;
+    if (s === 'super_admin' || s === 'superadmin' || s === 'superuser' || s === 'admin' || s === 'administrator' || s === 'sub_admin' || s === 'subadmin') {
+      return 'admin';
+    }
+    if (s === 'order_manager' || s === 'ordermanager') {
+      return 'order_manager';
+    }
+    if (s === 'store_manager' || s === 'manager') {
+      return 'store_manager';
+    }
+    return 'customer';
   }
   if (typeof input === 'object') {
-    if (input.is_superuser) return 'admin';
-    const roleVal = input.role || input.user_role || (input.is_staff && input.role !== 'store_manager' ? 'admin' : null);
+    if (input.role === 'order_manager') {
+      return 'order_manager';
+    }
+    if (input.is_super_admin || input.is_superuser || input.role === 'super_admin' || input.role === 'admin' || input.is_staff) {
+      if (input.role === 'store_manager' && !input.is_superuser && !input.is_super_admin) {
+        return 'store_manager';
+      }
+      if (input.role === 'order_manager' && !input.is_superuser && !input.is_super_admin) {
+        return 'order_manager';
+      }
+      return 'admin';
+    }
+    const roleVal = input.role || input.user_role;
     if (roleVal) {
       const s = String(roleVal).trim().toLowerCase().replace(/[\s-]+/g, '_');
-      if (s === 'admin' || s === 'administrator' || s === 'superuser') return 'admin';
-      if (s === 'store_manager' || s === 'manager') return 'store_manager';
-      if (s === 'customer') return 'customer';
-      return s;
+      if (s === 'super_admin' || s === 'superadmin' || s === 'superuser' || s === 'admin' || s === 'administrator' || s === 'sub_admin' || s === 'subadmin') {
+        return 'admin';
+      }
+      if (s === 'order_manager' || s === 'ordermanager') {
+        return 'order_manager';
+      }
+      if (s === 'store_manager' || s === 'manager') {
+        return 'store_manager';
+      }
+      return 'customer';
+    }
+    if (input.custom_role?.name) {
+      const c = input.custom_role.name.toLowerCase();
+      if (c.includes('admin')) return 'admin';
+      if (c.includes('order')) return 'order_manager';
+      if (c.includes('manager')) return 'store_manager';
     }
   }
   return 'customer';
@@ -50,32 +80,32 @@ export const extractUserRole = (input) => {
 
 /**
  * Returns the authoritative uppercase role label for display badges.
- * Accepts either a user object or a raw role string.
+ * Strictly uses 'ADMIN', 'STORE MANAGER', 'ORDER MANAGER', or 'CUSTOMER'.
  * @param {Object|string} user 
  * @returns {string}
  */
 export const getUserRoleLabel = (user) => {
-  if (!user) return 'GUEST';
+  if (!user) return '';
   const role = extractUserRole(user);
   if (role === 'admin') return 'ADMIN';
   if (role === 'store_manager') return 'STORE MANAGER';
+  if (role === 'order_manager') return 'ORDER MANAGER';
   if (role === 'customer') return 'CUSTOMER';
-  if (role === 'guest') return 'GUEST';
-  return role.toUpperCase().replace(/_/g, ' ');
+  return '';
 };
 
 /**
- * Returns role badge styling classes.
- * Accepts either a user object or a raw role string.
+ * Returns role badge styling classes with accessible high-contrast text.
  * @param {Object|string} user 
  * @returns {string}
  */
 export const getUserRoleBadgeClass = (user) => {
   if (!user) return 'bg-secondary text-white';
   const role = extractUserRole(user);
-  if (role === 'admin') return 'bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25';
-  if (role === 'store_manager') return 'bg-info bg-opacity-10 text-info border border-info border-opacity-25';
-  return 'bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25';
+  if (role === 'admin') return 'bg-primary text-white border-0 fw-bold shadow-sm';
+  if (role === 'store_manager') return 'bg-info text-dark border-0 fw-bold shadow-sm';
+  if (role === 'order_manager') return 'bg-amber-500 text-white border-0 fw-bold shadow-sm';
+  return 'bg-secondary text-white border-0 fw-bold shadow-sm';
 };
 
 /**

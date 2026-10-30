@@ -1,7 +1,81 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
 from rest_framework.authtoken.models import Token
-from .models import User, CustomerProfile, AuditLog
+from .models import User, CustomerProfile, AuditLog, Permission, Role
+
+
+class PermissionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Permission
+        fields = ['id', 'code', 'name', 'module', 'description', 'created_at']
+
+
+class RoleSerializer(serializers.ModelSerializer):
+    permissions = PermissionSerializer(many=True, read_only=True)
+    permission_codes = serializers.SerializerMethodField()
+    user_count = serializers.SerializerMethodField()
+    created_by_username = serializers.CharField(source='created_by.username', read_only=True)
+
+    class Meta:
+        model = Role
+        fields = [
+            'id', 'code', 'name', 'description', 'is_system_role',
+            'permissions', 'permission_codes', 'user_count',
+            'created_by', 'created_by_username', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'is_system_role', 'created_at', 'updated_at']
+
+    def get_permission_codes(self, obj):
+        return list(obj.permissions.values_list('code', flat=True))
+
+    def get_user_count(self, obj):
+        return obj.users.count() + User.objects.filter(role=obj.code).count()
+
+
+class RoleCreateUpdateSerializer(serializers.ModelSerializer):
+    permission_codes = serializers.ListField(
+        child=serializers.CharField(),
+        write_only=True,
+        required=False
+    )
+
+    class Meta:
+        model = Role
+        fields = ['id', 'code', 'name', 'description', 'permission_codes']
+
+    def validate_code(self, value):
+        normalized = value.strip().lower().replace(' ', '_')
+        if not normalized:
+            raise serializers.ValidationError("Role code cannot be empty.")
+        if self.instance and self.instance.is_system_role and self.instance.code != normalized:
+            raise serializers.ValidationError("System role code cannot be modified.")
+        qs = Role.objects.filter(code=normalized)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError(f"A role with code '{normalized}' already exists.")
+        return normalized
+
+    def create(self, validated_data):
+        perm_codes = validated_data.pop('permission_codes', [])
+        role = Role.objects.create(**validated_data)
+        if perm_codes:
+            perms = Permission.objects.filter(code__in=perm_codes)
+            role.permissions.set(perms)
+        return role
+
+    def update(self, instance, validated_data):
+        perm_codes = validated_data.pop('permission_codes', None)
+        instance.name = validated_data.get('name', instance.name)
+        instance.description = validated_data.get('description', instance.description)
+        if not instance.is_system_role:
+            instance.code = validated_data.get('code', instance.code)
+        instance.save()
+
+        if perm_codes is not None:
+            perms = Permission.objects.filter(code__in=perm_codes)
+            instance.permissions.set(perms)
+        return instance
 
 
 class CustomerProfileSerializer(serializers.ModelSerializer):
@@ -13,16 +87,26 @@ class CustomerProfileSerializer(serializers.ModelSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
     profile = CustomerProfileSerializer(read_only=True)
+    custom_role = RoleSerializer(read_only=True)
+    is_super_admin = serializers.BooleanField(read_only=True)
+    is_sub_admin = serializers.SerializerMethodField()
+    permissions = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
-            'role', 'is_staff', 'is_superuser', 'phone_number', 'address', 'city', 'avatar',
-            'created_at', 'profile'
+            'role', 'custom_role', 'is_super_admin', 'is_sub_admin', 'is_staff', 'is_superuser',
+            'phone_number', 'address', 'city', 'avatar',
+            'permissions', 'created_at', 'profile'
         ]
-        # Prevent privilege escalation: customers cannot change their own role or flags
-        read_only_fields = ['id', 'created_at', 'role', 'is_staff', 'is_superuser']
+        read_only_fields = ['id', 'created_at', 'role', 'custom_role', 'is_staff', 'is_superuser', 'permissions']
+
+    def get_is_sub_admin(self, obj):
+        return obj.is_sub_admin()
+
+    def get_permissions(self, obj):
+        return list(obj.get_all_permissions())
 
     def validate_email(self, value):
         if not value or not str(value).strip():
@@ -37,29 +121,54 @@ class UserSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         request = self.context.get('request')
-        # Check if client attempted to pass 'role' in initial_data to change protected role
+        # Prevent privilege escalation: users cannot change their own role or assign roles
         if hasattr(self, 'initial_data') and 'role' in self.initial_data:
             submitted_role = self.initial_data.get('role')
             current_user = request.user if request and request.user else getattr(self, 'instance', None)
             if current_user and submitted_role != current_user.role:
-                if current_user.role == User.Role.ADMIN or current_user.is_superuser:
+                if current_user.is_super_admin:
                     raise serializers.ValidationError({
-                        'role': "The Main Administrator's role is protected and cannot be changed."
+                        'role': "The Super Administrator's role is protected and cannot be changed."
                     })
         return attrs
 
 
 class AdminUserSerializer(serializers.ModelSerializer):
     profile = CustomerProfileSerializer(read_only=True)
+    custom_role = RoleSerializer(read_only=True)
+    custom_role_id = serializers.PrimaryKeyRelatedField(
+        queryset=Role.objects.all(),
+        source='custom_role',
+        write_only=True,
+        required=False,
+        allow_null=True
+    )
+    direct_permission_codes = serializers.ListField(
+        child=serializers.CharField(),
+        write_only=True,
+        required=False
+    )
+    is_super_admin = serializers.BooleanField(read_only=True)
+    is_sub_admin = serializers.SerializerMethodField()
+    permissions = serializers.SerializerMethodField()
+    password = serializers.CharField(write_only=True, required=False)
 
     class Meta:
         model = User
         fields = [
-            'id', 'username', 'email', 'first_name', 'last_name',
-            'role', 'is_active', 'is_staff', 'is_superuser', 'phone_number', 'address', 'city', 'avatar',
-            'created_at', 'profile'
+            'id', 'username', 'email', 'password', 'first_name', 'last_name',
+            'role', 'custom_role', 'custom_role_id', 'direct_permission_codes',
+            'is_active', 'is_staff', 'is_superuser', 'is_super_admin', 'is_sub_admin',
+            'phone_number', 'address', 'city', 'avatar',
+            'permissions', 'created_at', 'profile'
         ]
-        read_only_fields = ['id', 'created_at', 'is_staff', 'is_superuser']
+        read_only_fields = ['id', 'created_at', 'is_staff', 'is_superuser', 'permissions']
+
+    def get_is_sub_admin(self, obj):
+        return obj.is_sub_admin()
+
+    def get_permissions(self, obj):
+        return list(obj.get_all_permissions())
 
     def validate_email(self, value):
         if not value or not str(value).strip():
@@ -76,17 +185,122 @@ class AdminUserSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         instance = getattr(self, 'instance', None)
         new_role = attrs.get('role')
-        if instance and new_role and new_role != instance.role:
-            # 1. Main administrator role protection
-            if instance.is_superuser or instance.username == 'addisuguche_admin':
+        actor = request.user if request else None
+
+        # 1. Protection of Super Administrator accounts
+        if instance and (instance.is_super_admin or instance.username == 'addisuguche_admin'):
+            if new_role and new_role not in [User.RoleChoices.SUPER_ADMIN, User.RoleChoices.ADMIN]:
                 raise serializers.ValidationError({
-                    'role': "The Main Administrator's role is protected and cannot be changed."
+                    'role': "The Super Administrator's role is protected and cannot be downgraded."
                 })
-            # 2. Prevent any administrator from changing their own role
-            if request and request.user and request.user.id == instance.id and request.user.role == User.Role.ADMIN:
+            if 'is_active' in attrs and not attrs['is_active']:
                 raise serializers.ValidationError({
-                    'role': "Administrators cannot change their own role."
+                    'is_active': "The Super Administrator account cannot be deactivated."
                 })
+
+        # 2. Prevent self-demotion or self-role change
+        if instance and actor and actor.id == instance.id and new_role and new_role != instance.role:
+            raise serializers.ValidationError({
+                'role': "Administrators cannot change their own role."
+            })
+
+        # 3. Only Super Admin can promote to SUPER_ADMIN
+        if new_role == User.RoleChoices.SUPER_ADMIN:
+            if not actor or not actor.is_super_admin:
+                raise serializers.ValidationError({
+                    'role': "Only existing Super Administrators can promote users to Super Admin."
+                })
+
+        # 4. Non-Super-Admins (Admins and Sub-Admins) cannot edit Super Admin accounts
+        if instance and instance.is_super_admin:
+            if actor and not actor.is_super_admin:
+                raise serializers.ValidationError({
+                    'error': "You do not have permission to modify a Super Administrator account."
+                })
+
+        # 5. Sub-Admins cannot modify Admin or Super Admin accounts
+        if instance and (instance.role == User.RoleChoices.ADMIN or instance.is_super_admin):
+            if actor and actor.is_sub_admin():
+                raise serializers.ValidationError({
+                    'error': "Sub-Administrators cannot modify Administrator accounts."
+                })
+
+        return attrs
+
+    def create(self, validated_data):
+        direct_perm_codes = validated_data.pop('direct_permission_codes', None)
+        password = validated_data.pop('password', None)
+        user = super().create(validated_data)
+
+        if password:
+            user.set_password(password)
+
+        if direct_perm_codes is not None:
+            perms = Permission.objects.filter(code__in=direct_perm_codes)
+            user.direct_permissions.set(perms)
+
+        # Ensure staff flag is aligned with administrative roles
+        if user.role in [
+            User.RoleChoices.SUPER_ADMIN,
+            User.RoleChoices.ADMIN,
+            User.RoleChoices.SUB_ADMIN,
+            User.RoleChoices.STORE_MANAGER,
+            User.RoleChoices.ORDER_MANAGER
+        ] or user.custom_role is not None:
+            user.is_staff = True
+        else:
+            user.is_staff = False
+        user.save()
+
+        return user
+
+    def update(self, instance, validated_data):
+        direct_perm_codes = validated_data.pop('direct_permission_codes', None)
+        user = super().update(instance, validated_data)
+
+        if direct_perm_codes is not None:
+            perms = Permission.objects.filter(code__in=direct_perm_codes)
+            user.direct_permissions.set(perms)
+
+        # Ensure staff flag is aligned with administrative roles
+        if user.role in [
+            User.RoleChoices.SUPER_ADMIN,
+            User.RoleChoices.ADMIN,
+            User.RoleChoices.SUB_ADMIN,
+            User.RoleChoices.STORE_MANAGER,
+            User.RoleChoices.ORDER_MANAGER
+        ] or user.custom_role is not None:
+            user.is_staff = True
+        else:
+            user.is_staff = False
+        user.save(update_fields=['is_staff'])
+
+        return user
+
+
+class RoleAssignmentSerializer(serializers.Serializer):
+    role = serializers.ChoiceField(choices=User.RoleChoices.choices, required=False)
+    custom_role_id = serializers.IntegerField(required=False, allow_null=True)
+    direct_permission_codes = serializers.ListField(
+        child=serializers.CharField(),
+        required=False
+    )
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        target_user = self.context.get('target_user')
+        actor = request.user if request else None
+
+        if target_user and target_user.is_super_admin and actor and not actor.is_super_admin:
+            raise serializers.ValidationError("Only Super Administrators can modify Super Admin accounts.")
+
+        role = attrs.get('role')
+        if role == User.RoleChoices.SUPER_ADMIN and (not actor or not actor.is_super_admin):
+            raise serializers.ValidationError("Only Super Administrators can grant the Super Admin role.")
+
+        if actor and actor.is_sub_admin():
+            raise serializers.ValidationError("Sub-Administrators cannot assign roles or permissions.")
+
         return attrs
 
 
@@ -137,11 +351,11 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def validate_role(self, value):
         # Public self-registration is strictly restricted to Customer role
-        return User.Role.CUSTOMER
+        return User.RoleChoices.CUSTOMER
 
     def create(self, validated_data):
         password = validated_data.pop('password')
-        # Public self-registration is strictly restricted to Customer
+        customer_role = Role.objects.filter(code='customer').first()
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data['email'],
@@ -149,7 +363,8 @@ class RegisterSerializer(serializers.ModelSerializer):
             first_name=validated_data.get('first_name', ''),
             last_name=validated_data.get('last_name', ''),
             phone_number=validated_data.get('phone_number', ''),
-            role=User.Role.CUSTOMER
+            role=User.RoleChoices.CUSTOMER,
+            custom_role=customer_role
         )
         Token.objects.create(user=user)
         return user
@@ -195,7 +410,6 @@ class LoginSerializer(serializers.Serializer):
         password = data.get('password')
 
         # Allow logging in with either username or email
-        user = None
         if '@' in username:
             try:
                 user_obj = User.objects.get(email__iexact=username)

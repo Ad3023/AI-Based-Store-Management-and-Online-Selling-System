@@ -6,7 +6,7 @@ from .serializers import CustomerSegmentSerializer, CustomerActivitySerializer
 from .engine import AIRecommendationEngine
 from products.serializers import ProductSerializer
 from products.models import Product
-from accounts.permissions import IsStoreManagerOrAdmin
+from accounts.permissions import IsStoreManagerOrAdmin, require_permission
 
 
 class PersonalizedRecommendationsView(APIView):
@@ -64,7 +64,7 @@ class TrendingProductsView(APIView):
 
 
 class CustomerSegmentationView(APIView):
-    permission_classes = [IsStoreManagerOrAdmin]
+    permission_classes = [require_permission('customers.view')]
 
     def get(self, request):
         # Auto-run if empty
@@ -308,4 +308,125 @@ class AIProductComparisonView(APIView):
         return Response({
             'products': ProductSerializer(products, many=True).data,
             'ai_synthesis': ai_synthesis
+        })
+
+
+class AIDemandForecastingView(APIView):
+    """
+    Grounded Demand Forecasting & Stock Intelligence Engine.
+    Analyzes verified historical sales velocity over the past 30-90 days,
+    computes moving daily run rate, predicts 30-day demand, estimates days-of-stock,
+    and flags stockout warnings and restocking recommendations.
+    Restricted to authorized Store Managers and Admins.
+    """
+    permission_classes = [IsStoreManagerOrAdmin]
+
+    def get(self, request):
+        from datetime import timedelta
+        from django.utils import timezone
+        from django.db.models import Sum, Count, Q
+        from orders.models import Order, OrderItem
+        from products.models import Product
+
+        now = timezone.now()
+        try:
+            analysis_days = max(int(request.query_params.get('days', 60)), 14)
+        except ValueError:
+            analysis_days = 60
+        forecast_horizon_days = 30
+        since_date = now - timedelta(days=analysis_days)
+
+        # Verified paid orders for sales analysis
+        verified_orders = Order.objects.filter(
+            Q(payment_status=Order.PaymentStatus.PAID) |
+            Q(status__in=[Order.Status.PROCESSING, Order.Status.SHIPPED, Order.Status.DELIVERED])
+        ).exclude(status=Order.Status.CANCELLED)
+
+        recent_items = OrderItem.objects.filter(
+            order__in=verified_orders,
+            order__created_at__gte=since_date
+        )
+
+        total_orders_sample = verified_orders.filter(created_at__gte=since_date).count()
+        has_adequate_data = total_orders_sample >= 5
+
+        # Group sales by product
+        sales_by_product = (
+            recent_items.values('product_id')
+            .annotate(
+                units_sold=Sum('quantity'),
+                revenue=Sum('total_price'),
+                orders_count=Count('id')
+            )
+        )
+        sales_map = {item['product_id']: item for item in sales_by_product}
+
+        forecasts = []
+        active_products = Product.objects.filter(is_active=True).select_related('category')
+
+        for prod in active_products:
+            sales_info = sales_map.get(prod.id, {'units_sold': 0, 'revenue': 0.0, 'orders_count': 0})
+            units_sold = sales_info['units_sold'] or 0
+            daily_run_rate = units_sold / max(analysis_days, 1)
+            predicted_30d_demand = round(daily_run_rate * forecast_horizon_days, 1)
+
+            # Days of stock remaining based on daily run rate
+            if daily_run_rate > 0:
+                days_of_stock = round(prod.stock / daily_run_rate, 1)
+            else:
+                days_of_stock = 999.0 if prod.stock > 0 else 0.0
+
+            # Stockout risk evaluation
+            if prod.stock == 0:
+                risk_level = "CRITICAL_OUT_OF_STOCK"
+                status_text = "Out of Stock"
+                suggested_reorder = max(int(predicted_30d_demand) + 5, 10)
+            elif days_of_stock < 14 or prod.stock <= prod.low_stock_threshold:
+                risk_level = "HIGH_STOCKOUT_RISK"
+                status_text = f"Restock Urgently (~{int(days_of_stock)} days left)"
+                suggested_reorder = max(int(predicted_30d_demand - prod.stock) + 5, 5)
+            elif days_of_stock < 30:
+                risk_level = "MODERATE_REORDER_SOON"
+                status_text = f"Reorder Soon (~{int(days_of_stock)} days left)"
+                suggested_reorder = max(int(predicted_30d_demand - prod.stock), 0)
+            else:
+                risk_level = "ADEQUATE_STOCK"
+                status_text = "Stock Healthy"
+                suggested_reorder = 0
+
+            forecasts.append({
+                'product_id': prod.id,
+                'name': prod.name,
+                'sku': prod.sku,
+                'category': prod.category.name,
+                'price': float(prod.price),
+                'current_stock': prod.stock,
+                'low_stock_threshold': prod.low_stock_threshold,
+                'historical_units_sold': units_sold,
+                'daily_sales_velocity': round(daily_run_rate, 2),
+                'predicted_30d_demand': predicted_30d_demand,
+                'estimated_days_of_stock': min(days_of_stock, 999.0),
+                'risk_level': risk_level,
+                'status_text': status_text,
+                'suggested_reorder_qty': suggested_reorder
+            })
+
+        # Sort by urgency (critical and high risk first)
+        risk_priority = {
+            'CRITICAL_OUT_OF_STOCK': 0,
+            'HIGH_STOCKOUT_RISK': 1,
+            'MODERATE_REORDER_SOON': 2,
+            'ADEQUATE_STOCK': 3
+        }
+        forecasts.sort(key=lambda x: (risk_priority.get(x['risk_level'], 9), -x['predicted_30d_demand']))
+
+        return Response({
+            'algorithm': 'Historical Moving Average & Sales Run Rate Forecasting',
+            'analysis_window_days': analysis_days,
+            'forecast_horizon_days': forecast_horizon_days,
+            'data_adequate': has_adequate_data,
+            'data_limitation': None if has_adequate_data else f"Sample size contains only {total_orders_sample} verified order(s) in past {analysis_days} days. Baseline moving run rate estimation applied.",
+            'total_products_monitored': len(forecasts),
+            'stockout_warnings_count': sum(1 for f in forecasts if f['risk_level'] in ['CRITICAL_OUT_OF_STOCK', 'HIGH_STOCKOUT_RISK']),
+            'forecasts': forecasts
         })

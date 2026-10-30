@@ -113,14 +113,21 @@ class ReceiptSerializer(serializers.ModelSerializer):
 
 class OrderStatusHistorySerializer(serializers.ModelSerializer):
     changed_by_username = serializers.CharField(source='changed_by.username', read_only=True)
+    changed_by_role = serializers.CharField(source='changed_by.role', read_only=True)
+    changed_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = OrderStatusHistory
         fields = [
-            'id', 'order', 'changed_by', 'changed_by_username',
+            'id', 'order', 'changed_by', 'changed_by_username', 'changed_by_role', 'changed_by_name',
             'status_type', 'previous_status', 'new_status', 'comment', 'created_at'
         ]
         read_only_fields = ['id', 'created_at']
+
+    def get_changed_by_name(self, obj):
+        if not obj.changed_by:
+            return 'System'
+        return obj.changed_by.get_full_name() or obj.changed_by.username
 
 
 class OrderSerializer(serializers.ModelSerializer):

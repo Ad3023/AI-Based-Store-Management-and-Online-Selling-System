@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../api';
 
 const AuthContext = createContext();
@@ -71,6 +71,21 @@ export const AuthProvider = ({ children }) => {
     return newUser;
   };
 
+  const loginWithGoogle = async (credentialOrIdToken) => {
+    const res = await api.post('auth/google/', {
+      credential: credentialOrIdToken,
+      id_token: credentialOrIdToken,
+    });
+    const { token: authToken, user: userData } = res.data;
+    localStorage.setItem('token', authToken);
+    localStorage.setItem('user', JSON.stringify(userData));
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
+    setToken(authToken);
+    setUser(userData);
+    return userData;
+  };
+
   const updateProfile = async (data) => {
     const res = await api.put('auth/profile/', data);
     setUser(res.data);
@@ -101,11 +116,48 @@ export const AuthProvider = ({ children }) => {
     return updatedUser;
   };
 
-  // Derive roles directly from actual backend user object
-  const isCustomer = user?.role === 'customer';
-  const isStoreManager = user?.role === 'store_manager' || Boolean(user?.is_superuser);
-  const isAdmin = user?.role === 'admin' || Boolean(user?.is_superuser);
-  const isManagerOrAdmin = isStoreManager || isAdmin;
+  // Authoritative application roles (super_admin, admin, sub_admin, store_manager, order_manager, customer)
+  const isSuperAdmin = Boolean(
+    user?.role === 'super_admin' ||
+    user?.is_super_admin ||
+    user?.is_superuser ||
+    user?.username === 'addisuguche_admin'
+  );
+  const isAdmin = Boolean(
+    isSuperAdmin ||
+    user?.role === 'admin' ||
+    user?.username === 'admin'
+  );
+  const isSubAdmin = Boolean(
+    user?.role === 'sub_admin' ||
+    user?.is_sub_admin
+  );
+  const isOrderManager = Boolean(user?.role === 'order_manager');
+  // Store Manager has operational access; Admin has complete supervisory access
+  const isStoreManager = Boolean(
+    isAdmin ||
+    user?.role === 'store_manager' ||
+    (user?.is_staff && user?.role !== 'customer' && user?.role !== 'order_manager' && user?.role !== 'sub_admin')
+  );
+  const isCustomer = user?.role === 'customer' || (!isAdmin && !isSubAdmin && !isStoreManager && !isOrderManager);
+  const isManagerOrAdmin = isAdmin || isSubAdmin || isStoreManager || isOrderManager;
+
+  const userPermissions = useMemo(() => {
+    return Array.isArray(user?.permissions) ? user.permissions : [];
+  }, [user?.permissions]);
+
+  const hasPermission = useCallback((permissionCode) => {
+    if (!user) return false;
+    if (isAdmin) return true;
+    return userPermissions.includes(permissionCode);
+  }, [user, isAdmin, userPermissions]);
+
+  const hasAnyPermission = useCallback((permissionCodes) => {
+    if (!user) return false;
+    if (isAdmin) return true;
+    if (!Array.isArray(permissionCodes)) return false;
+    return permissionCodes.some((code) => userPermissions.includes(code));
+  }, [user, isAdmin, userPermissions]);
 
   return (
     <AuthContext.Provider
@@ -114,15 +166,22 @@ export const AuthProvider = ({ children }) => {
         token,
         loading,
         login,
+        loginWithGoogle,
         register,
         logout,
         updateProfile,
         uploadAvatar,
         removeAvatar,
+        isSuperAdmin,
+        isAdmin,
+        isSubAdmin,
         isCustomer,
         isStoreManager,
-        isAdmin,
+        isOrderManager,
         isManagerOrAdmin,
+        userPermissions,
+        hasPermission,
+        hasAnyPermission,
       }}
     >
       {children}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import GoogleSignInButton from '../components/GoogleSignInButton';
 
 const RegisterPage = () => {
   const [formData, setFormData] = useState({
@@ -16,7 +17,7 @@ const RegisterPage = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const { register } = useAuth();
+  const { register, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -77,6 +78,20 @@ const RegisterPage = () => {
       } else {
         setError(err.message || 'An error occurred during account registration.');
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleToken = async (credential) => {
+    try {
+      setLoading(true);
+      setError('');
+      await loginWithGoogle(credential);
+      navigate('/customer/dashboard');
+    } catch (authErr) {
+      const msg = authErr.response?.data?.error || authErr.response?.data?.detail || 'Google registration failed. Please try again.';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -279,7 +294,7 @@ const RegisterPage = () => {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="btn btn-ethio-primary w-100 py-2.5 fw-bold text-sm shadow-sm"
+                    className="btn btn-ethio-primary w-100 py-2.5 fw-bold text-sm shadow-sm mb-3"
                     style={{ backgroundColor: '#1b64da', color: '#ffffff', borderRadius: '0.5rem' }}
                   >
                     {loading ? (
@@ -291,11 +306,29 @@ const RegisterPage = () => {
                       'Create Account'
                     )}
                   </button>
+
+                  {/* Google OAuth Option */}
+                  <div className="d-flex align-items-center my-2.5">
+                    <hr className="flex-grow-1 border-slate-200 my-0" />
+                    <span className="px-2.5 text-slate-400 text-[11px] text-uppercase font-semibold">or</span>
+                    <hr className="flex-grow-1 border-slate-200 my-0" />
+                  </div>
+
+                  <GoogleSignInButton
+                    text="signup_with"
+                    buttonId="register-with-google-btn"
+                    onSuccess={handleGoogleToken}
+                    onError={(err) => {
+                      const msg = typeof err === 'string' ? err : err?.message || 'Google registration was not completed.';
+                      setError(msg);
+                    }}
+                    disabled={loading}
+                  />
                 </form>
 
                 {/* Footer Link: Sign In */}
-                <div className="text-center mt-4 pt-2">
-                  <span className="text-muted text-xs">Already have an account? </span>
+                <div className="text-center mt-3 pt-1">
+                  <span className="text-muted text-xs me-1">Already have an account?</span>
                   <Link to="/login" className="text-primary fw-bold text-xs text-decoration-none">
                     Sign in
                   </Link>

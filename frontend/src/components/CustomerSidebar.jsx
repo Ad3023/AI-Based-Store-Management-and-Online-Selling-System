@@ -57,11 +57,11 @@ const CustomerSidebar = ({ mobileOpen, setMobileOpen, activeItem }) => {
       )}
 
       {/* Deep Navy Fixed Sidebar */}
-      <aside className={`ethio-sidebar ${mobileOpen ? 'open' : ''}`}>
+      <aside className={`ethio-sidebar ethio-customer-sidebar ${mobileOpen ? 'open' : ''}`}>
         
-        {/* Brand Header */}
-        <div className="p-3.5 border-bottom border-secondary border-opacity-25 d-flex align-items-center justify-content-between">
-          <Link to="/" className="d-flex align-items-center gap-2 text-decoration-none">
+        {/* Brand Header (Shown on mobile drawer for close action, hidden on desktop under navbar) */}
+        <div className="p-3.5 border-bottom border-secondary border-opacity-25 d-flex align-items-center justify-content-between d-lg-none">
+          <Link to="/" className="d-flex align-items-center gap-2 text-decoration-none" onClick={() => setMobileOpen(false)}>
             <div
               className="rounded-3 d-flex align-items-center justify-content-center text-white"
               style={{ width: '34px', height: '34px', backgroundColor: '#1b64da', boxShadow: '0 2px 6px rgba(27, 100, 218, 0.4)' }}
@@ -88,7 +88,7 @@ const CustomerSidebar = ({ mobileOpen, setMobileOpen, activeItem }) => {
 
         {/* User Persona Card (Screenshot 4 & 5) */}
         <div className="ethio-persona-card">
-          <Link to="/profile" className="text-decoration-none" onClick={() => setMobileOpen(false)}>
+          <Link to="/profile" className="text-decoration-none" onClick={() => setMobileOpen(false)} title="View & Edit Profile">
             {avatarUrl ? (
               <img
                 src={avatarUrl}
@@ -103,9 +103,11 @@ const CustomerSidebar = ({ mobileOpen, setMobileOpen, activeItem }) => {
             )}
           </Link>
           <div className="text-truncate flex-grow-1">
-            <div className="fw-bold text-white text-xs text-truncate">
-              {displayName}
-            </div>
+            <Link to="/profile" className="text-decoration-none text-white d-block text-truncate" onClick={() => setMobileOpen(false)} title="View Profile">
+              <div className="fw-bold text-white text-xs text-truncate">
+                {displayName}
+              </div>
+            </Link>
             <span className={`badge ${roleBadgeClass} text-[10px] fw-semibold text-uppercase`}>
               {roleLabel}
             </span>
@@ -134,6 +136,17 @@ const CustomerSidebar = ({ mobileOpen, setMobileOpen, activeItem }) => {
             >
               <i className="bi bi-speedometer2 text-info"></i>
               <span className="fw-bold">Manager Portal</span>
+            </Link>
+          )}
+
+          {user?.role === 'order_manager' && (
+            <Link
+              to="/order-manager/dashboard"
+              className="ethio-nav-item bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 mb-1.5"
+              onClick={() => setMobileOpen(false)}
+            >
+              <i className="bi bi-box-seam-fill text-warning"></i>
+              <span className="fw-bold">Order Manager Portal</span>
             </Link>
           )}
 

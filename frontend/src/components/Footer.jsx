@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import EthioTechLogo from './EthioTechLogo';
 
+const CURRENT_YEAR = new Date().getFullYear();
+
 const Footer = () => {
   const [email, setEmail] = useState('');
   const [subscribed, setSubscribed] = useState(false);
@@ -103,7 +105,7 @@ const Footer = () => {
 
         <div className="d-flex flex-column flex-md-row justify-content-between align-items-center text-slate-500 text-xs">
           <div>
-            &copy; {new Date().getFullYear()} <strong className="text-slate-300">EthioTech Market</strong> &bull; All prices in Ethiopian Birr (ETB). Payments processed securely via Chapa.
+            &copy; {CURRENT_YEAR} <strong className="text-slate-300">EthioTech Market</strong> &bull; All prices in Ethiopian Birr (ETB). Payments processed securely via Chapa.
           </div>
           <div className="d-flex gap-3 mt-2 mt-md-0 text-slate-400">
             <Link to="/privacy" className="hover:text-slate-300 text-decoration-none">Privacy</Link>

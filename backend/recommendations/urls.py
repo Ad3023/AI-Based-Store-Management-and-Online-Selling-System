@@ -3,7 +3,8 @@ from .views import (
     PersonalizedRecommendationsView, SimilarProductsView,
     FrequentlyBoughtTogetherView, TrendingProductsView,
     CustomerSegmentationView, TrackActivityView,
-    AIAssistantView, AIProductComparisonView
+    AIAssistantView, AIProductComparisonView,
+    AIDemandForecastingView
 )
 
 urlpatterns = [
@@ -12,6 +13,7 @@ urlpatterns = [
     path('bought-together/<int:product_id>/', FrequentlyBoughtTogetherView.as_view(), name='bought-together-products'),
     path('trending/', TrendingProductsView.as_view(), name='trending-products'),
     path('segmentation/', CustomerSegmentationView.as_view(), name='customer-segmentation'),
+    path('forecasting/', AIDemandForecastingView.as_view(), name='ai-demand-forecasting'),
     path('track/', TrackActivityView.as_view(), name='track-activity'),
     path('assistant/', AIAssistantView.as_view(), name='ai-shopping-assistant'),
     path('compare/', AIProductComparisonView.as_view(), name='ai-product-comparison'),

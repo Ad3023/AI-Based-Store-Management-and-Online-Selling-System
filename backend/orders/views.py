@@ -20,7 +20,7 @@ from .serializers import (
 )
 from .chapa import ChapaService
 from products.models import Product, StockMovement
-from accounts.permissions import IsStoreManagerOrAdmin, IsNotAdmin
+from accounts.permissions import IsStoreManagerOrAdmin, IsNotAdmin, require_permission
 from accounts.models import User, AuditLog
 from notifications.models import Notification, create_order_notification
 from recommendations.models import CustomerActivity
@@ -271,20 +271,21 @@ class CheckoutView(APIView):
             event_key=f"order_placed:{order.order_number}"
         )
 
-        # Notify store managers and administrators
+        # Notify store managers, order managers, and administrators
         customer_display = request.user.get_full_name() or request.user.username
         staff_recipients = User.objects.filter(
-            Q(role__in=[User.Role.STORE_MANAGER, User.Role.ADMIN]) |
+            Q(role__in=[User.Role.STORE_MANAGER, User.Role.ADMIN, User.Role.ORDER_MANAGER]) |
             Q(is_superuser=True) |
             Q(is_staff=True)
         ).exclude(id=request.user.id).distinct()
 
         for staff_user in staff_recipients:
-            review_link = (
-                f"/admin/orders?order_id={order.id}"
-                if (staff_user.role == User.Role.ADMIN or staff_user.is_superuser)
-                else f"/manager/orders?order_id={order.id}"
-            )
+            if staff_user.role == User.Role.ORDER_MANAGER:
+                review_link = f"/order-manager/dashboard?order_id={order.id}"
+            elif staff_user.role == User.Role.ADMIN or staff_user.is_superuser:
+                review_link = f"/admin/orders?order_id={order.id}"
+            else:
+                review_link = f"/manager/orders?order_id={order.id}"
             Notification.objects.create(
                 user=staff_user,
                 title=f"New Order Placed: #{order.order_number}",
@@ -323,7 +324,11 @@ class OrderListView(generics.ListAPIView):
         date_to_param = self.request.query_params.get('date_to')
         search_param = self.request.query_params.get('search')
 
-        if user.role in [User.Role.STORE_MANAGER, User.Role.ADMIN] or user.is_superuser:
+        # RBAC Check: Customers view their own orders; staff requires 'orders.view'
+        if not user.is_customer():
+            if not (getattr(user, 'is_super_admin', False) or user.has_permission('orders.view')):
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("Access denied. Required permission: 'orders.view'.")
             qs = Order.objects.all().select_related('customer').prefetch_related('items__product', 'status_history')
         else:
             qs = Order.objects.filter(customer=user).select_related('customer').prefetch_related('items__product', 'status_history')
@@ -378,11 +383,22 @@ class OrderDetailView(generics.RetrieveAPIView):
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = OrderSerializer
 
-    def get_queryset(self):
+    def get_object(self):
+        obj = generics.get_object_or_404(Order, pk=self.kwargs['pk'])
         user = self.request.user
-        if user.role in [User.Role.STORE_MANAGER, User.Role.ADMIN] or user.is_superuser:
-            return Order.objects.all()
-        return Order.objects.filter(customer=user)
+
+        # Customer Data Isolation: Customer can strictly only view their own order
+        if user.is_customer():
+            if obj.customer != user:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("Access denied. You cannot view another customer's orders.")
+        else:
+            # Staff viewing order requires 'orders.view' or Super Admin
+            if not (getattr(user, 'is_super_admin', False) or user.has_permission('orders.view')):
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("Access denied. Required permission: 'orders.view'.")
+
+        return obj
 
 
 class PaymentEvidenceUploadView(APIView):
@@ -453,7 +469,7 @@ class PaymentEvidenceUploadView(APIView):
 
 
 class StoreManagerPaymentVerificationView(APIView):
-    permission_classes = [IsStoreManagerOrAdmin]
+    permission_classes = [require_permission('payments.verify')]
 
     def post(self, request, order_id):
         try:
@@ -524,7 +540,7 @@ class StoreManagerPaymentVerificationView(APIView):
 
 
 class StoreManagerOrderStatusUpdateView(APIView):
-    permission_classes = [IsStoreManagerOrAdmin]
+    permission_classes = [require_permission('orders.update')]
 
     def patch(self, request, order_id):
         try:
@@ -695,8 +711,14 @@ class ReceiptDetailView(APIView):
         except Order.DoesNotExist:
             return Response({'error': 'Order not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Ensure user is customer or manager/admin
-        if order.customer != request.user and not (request.user.role in [User.Role.STORE_MANAGER, User.Role.ADMIN] or request.user.is_superuser):
+        # Ensure user is order owner or has staff orders.view / payments.view permission
+        is_owner = (order.customer == request.user)
+        has_staff_access = (
+            getattr(request.user, 'is_super_admin', False) or
+            request.user.has_permission('orders.view') or
+            request.user.has_permission('payments.view')
+        )
+        if not is_owner and not has_staff_access:
             return Response({'error': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
 
         if not hasattr(order, 'receipt'):
@@ -969,7 +991,7 @@ class AdminVerifyPaymentView(APIView):
     Flags discrepancies in amount and currency instead of blindly accepting payment.
     Enforces atomic updates and auditable history.
     """
-    permission_classes = [IsStoreManagerOrAdmin]
+    permission_classes = [require_permission('payments.verify')]
 
     def post(self, request, order_id):
         try:
@@ -1246,7 +1268,9 @@ class WarrantyClaimListCreateView(APIView):
 
     def get(self, request):
         user = request.user
-        if user.role in [User.Role.STORE_MANAGER, User.Role.ADMIN] or user.is_superuser:
+        if not user.is_customer():
+            if not (getattr(user, 'is_super_admin', False) or user.has_permission('refunds.manage')):
+                return Response({'error': "Access denied. Required permission: 'refunds.manage'."}, status=status.HTTP_403_FORBIDDEN)
             claims = WarrantyClaim.objects.all()
             status_param = request.query_params.get('status')
             if status_param:
@@ -1299,8 +1323,8 @@ class WarrantyClaimDetailView(APIView):
         return Response(WarrantyClaimSerializer(claim).data)
 
     def patch(self, request, pk):
-        if not (request.user.role in [User.Role.STORE_MANAGER, User.Role.ADMIN] or request.user.is_superuser):
-            return Response({'error': 'Permission denied. Staff only.'}, status=status.HTTP_403_FORBIDDEN)
+        if not (getattr(request.user, 'is_super_admin', False) or request.user.has_permission('refunds.manage')):
+            return Response({'error': "Access denied. Required permission: 'refunds.manage'."}, status=status.HTTP_403_FORBIDDEN)
 
         try:
             claim = WarrantyClaim.objects.get(id=pk)

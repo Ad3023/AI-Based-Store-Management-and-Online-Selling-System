@@ -176,3 +176,19 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CHAPA_SECRET_KEY = os.getenv('CHAPA_SECRET_KEY', '')
 CHAPA_API_URL = os.getenv('CHAPA_API_URL', 'https://api.chapa.co/v1').rstrip('/')
 CHAPA_WEBHOOK_SECRET = os.getenv('CHAPA_WEBHOOK_SECRET', '')
+
+# Email Configuration (Environment-driven with development console fallback)
+EMAIL_BACKEND = os.getenv(
+    'EMAIL_BACKEND',
+    'django.core.mail.backends.console.EmailBackend' if DEBUG else 'django.core.mail.backends.smtp.EmailBackend'
+)
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() in ('true', '1', 't')
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'Ethio Tech Market <noreply@ethiotechmarket.com>')
+
+# Google OAuth Client Configuration
+GOOGLE_OAUTH_CLIENT_ID = os.getenv('GOOGLE_OAUTH_CLIENT_ID', '')
+

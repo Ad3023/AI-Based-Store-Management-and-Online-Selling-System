@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../../api';
 import { formatETB } from '../../utils/currency';
@@ -11,6 +11,15 @@ const ManagerInventoryPage = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
+
+  // Active View Tab: 'catalog' | 'forecasting' | 'movements'
+  const [activeTab, setActiveTab] = useState('catalog');
+
+  // AI Demand Forecasting State
+  const [forecastingData, setForecastingData] = useState(null);
+  const [forecastingLoading, setForecastingLoading] = useState(false);
+  const [forecastingDays, setForecastingDays] = useState(60);
+  const [riskFilter, setRiskFilter] = useState('ALL');
 
   // Stock Adjust Modal state
   const [adjustProduct, setAdjustProduct] = useState(null);
@@ -56,6 +65,42 @@ const ManagerInventoryPage = () => {
     }
   };
 
+  const fetchForecasting = useCallback(async (days = forecastingDays) => {
+    try {
+      setForecastingLoading(true);
+      const res = await api.get(`recommendations/forecasting/?days=${days}`);
+      setForecastingData(res.data);
+    } catch (err) {
+      console.warn("Inventory forecasting fetch error", err);
+    } finally {
+      setForecastingLoading(false);
+    }
+  }, [forecastingDays]);
+
+  const handleQuickRestockFromForecast = (forecastItem) => {
+    const matched = products.find((p) => p.id === forecastItem.product_id) || {
+      id: forecastItem.product_id,
+      name: forecastItem.name,
+      sku: forecastItem.sku,
+      stock: forecastItem.current_stock,
+    };
+    setAdjustProduct(matched);
+    setAdjustQuantity(forecastItem.suggested_reorder_qty || 10);
+    setMovementType('RESTOCK');
+    setReference(`AI Demand Run-Rate: Recommended restock (+${forecastItem.suggested_reorder_qty || 10})`);
+  };
+
+  const filteredForecasts = useMemo(() => {
+    if (!forecastingData?.forecasts) return [];
+    if (riskFilter === 'ALL') return forecastingData.forecasts;
+    if (riskFilter === 'WARNINGS') {
+      return forecastingData.forecasts.filter(
+        (f) => f.risk_level === 'CRITICAL_OUT_OF_STOCK' || f.risk_level === 'HIGH_STOCKOUT_RISK'
+      );
+    }
+    return forecastingData.forecasts.filter((f) => f.risk_level === riskFilter);
+  }, [forecastingData, riskFilter]);
+
   // Open Create Modal
   const handleOpenCreateModal = () => {
     setEditingProduct(null);
@@ -76,6 +121,7 @@ const ManagerInventoryPage = () => {
 
   useEffect(() => {
     fetchData();
+    fetchForecasting(forecastingDays);
   }, []);
 
   useEffect(() => {
@@ -256,152 +302,441 @@ const ManagerInventoryPage = () => {
         </div>
       </div>
 
-      {/* Products Stock Table */}
-      <div className="card border-0 shadow-sm rounded-4 p-4 mb-5">
-        <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-          <h5 className="fw-bold mb-0">Live Catalog & Stock Levels ({filteredProducts.length})</h5>
-          <div className="d-flex gap-2">
-            <input
-              type="text"
-              className="form-control form-control-sm rounded-pill px-3"
-              placeholder="Search product or SKU..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ width: '220px' }}
-            />
-            <select
-              className="form-select form-select-sm rounded-pill px-3"
-              value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
-              style={{ width: '180px' }}
-            >
-              <option value="">All Categories</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
-        </div>
+      {/* Navigation Tabs */}
+      <div className="d-flex flex-wrap gap-2 mb-4">
+        <button
+          type="button"
+          className={`btn btn-sm rounded-pill px-3.5 py-2 fw-bold d-inline-flex align-items-center gap-2 shadow-sm transition ${
+            activeTab === 'catalog' ? 'btn-primary' : 'btn-white bg-white text-slate-700 border border-slate-200'
+          }`}
+          onClick={() => setActiveTab('catalog')}
+        >
+          <i className="bi bi-boxes"></i>
+          <span>Live Catalog & Stock</span>
+          <span className={`badge rounded-pill px-2 ${activeTab === 'catalog' ? 'bg-white text-primary' : 'bg-slate-100 text-slate-700'}`}>
+            {filteredProducts.length}
+          </span>
+        </button>
 
-        <div className="table-responsive">
-          <table className="table align-middle mb-0">
-            <thead className="table-light text-uppercase small text-muted" style={{ fontSize: '0.72rem' }}>
-              <tr>
-                <th>SKU</th>
-                <th>Product Name</th>
-                <th>Category</th>
-                <th>Cost Price</th>
-                <th>Retail Price</th>
-                <th>Stock Level</th>
-                <th>Status</th>
-                <th className="text-end">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="small">
-              {filteredProducts.map((p) => (
-                <tr key={p.id}>
-                  <td><code>{p.sku}</code></td>
-                  <td>
-                    <div className="fw-semibold text-dark">{p.name}</div>
-                    {p.is_featured && <span className="badge bg-warning text-dark text-[10px]">Featured</span>}
-                    {!p.is_active && <span className="badge bg-secondary text-[10px] ms-1">Inactive</span>}
-                  </td>
-                  <td className="text-muted">{p.category_name}</td>
-                  <td>{formatETB(p.cost_price)}</td>
-                  <td className="fw-bold text-dark">
-                    {formatETB(p.price)}
-                    {p.has_promotion && p.current_price && Number(p.current_price) < Number(p.price) && (
-                      <div className="text-success text-[11px] fw-bold">
-                        Promo: {formatETB(p.current_price)} ({p.discount_label})
-                      </div>
-                    )}
-                  </td>
-                  <td>
-                    <span className="fw-bolder fs-6 text-dark">{p.stock}</span> units
-                  </td>
-                  <td>
-                    {p.stock === 0 ? (
-                      <span className="badge bg-danger">Out of Stock</span>
-                    ) : p.stock <= p.low_stock_threshold ? (
-                      <span className="badge bg-warning text-dark">Low Stock ({p.stock})</span>
-                    ) : (
-                      <span className="badge bg-success">In Stock</span>
-                    )}
-                  </td>
-                  <td className="text-end">
-                    <div className="d-flex justify-content-end gap-1">
-                      <button
-                        className="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1"
-                        onClick={() => handleOpenEditModal(p)}
-                        title="Edit Product Details & Pricing"
-                      >
-                        <i className="bi bi-pencil me-1"></i> Edit
-                      </button>
-                      <button
-                        className="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-1"
-                        onClick={() => setAdjustProduct(p)}
-                        title="Adjust Stock Level"
-                      >
-                        <i className="bi bi-box-arrow-in-down me-1"></i> Adjust
-                      </button>
-                      <button
-                        className="btn btn-sm btn-outline-danger rounded-pill px-2.5 py-1"
-                        onClick={() => handleDeleteProduct(p)}
-                        title="Permanently Delete Product"
-                      >
-                        <i className="bi bi-trash me-1"></i> Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <button
+          type="button"
+          className={`btn btn-sm rounded-pill px-3.5 py-2 fw-bold d-inline-flex align-items-center gap-2 shadow-sm transition ${
+            activeTab === 'forecasting' ? 'btn-primary' : 'btn-white bg-white text-slate-700 border border-slate-200'
+          }`}
+          onClick={() => {
+            setActiveTab('forecasting');
+            if (!forecastingData) fetchForecasting(forecastingDays);
+          }}
+        >
+          <i className="bi bi-lightning-charge-fill text-warning"></i>
+          <span>AI Demand Forecasting</span>
+          {forecastingData?.stockout_warnings_count > 0 && (
+            <span className="badge bg-danger text-white rounded-pill px-2">
+              {forecastingData.stockout_warnings_count} Alert{forecastingData.stockout_warnings_count === 1 ? '' : 's'}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          className={`btn btn-sm rounded-pill px-3.5 py-2 fw-bold d-inline-flex align-items-center gap-2 shadow-sm transition ${
+            activeTab === 'movements' ? 'btn-primary' : 'btn-white bg-white text-slate-700 border border-slate-200'
+          }`}
+          onClick={() => setActiveTab('movements')}
+        >
+          <i className="bi bi-clock-history"></i>
+          <span>Stock Movement Logs</span>
+          <span className={`badge rounded-pill px-2 ${activeTab === 'movements' ? 'bg-white text-primary' : 'bg-slate-100 text-slate-700'}`}>
+            {inventoryData?.recent_movements?.length || 0}
+          </span>
+        </button>
       </div>
 
-      {/* Stock Movements Audit Trail */}
-      <div className="card border-0 shadow-sm rounded-4 p-4">
-        <h5 className="fw-bold mb-3">Recent Stock Movements Audit Log</h5>
-        {inventoryData?.recent_movements?.length === 0 ? (
-          <div className="text-center py-4 text-muted small">No recent movements recorded.</div>
-        ) : (
+      {/* =========================================================================
+          TAB 1: LIVE CATALOG & STOCK
+          ========================================================================= */}
+      {activeTab === 'catalog' && (
+        <div className="card border-0 shadow-sm rounded-4 p-4 mb-5">
+          <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+            <h5 className="fw-bold mb-0">Live Catalog & Stock Levels ({filteredProducts.length})</h5>
+            <div className="d-flex gap-2">
+              <input
+                type="text"
+                className="form-control form-control-sm rounded-pill px-3"
+                placeholder="Search product or SKU..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{ width: '220px' }}
+              />
+              <select
+                className="form-select form-select-sm rounded-pill px-3"
+                value={filterCategory}
+                onChange={(e) => setFilterCategory(e.target.value)}
+                style={{ width: '180px' }}
+              >
+                <option value="">All Categories</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           <div className="table-responsive">
             <table className="table align-middle mb-0">
               <thead className="table-light text-uppercase small text-muted" style={{ fontSize: '0.72rem' }}>
                 <tr>
-                  <th>Timestamp</th>
-                  <th>Product</th>
-                  <th>Type</th>
-                  <th>Quantity Change</th>
-                  <th>Reference / Note</th>
-                  <th>Recorded By</th>
+                  <th>SKU</th>
+                  <th>Product Name</th>
+                  <th>Category</th>
+                  <th>Cost Price</th>
+                  <th>Retail Price</th>
+                  <th>Stock Level</th>
+                  <th>Status</th>
+                  <th className="text-end">Actions</th>
                 </tr>
               </thead>
               <tbody className="small">
-                {inventoryData?.recent_movements?.map((m) => (
-                  <tr key={m.id}>
-                    <td className="text-muted">{new Date(m.created_at).toLocaleString()}</td>
-                    <td className="fw-bold text-dark">{m.product_name}</td>
+                {filteredProducts.map((p) => (
+                  <tr key={p.id}>
+                    <td><code>{p.sku}</code></td>
                     <td>
-                      <span className={`badge ${
-                        m.movement_type === 'RESTOCK' ? 'bg-success' : m.movement_type === 'SALE' ? 'bg-primary' : 'bg-warning text-dark'
-                      }`}>
-                        {m.movement_type}
-                      </span>
+                      <div className="fw-semibold text-dark">{p.name}</div>
+                      {p.is_featured && <span className="badge bg-warning text-dark text-[10px]">Featured</span>}
+                      {!p.is_active && <span className="badge bg-secondary text-[10px] ms-1">Inactive</span>}
                     </td>
-                    <td className={`fw-bold ${m.quantity > 0 ? 'text-success' : 'text-danger'}`}>
-                      {m.quantity > 0 ? `+${m.quantity}` : m.quantity}
+                    <td className="text-muted">{p.category_name}</td>
+                    <td>{formatETB(p.cost_price)}</td>
+                    <td className="fw-bold text-dark">
+                      {formatETB(p.price)}
+                      {p.has_promotion && p.current_price && Number(p.current_price) < Number(p.price) && (
+                        <div className="text-success text-[11px] fw-bold">
+                          Promo: {formatETB(p.current_price)} ({p.discount_label})
+                        </div>
+                      )}
                     </td>
-                    <td className="text-muted">{m.reference || 'N/A'}</td>
-                    <td>{m.created_by_username || 'System'}</td>
+                    <td>
+                      <span className="fw-bolder fs-6 text-dark">{p.stock}</span> units
+                    </td>
+                    <td>
+                      {p.stock === 0 ? (
+                        <span className="badge bg-danger">Out of Stock</span>
+                      ) : p.stock <= p.low_stock_threshold ? (
+                        <span className="badge bg-warning text-dark">Low Stock ({p.stock})</span>
+                      ) : (
+                        <span className="badge bg-success">In Stock</span>
+                      )}
+                    </td>
+                    <td className="text-end">
+                      <div className="d-flex justify-content-end gap-1">
+                        <button
+                          className="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1"
+                          onClick={() => handleOpenEditModal(p)}
+                          title="Edit Product Details & Pricing"
+                        >
+                          <i className="bi bi-pencil me-1"></i> Edit
+                        </button>
+                        <button
+                          className="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-1"
+                          onClick={() => setAdjustProduct(p)}
+                          title="Adjust Stock Level"
+                        >
+                          <i className="bi bi-box-arrow-in-down me-1"></i> Adjust
+                        </button>
+                        <button
+                          className="btn btn-sm btn-outline-danger rounded-pill px-2.5 py-1"
+                          onClick={() => handleDeleteProduct(p)}
+                          title="Permanently Delete Product"
+                        >
+                          <i className="bi bi-trash me-1"></i> Delete
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          TAB 2: AI DEMAND FORECASTING & RESTOCK INTELLIGENCE
+          ========================================================================= */}
+      {activeTab === 'forecasting' && (
+        <div className="card border-0 shadow-sm rounded-4 p-4 mb-5 bg-white">
+          {/* Header & Controls */}
+          <div className="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+            <div>
+              <div className="d-flex align-items-center gap-2">
+                <span className="p-1.5 rounded-3 bg-amber-500 bg-opacity-10 text-amber-600">
+                  <i className="bi bi-cpu-fill fs-5"></i>
+                </span>
+                <h5 className="fw-bold mb-0 text-slate-900">AI Stock Intelligence & Demand Forecasting</h5>
+              </div>
+              <p className="text-muted small mb-0 mt-1">
+                Grounded moving sales velocity algorithm analyzes verified order histories to predict 30-day demand and prevent warehouse stockouts.
+              </p>
+            </div>
+
+            <div className="d-flex flex-wrap align-items-center gap-2">
+              <div className="d-flex align-items-center gap-1.5 bg-slate-50 border rounded-pill px-3 py-1 text-xs">
+                <span className="text-slate-500">History:</span>
+                <select
+                  className="form-select form-select-sm border-0 bg-transparent text-xs fw-bold p-0 pe-4 shadow-none"
+                  value={forecastingDays}
+                  onChange={(e) => {
+                    const days = Number(e.target.value);
+                    setForecastingDays(days);
+                    fetchForecasting(days);
+                  }}
+                  style={{ width: 'auto' }}
+                >
+                  <option value={30}>Past 30 Days</option>
+                  <option value={60}>Past 60 Days</option>
+                  <option value={90}>Past 90 Days</option>
+                </select>
+              </div>
+
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-secondary rounded-pill px-3 d-inline-flex align-items-center gap-1"
+                onClick={() => fetchForecasting(forecastingDays)}
+                disabled={forecastingLoading}
+              >
+                <i className={`bi bi-arrow-repeat ${forecastingLoading ? 'spin' : ''}`}></i>
+                <span>Refresh AI Model</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Alert if critical stockouts exist */}
+          {forecastingData?.stockout_warnings_count > 0 && (
+            <div className="alert alert-warning border-warning border-opacity-25 rounded-3 d-flex align-items-center gap-3 mb-4">
+              <i className="bi bi-exclamation-triangle-fill text-warning fs-4 shrink-0"></i>
+              <div className="text-xs">
+                <strong className="d-block text-slate-900 font-semibold mb-0.5">
+                  Restocking Action Required ({forecastingData.stockout_warnings_count} hardware items at high risk)
+                </strong>
+                Estimated days of stock are below 14 days or products are out of stock. Suggested reorder units have been computed automatically based on current sales velocity.
+              </div>
+            </div>
+          )}
+
+          {/* Forecasting KPI Summary Cards */}
+          <div className="row g-3 mb-4">
+            <div className="col-6 col-md-3">
+              <div className="p-3 rounded-3 bg-slate-50 border border-slate-200">
+                <span className="text-slate-500 text-[11px] text-uppercase fw-bold">Monitored Items</span>
+                <h4 className="fw-bolder text-slate-900 mb-0 mt-1">
+                  {forecastingData?.total_products_monitored || 0}
+                </h4>
+              </div>
+            </div>
+            <div className="col-6 col-md-3">
+              <div className="p-3 rounded-3 bg-red-50 border border-red-200">
+                <span className="text-red-700 text-[11px] text-uppercase fw-bold">Stockout Alerts</span>
+                <h4 className="fw-bolder text-red-600 mb-0 mt-1">
+                  {forecastingData?.stockout_warnings_count || 0}
+                </h4>
+              </div>
+            </div>
+            <div className="col-6 col-md-3">
+              <div className="p-3 rounded-3 bg-slate-50 border border-slate-200">
+                <span className="text-slate-500 text-[11px] text-uppercase fw-bold">Forecast Horizon</span>
+                <h4 className="fw-bolder text-primary mb-0 mt-1">
+                  30 Days
+                </h4>
+              </div>
+            </div>
+            <div className="col-6 col-md-3">
+              <div className="p-3 rounded-3 bg-slate-50 border border-slate-200">
+                <span className="text-slate-500 text-[11px] text-uppercase fw-bold">Analysis Window</span>
+                <h4 className="fw-bolder text-slate-900 mb-0 mt-1">
+                  {forecastingData?.analysis_window_days || forecastingDays} Days
+                </h4>
+              </div>
+            </div>
+          </div>
+
+          {/* Risk Level Filter Chips */}
+          <div className="d-flex flex-wrap gap-1.5 mb-3 align-items-center">
+            <span className="text-xs text-slate-500 me-1">Risk Filter:</span>
+            {[
+              { id: 'ALL', label: 'All Items' },
+              { id: 'WARNINGS', label: 'Urgent Alerts' },
+              { id: 'CRITICAL_OUT_OF_STOCK', label: 'Out of Stock' },
+              { id: 'HIGH_STOCKOUT_RISK', label: 'High Risk (<14d)' },
+              { id: 'MODERATE_REORDER_SOON', label: 'Reorder Soon' },
+              { id: 'ADEQUATE_STOCK', label: 'Stock Healthy' },
+            ].map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                className={`btn btn-xs rounded-pill px-2.5 py-1 ${
+                  riskFilter === f.id ? 'btn-primary' : 'btn-outline-secondary'
+                }`}
+                onClick={() => setRiskFilter(f.id)}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Forecasting Table */}
+          {forecastingLoading ? (
+            <div className="text-center py-5">
+              <div className="spinner-border text-primary spinner-border-sm" role="status"></div>
+              <p className="text-muted small mt-2">Computing 30-day demand forecast from PostgreSQL orders...</p>
+            </div>
+          ) : filteredForecasts.length === 0 ? (
+            <div className="text-center py-5 text-slate-400 text-xs">
+              <i className="bi bi-check-circle-fill text-success fs-3 d-block mb-1"></i>
+              No products match the selected risk filter.
+            </div>
+          ) : (
+            <div className="table-responsive">
+              <table className="table align-middle text-xs mb-0">
+                <thead className="table-light text-slate-500 text-uppercase" style={{ fontSize: '0.7rem' }}>
+                  <tr>
+                    <th>Product & SKU</th>
+                    <th>Category</th>
+                    <th className="text-center">Current Stock</th>
+                    <th className="text-center">Sales Velocity</th>
+                    <th className="text-center">30-Day Demand</th>
+                    <th className="text-center">Days of Stock</th>
+                    <th className="text-center">Urgency</th>
+                    <th className="text-center">Suggested Reorder</th>
+                    <th className="text-end">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredForecasts.map((f) => (
+                    <tr key={f.product_id}>
+                      <td>
+                        <div className="fw-bold text-slate-900">{f.name}</div>
+                        <code className="text-[10px] text-slate-400">{f.sku}</code>
+                      </td>
+                      <td className="text-slate-500">{f.category}</td>
+                      <td className="text-center">
+                        <span className={`fw-bold ${f.current_stock === 0 ? 'text-danger' : f.current_stock <= f.low_stock_threshold ? 'text-warning font-semibold' : 'text-slate-900'}`}>
+                          {f.current_stock}
+                        </span>
+                        <span className="text-[10px] text-slate-400 d-block">Threshold: {f.low_stock_threshold}</span>
+                      </td>
+                      <td className="text-center">
+                        <span className="fw-semibold text-slate-700">{f.daily_sales_velocity}</span>
+                        <span className="text-[10px] text-slate-400 d-block">units/day</span>
+                      </td>
+                      <td className="text-center">
+                        <span className="fw-bold text-primary">{f.predicted_30d_demand}</span>
+                        <span className="text-[10px] text-slate-400 d-block">predicted</span>
+                      </td>
+                      <td className="text-center">
+                        {f.estimated_days_of_stock >= 999 ? (
+                          <span className="text-slate-400">&infin;</span>
+                        ) : (
+                          <span className={`fw-bold ${f.estimated_days_of_stock < 14 ? 'text-danger' : f.estimated_days_of_stock < 30 ? 'text-warning' : 'text-success'}`}>
+                            ~{Math.round(f.estimated_days_of_stock)} days
+                          </span>
+                        )}
+                      </td>
+                      <td className="text-center">
+                        {f.risk_level === 'CRITICAL_OUT_OF_STOCK' && (
+                          <span className="badge bg-danger text-white text-[10px] px-2 py-0.5">
+                            Out of Stock
+                          </span>
+                        )}
+                        {f.risk_level === 'HIGH_STOCKOUT_RISK' && (
+                          <span className="badge bg-danger bg-opacity-10 text-danger text-[10px] px-2 py-0.5">
+                            High Risk
+                          </span>
+                        )}
+                        {f.risk_level === 'MODERATE_REORDER_SOON' && (
+                          <span className="badge bg-warning bg-opacity-15 text-warning text-[10px] px-2 py-0.5">
+                            Reorder Soon
+                          </span>
+                        )}
+                        {f.risk_level === 'ADEQUATE_STOCK' && (
+                          <span className="badge bg-success bg-opacity-10 text-success text-[10px] px-2 py-0.5">
+                            Healthy
+                          </span>
+                        )}
+                      </td>
+                      <td className="text-center">
+                        {f.suggested_reorder_qty > 0 ? (
+                          <span className="badge bg-primary bg-opacity-10 text-primary fw-bold text-[11px] px-2 py-0.5">
+                            +{f.suggested_reorder_qty} units
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">&mdash;</span>
+                        )}
+                      </td>
+                      <td className="text-end">
+                        <button
+                          type="button"
+                          className="btn btn-xs btn-primary-gradient rounded-pill px-2.5 py-1 fw-bold shadow-sm"
+                          onClick={() => handleQuickRestockFromForecast(f)}
+                          title="Restock this item"
+                        >
+                          <i className="bi bi-box-arrow-in-down me-1"></i> Restock
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* =========================================================================
+          TAB 3: STOCK MOVEMENTS AUDIT TRAIL
+          ========================================================================= */}
+      {activeTab === 'movements' && (
+        <div className="card border-0 shadow-sm rounded-4 p-4">
+          <h5 className="fw-bold mb-3">Recent Stock Movements Audit Log</h5>
+          {inventoryData?.recent_movements?.length === 0 ? (
+            <div className="text-center py-4 text-muted small">No recent movements recorded.</div>
+          ) : (
+            <div className="table-responsive">
+              <table className="table align-middle mb-0">
+                <thead className="table-light text-uppercase small text-muted" style={{ fontSize: '0.72rem' }}>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Product</th>
+                    <th>Type</th>
+                    <th>Quantity Change</th>
+                    <th>Reference / Note</th>
+                    <th>Recorded By</th>
+                  </tr>
+                </thead>
+                <tbody className="small">
+                  {inventoryData?.recent_movements?.map((m) => (
+                    <tr key={m.id}>
+                      <td className="text-muted">{new Date(m.created_at).toLocaleString()}</td>
+                      <td className="fw-bold text-dark">{m.product_name}</td>
+                      <td>
+                        <span className={`badge ${
+                          m.movement_type === 'RESTOCK' ? 'bg-success' : m.movement_type === 'SALE' ? 'bg-primary' : 'bg-warning text-dark'
+                        }`}>
+                          {m.movement_type}
+                        </span>
+                      </td>
+                      <td className={`fw-bold ${m.quantity > 0 ? 'text-success' : 'text-danger'}`}>
+                        {m.quantity > 0 ? `+${m.quantity}` : m.quantity}
+                      </td>
+                      <td className="text-muted">{m.reference || 'N/A'}</td>
+                      <td>{m.created_by_username || 'System'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Modal: Create / Edit Product */}
       {showProductModal && (

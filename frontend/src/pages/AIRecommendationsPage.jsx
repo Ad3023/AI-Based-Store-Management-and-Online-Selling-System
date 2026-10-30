@@ -3,22 +3,17 @@ import { Link } from 'react-router-dom';
 import api from '../api';
 import ProductCard from '../components/ProductCard';
 import { useAuth } from '../context/AuthContext';
-
 const AIRecommendationsPage = () => {
   const { user } = useAuth();
   const [personalized, setPersonalized] = useState([]);
   const [trending, setTrending] = useState([]);
   const [loading, setLoading] = useState(true);
-
   useEffect(() => {
     const fetchRecommendations = async () => {
       try {
         setLoading(true);
-        // Personalized
         const pRes = await api.get('recommendations/personalized/?limit=8');
         setPersonalized(pRes.data.results || []);
-
-        // Trending
         const tRes = await api.get('recommendations/trending/?limit=4');
         setTrending(tRes.data.results || []);
       } catch (err) {
@@ -29,7 +24,6 @@ const AIRecommendationsPage = () => {
     };
     fetchRecommendations();
   }, [user]);
-
   return (
     <div className="container py-4 pb-5">
       {/* AI Recommendation Hero Banner matching Panel 5 Concept */}

@@ -162,18 +162,81 @@ class Product(models.Model):
             self.sku = f"SKU-{uuid.uuid4().hex[:8].upper()}"
         super().save(*args, **kwargs)
 
-    def get_current_promotion(self):
-        now = timezone.now()
-        # Direct product promotion has priority
-        promo = self.promotions.filter(is_active=True, start_date__lte=now, end_date__gte=now).first()
-        if promo:
-            return promo
-        # Category-level promotion
-        promo = self.category.promotions.filter(is_active=True, start_date__lte=now, end_date__gte=now).first()
-        if promo:
-            return promo
-        # Store-wide promotion (apply_to_all=True)
-        return Promotion.objects.filter(apply_to_all=True, is_active=True, start_date__lte=now, end_date__gte=now).first()
+    def get_eligible_promotions(self, at_time=None):
+        """
+        Returns all active promotions applicable to this product at a given time:
+        1. Directly attached to this product.
+        2. Attached to this product's category.
+        3. Store-wide promotions (apply_to_all=True).
+        """
+        from django.utils import timezone
+        now = at_time or timezone.now()
+
+        direct_promos = list(self.promotions.filter(
+            is_active=True, start_date__lte=now, end_date__gte=now
+        ))
+        cat_promos = list(self.category.promotions.filter(
+            is_active=True, start_date__lte=now, end_date__gte=now
+        ))
+        store_promos = list(Promotion.objects.filter(
+            apply_to_all=True, is_active=True, start_date__lte=now, end_date__gte=now
+        ))
+
+        seen_ids = set()
+        unique_promos = []
+        for p in direct_promos + cat_promos + store_promos:
+            if p.id not in seen_ids:
+                seen_ids.add(p.id)
+                unique_promos.append(p)
+        return unique_promos
+
+    def get_current_promotion(self, at_time=None):
+        """
+        Consistent conflict resolution rule:
+        Apply the single promotion that yields the highest discount amount on this product.
+        Promotions are never stacked.
+        In case of a tie in monetary discount amount, preference order is:
+        1. Product-specific promotion
+        2. Category-level promotion
+        3. Store-wide promotion
+        4. More recently created promotion
+        """
+        eligible = self.get_eligible_promotions(at_time=at_time)
+        if not eligible:
+            return None
+
+        from decimal import Decimal
+        best_promo = None
+        max_discount = Decimal('0.00')
+
+        for promo in eligible:
+            if promo.discount_type == Promotion.DiscountType.PERCENTAGE:
+                discount = (self.price * promo.discount_value) / Decimal('100.0')
+            elif promo.discount_type == Promotion.DiscountType.FIXED:
+                discount = min(promo.discount_value, self.price)
+            else:
+                discount = Decimal('0.00')
+
+            discount = max(discount, Decimal('0.00'))
+
+            if discount > max_discount:
+                max_discount = discount
+                best_promo = promo
+            elif discount == max_discount and best_promo is not None and discount > Decimal('0.00'):
+                # Tie-breaker: Product-specific > Category-level > Store-wide
+                promo_is_direct = self.promotions.filter(id=promo.id).exists()
+                best_is_direct = self.promotions.filter(id=best_promo.id).exists()
+                if promo_is_direct and not best_is_direct:
+                    best_promo = promo
+                elif not promo_is_direct and not best_is_direct:
+                    promo_is_cat = self.category.promotions.filter(id=promo.id).exists()
+                    best_is_cat = self.category.promotions.filter(id=best_promo.id).exists()
+                    if promo_is_cat and not best_is_cat:
+                        best_promo = promo
+
+        if max_discount > Decimal('0.00'):
+            return best_promo
+        return None
 
     @property
     def current_price(self):

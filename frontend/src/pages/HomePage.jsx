@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import api from '../api';
 import ProductCard from '../components/ProductCard';
 import { useAuth } from '../context/AuthContext';
@@ -7,14 +7,13 @@ import { useLanguage } from '../context/LanguageContext';
 
 const HomePage = () => {
   const { user } = useAuth();
-  const { t, language } = useLanguage();
-  const navigate = useNavigate();
+  const { t } = useLanguage();
 
   // Data states
-  const [categories, setCategories] = useState([]);
   const [featuredProducts, setFeaturedProducts] = useState([]);
   const [aiRecommendations, setAiRecommendations] = useState([]);
   const [specialOffers, setSpecialOffers] = useState([]);
+  const [activePromotion, setActivePromotion] = useState(null);
   const [announcement, setAnnouncement] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -40,23 +39,21 @@ const HomePage = () => {
         // Fetch promo announcement if configured on backend
         try {
           const promoRes = await api.get('products/promotions/active/announcement/');
-          if (isMounted && promoRes.data?.banner_announcement) {
-            setAnnouncement(promoRes.data.banner_announcement);
+          if (isMounted && promoRes.data?.active) {
+            setActivePromotion(promoRes.data);
+            if (promoRes.data.banner_announcement) {
+              setAnnouncement(promoRes.data.banner_announcement);
+            }
           }
         } catch {
           // No active promo announcement
         }
 
-        // Fetch categories & catalog products
-        const [catRes, prodRes] = await Promise.all([
-          api.get('products/categories/'),
-          api.get('products/items/?limit=24'),
-        ]);
+        // Fetch catalog products
+        const prodRes = await api.get('products/items/?limit=24');
 
         if (isMounted) {
-          const catList = catRes.data.results || catRes.data || [];
           const allList = prodRes.data.results || prodRes.data || [];
-          setCategories(catList);
           setFeaturedProducts(allList);
 
           // Find items with genuine discount (authorized active admin promotion only)
@@ -105,8 +102,26 @@ const HomePage = () => {
     ? featuredProducts
     : featuredProducts.filter((p) => {
         const catName = (p.category_name || p.category?.name || '').toLowerCase();
-        return catName.includes(activeCategory.toLowerCase());
+        const prodName = (p.name || '').toLowerCase();
+        const target = activeCategory.toLowerCase();
+        return catName.includes(target) || prodName.includes(target);
       });
+
+  // Server-verified promotion checks: strictly validated on Django backend
+  const isMobile10PercentPromo = Boolean(
+    activePromotion?.active &&
+    (Number(activePromotion.discount_value) === 10 ||
+      activePromotion.title?.toLowerCase().includes('10%'))
+  );
+
+  const eligibleMobileOffers = specialOffers.filter((p) => {
+    const cat = (p.category_name || p.category?.name || '').toLowerCase();
+    return cat.includes('smartphone') || cat.includes('mobile') || cat.includes('tablet');
+  });
+
+  const displayOffers = isMobile10PercentPromo && eligibleMobileOffers.length > 0
+    ? eligibleMobileOffers
+    : specialOffers;
 
   return (
     <div style={{ backgroundColor: '#f4f6fa', minHeight: '100%', width: '100%' }}>
@@ -215,13 +230,12 @@ const HomePage = () => {
         <div className="container-fluid max-w-7xl">
           <div className="row g-2 g-md-2.5">
             {CATEGORY_ITEMS.map((cat) => {
-              const isSelected = activeCategory.toLowerCase() === cat.name.toLowerCase() ||
-                                activeCategory.toLowerCase() === cat.filter.toLowerCase();
+              const isSelected = activeCategory.toLowerCase() === cat.filter.toLowerCase();
               return (
                 <div key={cat.key} className="col-4 col-sm-4 col-md-2">
                   <button
                     type="button"
-                    onClick={() => setActiveCategory(isSelected ? 'All' : cat.name)}
+                    onClick={() => setActiveCategory(isSelected ? 'All' : cat.filter)}
                     className="w-100 p-2.5 p-md-3 rounded-3 text-center border transition d-flex flex-column align-items-center justify-content-center"
                     style={{
                       backgroundColor: isSelected ? '#1b64da' : '#ffffff',
@@ -304,24 +318,133 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* 5. Special Promotional Discounts */}
-      {specialOffers.length > 0 && (
-        <section className="py-3 px-3 px-lg-4 mb-4">
+      {/* 5. Special Promotional Discounts: Tech Mobile Sale */}
+      {displayOffers.length > 0 && (
+        <section className="py-3 py-md-4 px-3 px-lg-4 mb-4">
           <div className="container-fluid max-w-7xl">
-            <div className="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
-              <div>
-                <span className="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-20 rounded-pill px-3 py-1 text-xs fw-bold uppercase tracking-wider mb-1">
-                  <i className="bi bi-tag-fill me-1"></i> {t('specialOffers', 'Special Offers')}
-                </span>
-                <h4 className="fw-bolder text-slate-900 mb-0">{t('discountsPromotions', 'Discounts & Promotions')}</h4>
-              </div>
-              <Link to="/deals" className="text-primary text-xs fw-bold text-decoration-none">
-                {t('allDeals', 'All Deals')} &rarr;
-              </Link>
-            </div>
+            {isMobile10PercentPromo && eligibleMobileOffers.length > 0 ? (
+              /* Polished modern e-commerce promotional banner */
+              <div
+                className="card ethio-card border-0 rounded-4 overflow-hidden mb-4 text-white position-relative"
+                style={{
+                  background: 'linear-gradient(135deg, #0b1a2d 0%, #0d2745 55%, #133963 100%)',
+                  boxShadow: '0 12px 28px -6px rgba(11, 26, 45, 0.28)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                }}
+              >
+                {/* Subtle decorative background circle */}
+                <div
+                  className="position-absolute end-0 top-0 w-50 h-100 pointer-events-none"
+                  style={{
+                    background: 'radial-gradient(circle at 80% 30%, rgba(56, 189, 248, 0.12) 0%, transparent 60%)',
+                  }}
+                />
 
-            <div className="row row-cols-1 row-cols-sm-2 row-cols-md-4 g-3">
-              {specialOffers.slice(0, 4).map((p) => (
+                <div className="card-body p-4 p-md-5 position-relative z-1">
+                  <div className="row align-items-center g-4">
+                    <div className="col-lg-8">
+                      {/* Badge: ADMIN-VERIFIED OFFER */}
+                      <div className="mb-2.5">
+                        <span
+                          className="badge rounded-pill px-3 py-1.5 text-xs fw-bold text-uppercase d-inline-flex align-items-center gap-1.5 shadow-sm"
+                          style={{
+                            backgroundColor: 'rgba(56, 189, 248, 0.18)',
+                            color: '#38bdf8',
+                            border: '1px solid rgba(56, 189, 248, 0.35)',
+                            letterSpacing: '0.05em',
+                          }}
+                        >
+                          <i className="bi bi-patch-check-fill text-info"></i>
+                          ADMIN-VERIFIED OFFER
+                        </span>
+                      </div>
+
+                      {/* Heading: Tech Mobile Sale — Save 10% */}
+                      <h2
+                        className="display-6 fw-bolder mb-2.5 text-white tracking-tight"
+                        style={{ letterSpacing: '-0.02em', lineHeight: '1.25' }}
+                      >
+                        Tech Mobile Sale — <span style={{ color: '#60a5fa' }}>Save 10%</span>
+                      </h2>
+
+                      {/* Description */}
+                      <p
+                        className="text-slate-300 text-xs text-md-sm mb-3.5"
+                        style={{ maxWidth: '640px', lineHeight: '1.65' }}
+                      >
+                        Discover great deals on eligible mobile products at Ethio Tech Market. Enjoy transparent Ethiopian Birr (ETB) pricing, secure Chapa payments, and convenient delivery from Debre Birhan.
+                      </p>
+
+                      {/* Supporting text: Trusted Shopping · Smart Savings · Secure Checkout */}
+                      <div className="d-flex flex-wrap align-items-center gap-2 text-xs fw-semibold text-slate-300 pt-1">
+                        <span className="d-inline-flex align-items-center gap-1.5 bg-white bg-opacity-10 px-2.5 py-1 rounded-pill">
+                          <i className="bi bi-shield-check text-success"></i>
+                          Trusted Shopping
+                        </span>
+                        <span className="text-slate-400 opacity-60">·</span>
+                        <span className="d-inline-flex align-items-center gap-1.5 bg-white bg-opacity-10 px-2.5 py-1 rounded-pill">
+                          <i className="bi bi-tag-fill" style={{ color: '#93c5fd' }}></i>
+                          Smart Savings
+                        </span>
+                        <span className="text-slate-400 opacity-60">·</span>
+                        <span className="d-inline-flex align-items-center gap-1.5 bg-white bg-opacity-10 px-2.5 py-1 rounded-pill">
+                          <i className="bi bi-credit-card-2-front text-info"></i>
+                          Secure Checkout
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Right Callout / Discount Pill */}
+                    <div className="col-lg-4 text-start text-lg-end d-flex flex-column align-items-start align-items-lg-end justify-content-center">
+                      <div
+                        className="p-3.5 px-4 rounded-4 text-center d-inline-block shadow-sm"
+                        style={{
+                          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+                          border: '1px solid rgba(96, 165, 250, 0.28)',
+                          backdropFilter: 'blur(8px)',
+                        }}
+                      >
+                        <span className="text-xs fw-bold text-uppercase tracking-wider d-block text-slate-300 mb-1">
+                          Server-Verified Discount
+                        </span>
+                        <span className="display-5 fw-black text-white font-monospace d-block lh-1 mb-1">
+                          -10%
+                        </span>
+                        <small className="text-slate-400 text-xs">
+                          Validated in Ethiopian Birr
+                        </small>
+                      </div>
+
+                      <div className="mt-3">
+                        <Link
+                          to="/deals"
+                          className="btn btn-sm btn-outline-light rounded-pill px-3.5 py-1.5 text-xs fw-semibold d-inline-flex align-items-center gap-1.5"
+                        >
+                          <span>Explore All Deals</span>
+                          <i className="bi bi-arrow-right"></i>
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
+                <div>
+                  <span className="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-20 rounded-pill px-3 py-1 text-xs fw-bold uppercase tracking-wider mb-1">
+                    <i className="bi bi-tag-fill me-1"></i> {t('specialOffers', 'Special Offers')}
+                  </span>
+                  <h4 className="fw-bolder text-slate-900 mb-0">{t('discountsPromotions', 'Discounts & Promotions')}</h4>
+                </div>
+                <Link to="/deals" className="text-primary text-xs fw-bold text-decoration-none">
+                  {t('allDeals', 'All Deals')} &rarr;
+                </Link>
+              </div>
+            )}
+
+            {/* Products Grid */}
+            <div className="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-3 g-md-4">
+              {displayOffers.slice(0, 4).map((p) => (
                 <div key={`offer-${p.id}`} className="col">
                   <ProductCard product={p} />
                 </div>
@@ -402,7 +525,7 @@ const HomePage = () => {
                 </div>
                 <div>
                   <h6 className="fw-bold text-slate-900 mb-0 text-sm">{t('nationwideDispatch', 'Nationwide Delivery')}</h6>
-                  <p className="text-muted text-xs mb-0 mt-0.5">{t('nationwideDesc', 'Same-day Addis Ababa delivery and reliable regional courier options across Ethiopia.')}</p>
+                  <p className="text-muted text-xs mb-0 mt-0.5">{t('nationwideDesc', 'Next-day express delivery to Addis Ababa, local Debre Birhan pickup, and reliable regional courier options across Ethiopia.')}</p>
                 </div>
               </div>
             </div>

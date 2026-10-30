@@ -7,7 +7,7 @@ from .serializers import (
     CategorySerializer, ProductSerializer,
     ProductReviewSerializer, StockMovementSerializer
 )
-from accounts.permissions import IsStoreManagerOrAdmin
+from accounts.permissions import IsStoreManagerOrAdmin, require_permission
 from recommendations.models import CustomerActivity
 
 
@@ -17,7 +17,7 @@ class CategoryListCreateView(generics.ListCreateAPIView):
 
     def get_permissions(self):
         if self.request.method == 'POST':
-            return [IsStoreManagerOrAdmin()]
+            return [require_permission('categories.manage')()]
         return [permissions.AllowAny()]
 
 
@@ -27,7 +27,7 @@ class CategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_permissions(self):
         if self.request.method in ['PUT', 'PATCH', 'DELETE']:
-            return [IsStoreManagerOrAdmin()]
+            return [require_permission('categories.manage')()]
         return [permissions.AllowAny()]
 
 
@@ -36,13 +36,12 @@ class ProductListView(generics.ListCreateAPIView):
 
     def get_permissions(self):
         if self.request.method == 'POST':
-            return [IsStoreManagerOrAdmin()]
+            return [require_permission('products.create')()]
         return [permissions.AllowAny()]
 
     def get_queryset(self):
-        # Store managers see all products, customers see only active products
         user = self.request.user
-        if user.is_authenticated and (getattr(user, 'is_store_manager', lambda: False)() or getattr(user, 'is_admin', lambda: False)()):
+        if user.is_authenticated and (getattr(user, 'is_super_admin', False) or user.has_permission('products.view') or getattr(user, 'is_store_manager', lambda: False)()):
             queryset = Product.objects.all()
         else:
             queryset = Product.objects.filter(is_active=True)
@@ -127,8 +126,10 @@ class ProductDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = ProductSerializer
 
     def get_permissions(self):
-        if self.request.method in ['PUT', 'PATCH', 'DELETE']:
-            return [IsStoreManagerOrAdmin()]
+        if self.request.method in ['PUT', 'PATCH']:
+            return [require_permission('products.edit')()]
+        elif self.request.method == 'DELETE':
+            return [require_permission('products.delete')()]
         return [permissions.AllowAny()]
 
     def retrieve(self, request, *args, **kwargs):
@@ -209,7 +210,7 @@ class ProductReviewCreateView(APIView):
 
 
 class ProductReviewModerationView(APIView):
-    permission_classes = [IsStoreManagerOrAdmin]
+    permission_classes = [require_permission('products.edit')]
 
     def patch(self, request, review_id):
         try:
@@ -233,7 +234,10 @@ class ProductReviewModerationView(APIView):
 
 
 class InventoryManagementView(APIView):
-    permission_classes = [IsStoreManagerOrAdmin]
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [require_permission('inventory.manage')()]
+        return [require_permission('products.view')()]
 
     def get(self, request):
         products = Product.objects.all().order_by('stock')
@@ -289,7 +293,7 @@ class PromotionListCreateView(generics.ListCreateAPIView):
 
     def get_permissions(self):
         if self.request.method == 'POST':
-            return [IsStoreManagerOrAdmin()]
+            return [require_permission('promotions.manage')()]
         return [permissions.AllowAny()]
 
     def get_queryset(self):
@@ -322,7 +326,10 @@ class PromotionListCreateView(generics.ListCreateAPIView):
         return queryset
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        promo = serializer.save(created_by=self.request.user)
+        if promo.apply_to_all:
+            promo.products.clear()
+            promo.categories.clear()
 
 
 class PromotionDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -330,7 +337,36 @@ class PromotionDetailView(generics.RetrieveUpdateDestroyAPIView):
     from .serializers import PromotionSerializer
     queryset = Promotion.objects.all()
     serializer_class = PromotionSerializer
-    permission_classes = [IsStoreManagerOrAdmin]
+
+    def get_permissions(self):
+        if self.request.method in ['PUT', 'PATCH', 'DELETE']:
+            return [require_permission('promotions.manage')()]
+        return [permissions.AllowAny()]
+
+    def perform_update(self, serializer):
+        promo = serializer.save()
+        if promo.apply_to_all:
+            promo.products.clear()
+            promo.categories.clear()
+
+
+def _clean_promo_string(val):
+    if not val:
+        return ''
+    import html
+    import re
+    text = html.unescape(val)
+    text = re.sub(r'&#x20;', ' ', text, flags=re.IGNORECASE)
+    text = re.sub(r'&#xA0;', ' ', text, flags=re.IGNORECASE)
+    text = re.sub(r'&#160;', ' ', text, flags=re.IGNORECASE)
+    text = re.sub(r'&#32;', ' ', text, flags=re.IGNORECASE)
+    text = re.sub(r'&nbsp;', ' ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+    text = re.sub(r'__(.*?)__', r'\1', text)
+    text = re.sub(r'`(.*?)`', r'\1', text)
+    text = re.sub(r'^#+\s*', '', text)
+    text = text.replace('\ufffd', '—')
+    return re.sub(r'\s+', ' ', text).strip()
 
 
 class ActivePromotionAnnouncementView(APIView):
@@ -355,15 +391,22 @@ class ActivePromotionAnnouncementView(APIView):
             ).first()
 
         if promo:
+            if promo.discount_type == Promotion.DiscountType.PERCENTAGE:
+                discount_label = f"{int(promo.discount_value)}% OFF"
+            else:
+                discount_label = f"ETB {promo.discount_value} OFF"
+
             return Response({
                 'active': True,
                 'id': promo.id,
-                'title': promo.title,
-                'name': promo.title,
-                'description': promo.description or '',
-                'banner_announcement': promo.banner_announcement or f"Special Promotion: {promo.title}! Limited-time genuine store discounts.",
+                'title': _clean_promo_string(promo.title),
+                'name': _clean_promo_string(promo.title),
+                'description': _clean_promo_string(promo.description or ''),
+                'banner_announcement': _clean_promo_string(promo.banner_announcement or f"Special Promotion: {promo.title}! Limited-time genuine store discounts."),
                 'discount_type': promo.discount_type,
                 'discount_value': str(promo.discount_value),
+                'discount_label': discount_label,
+                'status_label': 'Active Promotion',
                 'apply_to_all': promo.apply_to_all,
                 'start_date': promo.start_date,
                 'end_date': promo.end_date,
@@ -379,7 +422,7 @@ class WarrantyPolicyListCreateView(generics.ListCreateAPIView):
 
     def get_permissions(self):
         if self.request.method == 'POST':
-            return [IsStoreManagerOrAdmin()]
+            return [require_permission('refunds.manage')()]
         return [permissions.AllowAny()]
 
 
@@ -388,7 +431,7 @@ class WarrantyPolicyDetailView(generics.RetrieveUpdateDestroyAPIView):
     from .serializers import WarrantyPolicySerializer
     queryset = WarrantyPolicy.objects.all()
     serializer_class = WarrantyPolicySerializer
-    permission_classes = [IsStoreManagerOrAdmin]
+    permission_classes = [require_permission('refunds.manage')]
 
 
 class CustomerFeedbackListCreateView(generics.ListCreateAPIView):

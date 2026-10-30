@@ -71,20 +71,20 @@ const CheckoutPage = () => {
 
   const subtotal = Number(cart.total_price || 0);
 
-  // Delivery methods, rates and estimates
+  // Delivery methods, rates and estimates dispatched from Debre Birhan, Amhara, Ethiopia
   const DELIVERY_OPTIONS = {
     standard: {
-      name: 'Standard City Dispatch',
+      name: 'Debre Birhan Local Hub Dispatch',
       cost: 50.0,
-      estimate: '1–2 business days',
+      estimate: 'Same-day / 1 business day',
     },
     express: {
-      name: 'Addis Ababa Express',
+      name: 'Addis Ababa & Express Dispatch',
       cost: 100.0,
-      estimate: 'Same-day delivery',
+      estimate: '1–2 business days',
     },
     regional: {
-      name: 'Regional Courier',
+      name: 'Nationwide Ethiopian Courier',
       cost: 150.0,
       estimate: '2–3 business days',
     },
@@ -251,6 +251,7 @@ const CheckoutPage = () => {
                     onChange={handleChange}
                     required
                   >
+                    <option value="Debre Birhan">Debre Birhan (Central Hub)</option>
                     <option value="Addis Ababa">Addis Ababa</option>
                     <option value="Hawassa">Hawassa</option>
                     <option value="Adama">Adama (Nazret)</option>
@@ -261,6 +262,10 @@ const CheckoutPage = () => {
                     <option value="Bishoftu">Bishoftu</option>
                   </select>
                 </div>
+              </div>
+              <div className="mb-2.5 p-2 rounded-2 bg-blue-50/60 border border-blue-200/50 text-[11px] text-blue-900 d-flex align-items-center gap-1.5">
+                <i className="bi bi-geo-fill text-primary"></i>
+                <span>Dispatched directly from Ethio Tech Market Central Warehouse in <strong>Debre Birhan, Amhara, Ethiopia</strong>.</span>
               </div>
 
               <div className="mb-2.5">

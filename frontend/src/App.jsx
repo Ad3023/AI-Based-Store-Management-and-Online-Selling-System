@@ -8,7 +8,7 @@ import { CompareProvider } from './context/CompareContext';
 import { LanguageProvider } from './context/LanguageContext';
 
 // Route Guards
-import { ProtectedRoute, ManagerRoute, AdminRoute } from './components/ProtectedRoute';
+import { ProtectedRoute, ManagerRoute, AdminRoute, PermissionRoute, OrderManagerRoute } from './components/ProtectedRoute';
 
 // Shared Components
 import Navbar from './components/Navbar';
@@ -59,6 +59,7 @@ import ManagerWarrantyPage from './pages/manager/ManagerWarrantyPage';
 import ManagerFeedbackPage from './pages/manager/ManagerFeedbackPage';
 import ManagerPaymentsPage from './pages/manager/ManagerPaymentsPage';
 import ManagerCategoriesPage from './pages/manager/ManagerCategoriesPage';
+import OrderManagerDashboardPage from './pages/manager/OrderManagerDashboardPage';
 
 // Layout with Navbar and Footer for public & customer pages
 const CustomerStoreLayout = () => {
@@ -198,17 +199,17 @@ function App() {
                 >
                   <Route index element={<ManagerOverviewPage />} />
                   <Route path="dashboard" element={<ManagerOverviewPage />} />
-                  <Route path="products" element={<ManagerInventoryPage />} />
-                  <Route path="categories" element={<ManagerCategoriesPage />} />
-                  <Route path="inventory" element={<ManagerInventoryPage />} />
-                  <Route path="promotions" element={<ManagerPromotionsPage />} />
-                  <Route path="orders" element={<ManagerOrdersPage />} />
-                  <Route path="payments" element={<ManagerPaymentsPage />} />
-                  <Route path="feedback" element={<ManagerFeedbackPage />} />
-                  <Route path="warranty" element={<ManagerWarrantyPage />} />
-                  <Route path="warranty-policies" element={<ManagerWarrantyPage />} />
-                  <Route path="segmentation" element={<ManagerSegmentationPage />} />
-                  <Route path="reports" element={<ManagerReportsPage />} />
+                  <Route path="products" element={<PermissionRoute permissions={['products.view', 'products.create', 'products.edit', 'products.delete']}><ManagerInventoryPage /></PermissionRoute>} />
+                  <Route path="categories" element={<PermissionRoute permissions={['categories.manage', 'products.view']}><ManagerCategoriesPage /></PermissionRoute>} />
+                  <Route path="inventory" element={<PermissionRoute permissions={['inventory.manage', 'products.view']}><ManagerInventoryPage /></PermissionRoute>} />
+                  <Route path="promotions" element={<PermissionRoute permission="promotions.manage"><ManagerPromotionsPage /></PermissionRoute>} />
+                  <Route path="orders" element={<PermissionRoute permissions={['orders.view', 'orders.update']}><ManagerOrdersPage /></PermissionRoute>} />
+                  <Route path="payments" element={<PermissionRoute permissions={['payments.view', 'payments.verify']}><ManagerPaymentsPage /></PermissionRoute>} />
+                  <Route path="feedback" element={<PermissionRoute permissions={['products.edit', 'refunds.manage']}><ManagerFeedbackPage /></PermissionRoute>} />
+                  <Route path="warranty" element={<PermissionRoute permission="refunds.manage"><ManagerWarrantyPage /></PermissionRoute>} />
+                  <Route path="warranty-policies" element={<PermissionRoute permission="refunds.manage"><ManagerWarrantyPage /></PermissionRoute>} />
+                  <Route path="segmentation" element={<PermissionRoute permission="customers.view"><ManagerSegmentationPage /></PermissionRoute>} />
+                  <Route path="reports" element={<PermissionRoute permission="reports.view"><ManagerReportsPage /></PermissionRoute>} />
                   <Route
                     path="admin/users"
                     element={
@@ -217,6 +218,21 @@ function App() {
                       </AdminRoute>
                     }
                   />
+                </Route>
+
+                {/* Dedicated Order Manager Protected Layout */}
+                <Route
+                  path="/order-manager"
+                  element={
+                    <OrderManagerRoute>
+                      <DashboardLayout />
+                    </OrderManagerRoute>
+                  }
+                >
+                  <Route index element={<OrderManagerDashboardPage />} />
+                  <Route path="dashboard" element={<OrderManagerDashboardPage />} />
+                  <Route path="orders" element={<ManagerOrdersPage />} />
+                  <Route path="reports" element={<ManagerReportsPage />} />
                 </Route>
 
                 {/* Dedicated Administrator Protected Layout */}

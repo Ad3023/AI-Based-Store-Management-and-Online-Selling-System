@@ -27,6 +27,12 @@ class PromotionAndPricingTests(TestCase):
             password='Password123!',
             role='store_manager'
         )
+        self.admin = User.objects.create_user(
+            username='admin_user',
+            email='admin@example.com',
+            password='Password123!',
+            role='admin'
+        )
         self.category = Category.objects.create(name='Laptops', slug='laptops')
         self.product = Product.objects.create(
             name='MacBook Pro M3',
@@ -80,6 +86,34 @@ class PromotionAndPricingTests(TestCase):
 
         self.assertEqual(self.product.current_price, Decimal('85000.00'))
 
+    def test_storewide_promotion_calculation(self):
+        now = timezone.now()
+        promo = Promotion.objects.create(
+            title='Store-Wide 5% Off',
+            discount_type=Promotion.DiscountType.PERCENTAGE,
+            discount_value=Decimal('5.00'),
+            start_date=now - timedelta(days=1),
+            end_date=now + timedelta(days=5),
+            apply_to_all=True,
+            is_active=True
+        )
+        self.assertEqual(self.product.current_price, Decimal('95000.00'))
+
+    def test_future_scheduled_promotion_does_not_apply_yet(self):
+        now = timezone.now()
+        promo = Promotion.objects.create(
+            title='Upcoming Black Friday',
+            discount_type=Promotion.DiscountType.PERCENTAGE,
+            discount_value=Decimal('30.00'),
+            start_date=now + timedelta(days=3),
+            end_date=now + timedelta(days=7),
+            is_active=True
+        )
+        promo.products.add(self.product)
+
+        self.assertFalse(self.product.has_active_promotion)
+        self.assertEqual(self.product.current_price, Decimal('100000.00'))
+
     def test_expired_promotion_does_not_apply(self):
         now = timezone.now()
         promo = Promotion.objects.create(
@@ -95,28 +129,241 @@ class PromotionAndPricingTests(TestCase):
         self.assertFalse(self.product.has_active_promotion)
         self.assertEqual(self.product.current_price, Decimal('100000.00'))
 
-    def test_customer_cannot_create_promotions(self):
-        self.client.force_authenticate(user=self.customer)
-        response = self.client.post('/api/products/promotions/', {
-            'title': 'Unauthorized Discount',
-            'discount_type': 'PERCENTAGE',
-            'discount_value': 50,
-            'start_date': timezone.now().isoformat(),
-            'end_date': (timezone.now() + timedelta(days=1)).isoformat(),
-        })
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+    def test_invalid_discount_value_negative_or_zero(self):
+        self.client.force_authenticate(user=self.admin)
+        now = timezone.now()
 
-    def test_manager_can_create_promotions(self):
-        self.client.force_authenticate(user=self.manager)
-        response = self.client.post('/api/products/promotions/', {
-            'title': 'Manager Promo',
+        # Zero discount value
+        resp1 = self.client.post('/api/products/promotions/', {
+            'title': 'Zero Discount',
+            'discount_type': 'PERCENTAGE',
+            'discount_value': 0,
+            'start_date': now.isoformat(),
+            'end_date': (now + timedelta(days=5)).isoformat(),
+            'apply_to_all': True
+        })
+        self.assertEqual(resp1.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # Negative discount value
+        resp2 = self.client.post('/api/products/promotions/', {
+            'title': 'Negative Discount',
+            'discount_type': 'FIXED',
+            'discount_value': -100,
+            'start_date': now.isoformat(),
+            'end_date': (now + timedelta(days=5)).isoformat(),
+            'apply_to_all': True
+        })
+        self.assertEqual(resp2.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_invalid_percentage_exceeding_100(self):
+        self.client.force_authenticate(user=self.admin)
+        now = timezone.now()
+        resp = self.client.post('/api/products/promotions/', {
+            'title': '120% Discount',
+            'discount_type': 'PERCENTAGE',
+            'discount_value': 120,
+            'start_date': now.isoformat(),
+            'end_date': (now + timedelta(days=5)).isoformat(),
+            'apply_to_all': True
+        })
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_invalid_dates_end_before_start(self):
+        self.client.force_authenticate(user=self.admin)
+        now = timezone.now()
+        resp = self.client.post('/api/products/promotions/', {
+            'title': 'Bad Dates',
             'discount_type': 'PERCENTAGE',
             'discount_value': 10,
-            'start_date': timezone.now().isoformat(),
-            'end_date': (timezone.now() + timedelta(days=5)).isoformat(),
+            'start_date': (now + timedelta(days=5)).isoformat(),
+            'end_date': now.isoformat(),
+            'apply_to_all': True
+        })
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_missing_targeting_scope_rejected(self):
+        self.client.force_authenticate(user=self.admin)
+        now = timezone.now()
+        resp = self.client.post('/api/products/promotions/', {
+            'title': 'No Scope',
+            'discount_type': 'PERCENTAGE',
+            'discount_value': 10,
+            'start_date': now.isoformat(),
+            'end_date': (now + timedelta(days=5)).isoformat(),
+            'apply_to_all': False,
+            'products': [],
+            'categories': []
+        })
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_promotion_conflict_highest_discount_wins(self):
+        """
+        Verify consistent conflict rule:
+        Highest eligible monetary discount wins without stacking.
+        """
+        now = timezone.now()
+
+        # Category promo: 10% off (10,000 ETB off 100,000 ETB)
+        cat_promo = Promotion.objects.create(
+            title='Laptops 10% Off',
+            discount_type=Promotion.DiscountType.PERCENTAGE,
+            discount_value=Decimal('10.00'),
+            start_date=now - timedelta(days=1),
+            end_date=now + timedelta(days=5),
+            is_active=True
+        )
+        cat_promo.categories.add(self.category)
+
+        # Product promo: 25% off (25,000 ETB off 100,000 ETB)
+        prod_promo = Promotion.objects.create(
+            title='MacBook 25% Off',
+            discount_type=Promotion.DiscountType.PERCENTAGE,
+            discount_value=Decimal('25.00'),
+            start_date=now - timedelta(days=1),
+            end_date=now + timedelta(days=5),
+            is_active=True
+        )
+        prod_promo.products.add(self.product)
+
+        # Store-wide promo: 5,000 ETB fixed off
+        store_promo = Promotion.objects.create(
+            title='Storewide 5000 Off',
+            discount_type=Promotion.DiscountType.FIXED,
+            discount_value=Decimal('5000.00'),
+            start_date=now - timedelta(days=1),
+            end_date=now + timedelta(days=5),
+            apply_to_all=True,
+            is_active=True
+        )
+
+        # The product should pick the 25% promo (25,000 discount) instead of stacking or picking a lower discount
+        self.assertEqual(self.product.get_current_promotion(), prod_promo)
+        self.assertEqual(self.product.current_price, Decimal('75000.00'))
+
+    def test_promotions_do_not_stack(self):
+        """
+        Ensure multiple active promotions do not compound or stack discounts.
+        """
+        now = timezone.now()
+        # Promo 1: 5,000 ETB fixed off
+        p1 = Promotion.objects.create(
+            title='Promo 1',
+            discount_type=Promotion.DiscountType.FIXED,
+            discount_value=Decimal('5000.00'),
+            start_date=now - timedelta(days=1),
+            end_date=now + timedelta(days=5),
+            is_active=True
+        )
+        p1.products.add(self.product)
+
+        # Promo 2: 10,000 ETB fixed off
+        p2 = Promotion.objects.create(
+            title='Promo 2',
+            discount_type=Promotion.DiscountType.FIXED,
+            discount_value=Decimal('10000.00'),
+            start_date=now - timedelta(days=1),
+            end_date=now + timedelta(days=5),
+            is_active=True
+        )
+        p2.products.add(self.product)
+
+        # Current price must be 100000 - 10000 = 90000, NOT 100000 - 15000 = 85000
+        self.assertEqual(self.product.current_price, Decimal('90000.00'))
+
+    def test_negative_price_prevention(self):
+        """
+        Ensure fixed discount larger than product price floors at 0.00 ETB.
+        """
+        now = timezone.now()
+        promo = Promotion.objects.create(
+            title='Mega Off',
+            discount_type=Promotion.DiscountType.FIXED,
+            discount_value=Decimal('150000.00'),
+            start_date=now - timedelta(days=1),
+            end_date=now + timedelta(days=5),
+            is_active=True
+        )
+        promo.products.add(self.product)
+
+        self.assertEqual(self.product.current_price, Decimal('0.00'))
+
+    def test_admin_can_create_promotions(self):
+        self.client.force_authenticate(user=self.admin)
+        now = timezone.now()
+        response = self.client.post('/api/products/promotions/', {
+            'title': 'Admin Special Promo',
+            'discount_type': 'PERCENTAGE',
+            'discount_value': 15,
+            'start_date': now.isoformat(),
+            'end_date': (now + timedelta(days=5)).isoformat(),
+            'apply_to_all': True,
             'is_active': True,
         })
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_store_manager_without_permission_cannot_create_promotions(self):
+        self.client.force_authenticate(user=self.manager)
+        now = timezone.now()
+        response = self.client.post('/api/products/promotions/', {
+            'title': 'Manager Attempt',
+            'discount_type': 'PERCENTAGE',
+            'discount_value': 10,
+            'start_date': now.isoformat(),
+            'end_date': (now + timedelta(days=5)).isoformat(),
+            'apply_to_all': True,
+        })
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_store_manager_with_explicit_permission_can_create_promotions(self):
+        from accounts.models import Permission
+        perm, _ = Permission.objects.get_or_create(code='promotions.manage', defaults={'name': 'Manage Promotions'})
+        self.manager.direct_permissions.add(perm)
+
+        self.client.force_authenticate(user=self.manager)
+        now = timezone.now()
+        response = self.client.post('/api/products/promotions/', {
+            'title': 'Authorized Manager Promo',
+            'discount_type': 'PERCENTAGE',
+            'discount_value': 10,
+            'start_date': now.isoformat(),
+            'end_date': (now + timedelta(days=5)).isoformat(),
+            'apply_to_all': True,
+            'is_active': True,
+        })
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_customer_cannot_create_promotions(self):
+        self.client.force_authenticate(user=self.customer)
+        now = timezone.now()
+        response = self.client.post('/api/products/promotions/', {
+            'title': 'Customer Attempt',
+            'discount_type': 'PERCENTAGE',
+            'discount_value': 50,
+            'start_date': now.isoformat(),
+            'end_date': (now + timedelta(days=1)).isoformat(),
+            'apply_to_all': True,
+        })
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_cart_and_checkout_use_server_calculated_discounted_totals(self):
+        from orders.models import Cart, CartItem
+        now = timezone.now()
+        promo = Promotion.objects.create(
+            title='10% Tech Sale',
+            discount_type=Promotion.DiscountType.PERCENTAGE,
+            discount_value=Decimal('10.00'),
+            start_date=now - timedelta(days=1),
+            end_date=now + timedelta(days=5),
+            is_active=True
+        )
+        promo.products.add(self.product)
+
+        # Base price 100,000 ETB, 10% discount = 90,000 ETB each * 2 units = 180,000 ETB subtotal
+        cart = Cart.objects.create(user=self.customer)
+        item = CartItem.objects.create(cart=cart, product=self.product, quantity=2)
+
+        self.assertEqual(item.subtotal, Decimal('180000.00'))
+        self.assertEqual(cart.total_price, Decimal('180000.00'))
 
 
 class WarrantyAndClaimTests(TestCase):

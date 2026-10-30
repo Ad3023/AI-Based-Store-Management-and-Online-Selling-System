@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import api from '../api';
 import { useAuth } from './AuthContext';
 
@@ -51,7 +51,7 @@ export const CartProvider = ({ children }) => {
     }
   };
 
-  const fetchCart = async () => {
+  const fetchCart = useCallback(async () => {
     if (token && user?.role === 'admin') {
       // Administrators have personal shopping disabled
       setCart({ items: [], total_price: '0.00', total_items: 0 });
@@ -80,11 +80,11 @@ export const CartProvider = ({ children }) => {
     } else {
       setCart({ items: [], total_price: '0.00', total_items: 0 });
     }
-  };
+  }, [token, user]);
 
   useEffect(() => {
     fetchCart();
-  }, [token, user]);
+  }, [fetchCart]);
 
   const addToCart = async (productOrId, quantity = 1, productObj = null) => {
     if (user?.role === 'admin') {

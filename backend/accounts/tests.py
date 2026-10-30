@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework import status
 from rest_framework.authtoken.models import Token
+from accounts.models import Role
 
 User = get_user_model()
 
@@ -22,6 +23,12 @@ class RoleBasedAuthSecurityTests(TestCase):
         )
         self.customer_token, _ = Token.objects.get_or_create(user=self.customer)
 
+        from accounts.rbac import init_rbac
+        from accounts.models import Permission
+        init_rbac()
+        manager_role = Role.objects.filter(code='store_manager').first()
+        admin_role = Role.objects.filter(code='admin').first()
+
         # Create store manager
         self.manager = User.objects.create_user(
             username='test_manager',
@@ -29,8 +36,13 @@ class RoleBasedAuthSecurityTests(TestCase):
             password='Password123!',
             first_name='Store',
             last_name='Manager',
-            role=User.Role.STORE_MANAGER
+            role=User.Role.STORE_MANAGER,
+            custom_role=manager_role,
+            is_staff=True
         )
+        perm_audit = Permission.objects.filter(code='audit_logs.view').first()
+        if perm_audit:
+            self.manager.direct_permissions.add(perm_audit)
         self.manager_token, _ = Token.objects.get_or_create(user=self.manager)
 
         # Create administrator
@@ -40,7 +52,10 @@ class RoleBasedAuthSecurityTests(TestCase):
             password='Password123!',
             first_name='System',
             last_name='Admin',
-            role=User.Role.ADMIN
+            role=User.Role.ADMIN,
+            custom_role=admin_role,
+            is_staff=True,
+            is_superuser=True
         )
         self.admin_token, _ = Token.objects.get_or_create(user=self.admin)
 

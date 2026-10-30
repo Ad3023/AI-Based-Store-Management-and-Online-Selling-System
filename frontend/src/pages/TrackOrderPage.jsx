@@ -265,6 +265,43 @@ const TrackOrderPage = () => {
               </div>
             </div>
           </div>
+
+          {/* Fulfillment Status Updates Timeline */}
+          {order.status_history && order.status_history.length > 0 && (
+            <div className="card border-0 shadow-sm rounded-4 p-3.5 mt-3 bg-white border border-slate-200">
+              <h6 className="fw-bolder mb-3 text-slate-900 d-flex align-items-center gap-2 fs-7">
+                <i className="bi bi-clock-history text-primary"></i> Real-Time Fulfillment Updates
+              </h6>
+              <div className="position-relative ps-2" style={{ borderLeft: '2px solid #e2e8f0', marginLeft: '8px' }}>
+                {order.status_history.map((hist, idx) => (
+                  <div key={hist.id || idx} className="position-relative mb-3 ps-3">
+                    <div
+                      className="position-absolute rounded-circle bg-primary"
+                      style={{ width: '10px', height: '10px', left: '-15px', top: '4px', border: '2px solid #fff' }}
+                    ></div>
+                    <div className="d-flex flex-wrap justify-content-between align-items-center gap-1 mb-1">
+                      <span className="badge bg-slate-100 text-slate-800 text-[10px] font-bold border border-slate-200">
+                        {hist.previous_status ? `${hist.previous_status} → ${hist.new_status}` : hist.new_status}
+                      </span>
+                      <small className="text-slate-400 text-[11px]">
+                        {new Date(hist.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                      </small>
+                    </div>
+                    {hist.comment && (
+                      <p className="text-secondary text-xs mb-0" style={{ lineHeight: '1.4' }}>
+                        {hist.comment}
+                      </p>
+                    )}
+                    {hist.changed_by_name && (
+                      <small className="text-slate-400 text-[10px] d-block mt-0.5">
+                        Updated by: {hist.changed_by_name}
+                      </small>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -105,6 +105,35 @@ const Navbar = () => {
     navigate('/');
   };
 
+  const headerRef = useRef(null);
+
+  useEffect(() => {
+    const updateNavbarHeight = () => {
+      if (headerRef.current) {
+        const height = headerRef.current.offsetHeight;
+        document.documentElement.style.setProperty('--navbar-height', `${height}px`);
+      }
+    };
+
+    updateNavbarHeight();
+    window.addEventListener('resize', updateNavbarHeight);
+
+    let observer;
+    if (typeof ResizeObserver !== 'undefined' && headerRef.current) {
+      observer = new ResizeObserver(() => {
+        updateNavbarHeight();
+      });
+      observer.observe(headerRef.current);
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateNavbarHeight);
+      if (observer) {
+        observer.disconnect();
+      }
+    };
+  }, []);
+
   const displayName = cleanDisplayName(user);
   const roleLabel = getUserRoleLabel(user);
   const roleBadgeClass = getUserRoleBadgeClass(user);
@@ -112,6 +141,7 @@ const Navbar = () => {
 
   return (
     <header
+      ref={headerRef}
       className="sticky-top z-3"
       style={{
         position: 'sticky',
@@ -434,6 +464,8 @@ const Navbar = () => {
                       to={
                         user.role === 'admin' || user.is_superuser
                           ? '/admin/dashboard'
+                          : user.role === 'order_manager'
+                          ? '/order-manager/dashboard'
                           : user.role === 'store_manager'
                           ? '/manager/dashboard'
                           : '/customer/dashboard'
@@ -545,13 +577,23 @@ const Navbar = () => {
           {isManagerOrAdmin && (
             <div className="d-flex align-items-center">
               <Link
-                to={user?.role === 'admin' ? '/admin/dashboard' : '/manager/dashboard'}
+                to={
+                  user?.role === 'admin'
+                    ? '/admin/dashboard'
+                    : user?.role === 'order_manager'
+                    ? '/order-manager/dashboard'
+                    : '/manager/dashboard'
+                }
                 className="btn btn-sm text-white px-2.5 py-1 rounded-2 text-xs fw-bold d-flex align-items-center gap-1"
                 style={{ backgroundColor: '#0c1e33' }}
                 onClick={() => setMobileMenuOpen(false)}
               >
                 <i className="bi bi-shield-lock-fill text-warning"></i>
-                {user?.role === 'admin' ? t('adminConsole') : t('managerConsole')}
+                {user?.role === 'admin'
+                  ? t('adminConsole')
+                  : user?.role === 'order_manager'
+                  ? 'Order Manager'
+                  : t('managerConsole')}
               </Link>
             </div>
           )}

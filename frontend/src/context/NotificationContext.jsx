@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import api from '../api';
 import { useAuth } from './AuthContext';
 
@@ -9,7 +9,7 @@ export const NotificationProvider = ({ children }) => {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     if (!token) {
       setNotifications([]);
       setUnreadCount(0);
@@ -19,16 +19,16 @@ export const NotificationProvider = ({ children }) => {
       const res = await api.get('notifications/');
       setNotifications(res.data.notifications || []);
       setUnreadCount(res.data.unread_count || 0);
-    } catch (err) {
+    } catch {
       // ignore in background
     }
-  };
+  }, [token]);
 
   useEffect(() => {
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 20000); // Polling every 20s
     return () => clearInterval(interval);
-  }, [token]);
+  }, [fetchNotifications]);
 
   const markAsRead = async (id) => {
     try {

@@ -35,16 +35,40 @@ class PromotionSerializer(serializers.ModelSerializer):
     is_currently_active = serializers.BooleanField(read_only=True)
     product_count = serializers.IntegerField(source='products.count', read_only=True)
     category_count = serializers.IntegerField(source='categories.count', read_only=True)
+    target_type = serializers.SerializerMethodField()
+    target_summary = serializers.SerializerMethodField()
 
     class Meta:
         model = Promotion
         fields = [
             'id', 'title', 'name', 'description', 'discount_type', 'discount_value',
             'start_date', 'end_date', 'is_active', 'is_currently_active',
-            'apply_to_all', 'products', 'categories', 'banner_announcement',
-            'created_by', 'created_by_username', 'product_count', 'category_count', 'created_at'
+            'apply_to_all', 'products', 'categories', 'target_type', 'target_summary',
+            'banner_announcement', 'created_by', 'created_by_username',
+            'product_count', 'category_count', 'created_at'
         ]
         read_only_fields = ['id', 'created_by', 'created_at']
+
+    def get_target_type(self, obj):
+        if obj.apply_to_all:
+            return 'all'
+        if obj.products.exists():
+            return 'products'
+        if obj.categories.exists():
+            return 'category'
+        return 'all'
+
+    def get_target_summary(self, obj):
+        if obj.apply_to_all:
+            return 'Store-Wide (All Products)'
+        if obj.products.exists():
+            cnt = obj.products.count()
+            return f"{cnt} Selected Product{'s' if cnt != 1 else ''}"
+        if obj.categories.exists():
+            cnt = obj.categories.count()
+            cat_names = ", ".join(obj.categories.values_list('name', flat=True)[:2])
+            return f"Category: {cat_names}{'...' if cnt > 2 else ''}"
+        return 'Unassigned'
 
     def to_internal_value(self, data):
         data = data.copy() if hasattr(data, 'copy') else dict(data)
@@ -80,6 +104,20 @@ class PromotionSerializer(serializers.ModelSerializer):
         end_date = attrs.get('end_date', getattr(self.instance, 'end_date', None))
         if start_date and end_date and start_date >= end_date:
             raise serializers.ValidationError({'end_date': 'Promotion expiration date must be after start date.'})
+
+        # Validate targeting options: Specific Products, Selected Category, or Store-Wide (when explicitly selected)
+        apply_to_all = attrs.get('apply_to_all', getattr(self.instance, 'apply_to_all', False) if self.instance else False)
+        products = attrs.get('products', None)
+        categories = attrs.get('categories', None)
+
+        if not self.instance or ('apply_to_all' in attrs or 'products' in attrs or 'categories' in attrs):
+            has_products = bool(products) if products is not None else (self.instance and self.instance.products.exists())
+            has_categories = bool(categories) if categories is not None else (self.instance and self.instance.categories.exists())
+
+            if not apply_to_all and not has_products and not has_categories:
+                raise serializers.ValidationError({
+                    'targeting': 'Please select targeting scope: specific products, a category, or explicitly choose store-wide.'
+                })
 
         return attrs
 

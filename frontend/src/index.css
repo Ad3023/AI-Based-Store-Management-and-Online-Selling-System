@@ -533,6 +533,7 @@ a {
    ========================================================================== */
 
 :root {
+  --navbar-height: 104px;
   --ethio-navy-dark: #0b1a2d;
   --ethio-navy-header: #0c1e33;
   --ethio-navy-hover: #162a45;
@@ -564,33 +565,37 @@ a {
   background-color: var(--ethio-navy-dark);
   color: #ffffff;
   z-index: 1020;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
 
-.ethio-sidebar::-webkit-scrollbar {
-  width: 5px;
-}
-.ethio-sidebar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
+/* Storefront Customer Sidebar (positioned cleanly below sticky Navbar) */
+@media (min-width: 992px) {
+  .ethio-customer-sidebar {
+    top: var(--navbar-height, 104px) !important;
+    height: calc(100vh - var(--navbar-height, 104px)) !important;
+  }
 }
 
 .ethio-dashboard-content {
   margin-left: 260px;
   flex: 1;
   min-height: 100vh;
+  min-width: 0;
+  width: calc(100% - 260px);
   background-color: var(--ethio-bg-page);
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
   position: relative;
+}
+
+/* Ensure sticky page subheaders stick cleanly below the storefront Navbar */
+.ethio-dashboard-content .sticky-top {
+  top: var(--navbar-height, 104px) !important;
 }
 
 /* Mobile Sidebar Drawer */

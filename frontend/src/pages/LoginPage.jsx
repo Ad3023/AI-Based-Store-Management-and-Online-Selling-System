@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import GoogleSignInButton from '../components/GoogleSignInButton';
 
 const LoginPage = () => {
   const [searchParams] = useSearchParams();
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const { addToCart } = useCart();
   const navigate = useNavigate();
 
@@ -46,7 +47,9 @@ const LoginPage = () => {
       const safeTarget = rawTarget.startsWith('/') && !rawTarget.startsWith('//') ? rawTarget : '';
 
       // Route authorized users strictly to their designated role dashboard
-      if (user.role === 'store_manager') {
+      if (user.role === 'order_manager') {
+        navigate('/order-manager/dashboard');
+      } else if (user.role === 'store_manager') {
         navigate('/manager/dashboard');
       } else if (user.role === 'admin' || user.is_superuser) {
         navigate('/admin/dashboard');
@@ -72,6 +75,50 @@ const LoginPage = () => {
       } else {
         setError(err.message || 'An unexpected error occurred during sign in.');
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleToken = async (idToken) => {
+    try {
+      setLoading(true);
+      setError('');
+      const user = await loginWithGoogle(idToken);
+
+      // Handle pending add_to_cart action if coming from guest click
+      const action = searchParams.get('action');
+      const productId = searchParams.get('productId');
+      const quantity = parseInt(searchParams.get('quantity') || '1', 10);
+      if (user.role === 'customer' && action === 'add_to_cart' && productId) {
+        try {
+          await addToCart(parseInt(productId, 10), quantity);
+        } catch (cartErr) {
+          console.error('Auto add to cart after login error', cartErr);
+        }
+      }
+
+      // Safe redirect validation: prevent open redirect vulnerabilities
+      const rawTarget = searchParams.get('redirect') || '';
+      const safeTarget = rawTarget.startsWith('/') && !rawTarget.startsWith('//') ? rawTarget : '';
+
+      if (user.role === 'order_manager') {
+        navigate('/order-manager/dashboard');
+      } else if (user.role === 'store_manager') {
+        navigate('/manager/dashboard');
+      } else if (user.role === 'admin' || user.is_superuser) {
+        navigate('/admin/dashboard');
+      } else {
+        if (safeTarget && safeTarget !== '/' && safeTarget !== '/login') {
+          navigate(safeTarget);
+        } else {
+          navigate('/customer/dashboard');
+        }
+      }
+    } catch (err) {
+      const respData = err.response?.data;
+      const msg = respData?.error || respData?.detail || 'Google sign-in failed. Please verify your credentials or try email sign in.';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -261,7 +308,7 @@ const LoginPage = () => {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="btn btn-ethio-primary w-100 py-2.5 fw-bold text-sm shadow-sm"
+                    className="btn btn-ethio-primary w-100 py-2.5 fw-bold text-sm shadow-sm mb-3"
                     style={{ backgroundColor: '#1b64da', color: '#ffffff', borderRadius: '0.5rem' }}
                   >
                     {loading ? (
@@ -273,11 +320,29 @@ const LoginPage = () => {
                       'Sign In'
                     )}
                   </button>
+
+                  {/* Google OAuth Option */}
+                  <div className="d-flex align-items-center my-2.5">
+                    <hr className="flex-grow-1 border-slate-200 my-0" />
+                    <span className="px-2.5 text-slate-400 text-[11px] text-uppercase font-semibold">or</span>
+                    <hr className="flex-grow-1 border-slate-200 my-0" />
+                  </div>
+
+                  <GoogleSignInButton
+                    text="continue_with"
+                    buttonId="continue-with-google-btn"
+                    onSuccess={handleGoogleToken}
+                    onError={(err) => {
+                      const msg = typeof err === 'string' ? err : err?.message || 'Google sign-in was not completed.';
+                      setError(msg);
+                    }}
+                    disabled={loading}
+                  />
                 </form>
 
                 {/* Footer Link: Create Account */}
-                <div className="text-center mt-4 pt-2">
-                  <span className="text-muted text-xs">Don't have an account? </span>
+                <div className="text-center mt-3 pt-1">
+                  <span className="text-muted text-xs me-1">Don't have an account?</span>
                   <Link to="/register" className="text-primary fw-bold text-xs text-decoration-none">
                     Create account
                   </Link>
