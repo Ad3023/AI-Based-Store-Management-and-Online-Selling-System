@@ -140,6 +140,9 @@ class OrderSerializer(serializers.ModelSerializer):
     payment_status_display = serializers.CharField(source='get_payment_status_display', read_only=True)
     fulfillment_status_display = serializers.CharField(source='get_fulfillment_status_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    tracking_number = serializers.SerializerMethodField()
+    shipment_status = serializers.SerializerMethodField()
+    delivery_method = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -148,14 +151,27 @@ class OrderSerializer(serializers.ModelSerializer):
             'status', 'status_display',
             'payment_status', 'payment_status_display',
             'fulfillment_status', 'fulfillment_status_display',
+            'tracking_number', 'shipment_status', 'delivery_method',
             'currency', 'subtotal', 'tax', 'shipping_fee', 'total_amount',
             'payment_method', 'chapa_tx_ref',
             'verified_amount', 'payment_initiated_at', 'payment_verified_at',
             'last_verification_result', 'verification_mismatch_message',
             'shipping_name', 'shipping_phone', 'shipping_address', 'shipping_city',
-            'notes', 'created_at', 'updated_at', 'items', 'payment_evidence', 'receipt',
+            'notes', 'rejection_reason', 'created_at', 'updated_at', 'items', 'payment_evidence', 'receipt',
             'status_history'
         ]
+
+    def get_tracking_number(self, obj):
+        shipment = getattr(obj, 'shipment', None)
+        return shipment.tracking_number if shipment else None
+
+    def get_shipment_status(self, obj):
+        shipment = getattr(obj, 'shipment', None)
+        return shipment.status if shipment else None
+
+    def get_delivery_method(self, obj):
+        shipment = getattr(obj, 'shipment', None)
+        return shipment.delivery_method if shipment else None
         read_only_fields = [
             'id', 'order_number', 'customer', 'subtotal', 'tax', 'shipping_fee',
             'total_amount', 'created_at', 'updated_at', 'verified_amount',

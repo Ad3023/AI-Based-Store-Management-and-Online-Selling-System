@@ -11,6 +11,8 @@ urlpatterns = [
     path('api/orders/', include('orders.urls')),
     path('api/recommendations/', include('recommendations.urls')),
     path('api/notifications/', include('notifications.urls')),
+    path('api/delivery/', include('delivery.urls')),
+    path('api/supplier/', include('products.supplier_urls')),
 ]
 
 # Serve media files (receipt screenshots, uploaded images) in both dev and production

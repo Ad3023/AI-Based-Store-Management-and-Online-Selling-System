@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api';
+import { validateEmail } from '../utils/validation';
 
 const ForgotPasswordPage = () => {
+  const [searchParams] = useSearchParams();
+  const isStaff = searchParams.get('portal') === 'staff';
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [statusState, setStatusState] = useState({ type: '', text: '' });
@@ -14,14 +17,15 @@ const ForgotPasswordPage = () => {
     setStatusState({ type: '', text: '' });
     setResetData(null);
 
-    if (!email.trim()) {
-      setStatusState({ type: 'danger', text: 'Please enter your registered email address.' });
+    const emailRes = validateEmail(email, true);
+    if (!emailRes.isValid) {
+      setStatusState({ type: 'danger', text: emailRes.error });
       return;
     }
 
     try {
       setLoading(true);
-      const res = await api.post('auth/password-reset/', { email: email.trim().toLowerCase() });
+      const res = await api.post('auth/password-reset/', { email: emailRes.value });
       setResetData(res.data);
       setStatusState({
         type: 'success',
@@ -48,13 +52,20 @@ const ForgotPasswordPage = () => {
             <div className="text-center mb-4">
               <div
                 className="mx-auto rounded-3 d-flex align-items-center justify-content-center text-white mb-3 shadow-sm"
-                style={{ width: '52px', height: '52px', background: 'var(--gradient-primary)' }}
+                style={{ width: '52px', height: '52px', background: isStaff ? 'linear-gradient(135deg, #0f766e 0%, #14b8a6 100%)' : 'var(--gradient-primary)' }}
               >
-                <i className="bi bi-key-fill fs-4"></i>
+                <i className={`bi ${isStaff ? 'bi-shield-lock-fill' : 'bi-key-fill'} fs-4`}></i>
               </div>
+              {isStaff && (
+                <div className="mb-2">
+                  <span className="badge rounded-pill px-2.5 py-1 text-xs fw-semibold" style={{ backgroundColor: 'rgba(15, 118, 110, 0.1)', color: '#0f766e', border: '1px solid rgba(20, 184, 166, 0.3)' }}>
+                    <i className="bi bi-shield-shaded me-1"></i> Staff Account Password Recovery
+                  </span>
+                </div>
+              )}
               <h3 className="fw-bolder text-slate-900 tracking-tight mb-1">Forgot Password</h3>
               <p className="text-slate-500 text-xs mb-0">
-                Enter your verified email address to receive password recovery instructions.
+                Enter your verified {isStaff ? 'staff' : ''} email address to receive password recovery instructions.
               </p>
             </div>
 
@@ -114,23 +125,40 @@ const ForgotPasswordPage = () => {
                 </button>
               </form>
             ) : (
-              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-center mb-4">
-                <i className="bi bi-shield-check text-success fs-1 mb-2 d-block"></i>
-                <h6 className="fw-bold text-slate-900 mb-1">Recovery Token Ready</h6>
-                <p className="text-slate-500 text-xs mb-3">
-                  A secure recovery token has been generated for <strong>{email}</strong>. Click below to set your new password.
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-center mb-4">
+                <div
+                  className="mx-auto rounded-circle d-flex align-items-center justify-content-center text-white mb-3 shadow-sm"
+                  style={{ width: '56px', height: '56px', backgroundColor: '#059669' }}
+                >
+                  <i className="bi bi-envelope-check-fill fs-3"></i>
+                </div>
+                <h5 className="fw-bolder text-slate-900 mb-1">Check Your Email</h5>
+                <p className="text-slate-600 text-xs mb-3" style={{ lineHeight: '1.6' }}>
+                  A secure <strong>6-digit recovery code</strong> and a <strong>password reset link</strong> have been dispatched to <strong>{email}</strong>.
                 </p>
 
-                <div className="d-grid gap-2 mb-3">
+                <div className="alert alert-info rounded-3 text-start text-xs p-3 mb-3 border-info border-opacity-25 bg-blue-50">
+                  <div className="fw-bold text-slate-900 mb-1.5 d-flex align-items-center gap-1.5">
+                    <i className="bi bi-shield-check text-primary"></i> Two ways to set your new password:
+                  </div>
+                  <ul className="mb-0 ps-3 text-slate-600">
+                    <li className="mb-1"><strong>Click the direct link</strong> sent to your Gmail inbox, OR</li>
+                    <li><strong>Enter the 6-digit OTP code</strong> sent to your email.</li>
+                  </ul>
+                </div>
+
+                <div className="d-grid gap-2 mb-2">
                   <button
                     type="button"
-                    className="btn btn-primary-gradient btn-sm rounded-pill fw-bold py-2"
+                    className="btn btn-primary-gradient btn-sm rounded-pill fw-bold py-2 shadow-sm d-flex align-items-center justify-content-center gap-1.5"
                     onClick={() => {
-                      const tokenParam = resetData.reset_token ? `&token=${encodeURIComponent(resetData.reset_token)}` : '';
-                      navigate(`/reset-password?email=${encodeURIComponent(email)}${tokenParam}`);
+                      const portalParam = isStaff ? '&portal=staff' : '';
+                      navigate(`/reset-password?email=${encodeURIComponent(email)}${portalParam}`);
                     }}
                   >
-                    Proceed to Reset Password &rarr;
+                    <i className="bi bi-key-fill"></i>
+                    <span>Enter 6-Digit Recovery Code</span>
+                    <i className="bi bi-arrow-right"></i>
                   </button>
 
                   <button
@@ -141,7 +169,7 @@ const ForgotPasswordPage = () => {
                       setStatusState({ type: '', text: '' });
                     }}
                   >
-                    Try Another Email
+                    Send to Another Email
                   </button>
                 </div>
               </div>
@@ -149,9 +177,27 @@ const ForgotPasswordPage = () => {
 
             <div className="text-center text-xs text-slate-500 pt-3 border-top border-slate-100">
               Remember your password?{' '}
-              <Link to="/login" className="text-primary fw-bold text-decoration-none hover:underline">
-                Back to Sign In
-              </Link>
+              {isStaff ? (
+                <>
+                  <Link to="/staff/login" className="text-teal-600 fw-bold text-decoration-none hover:underline">
+                    Back to Staff Login
+                  </Link>
+                  <span className="mx-2 text-slate-300">|</span>
+                  <Link to="/login" className="text-slate-400 text-decoration-none hover:underline">
+                    Customer Login
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link to="/login" className="text-primary fw-bold text-decoration-none hover:underline">
+                    Back to Sign In
+                  </Link>
+                  <span className="mx-2 text-slate-300">|</span>
+                  <Link to="/staff/login" className="text-slate-400 text-decoration-none hover:underline">
+                    Staff Portal
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>

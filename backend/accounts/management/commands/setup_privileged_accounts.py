@@ -8,7 +8,7 @@ User = get_user_model()
 
 
 class Command(BaseCommand):
-    help = 'Securely configures or updates the Administrator and Store Manager accounts.'
+    help = 'Securely configures or updates the Administrator, Store Manager, and Order Manager accounts.'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -25,15 +25,29 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             '--manager-email',
+            '--store-manager-email',
             type=str,
-            default=os.environ.get('STORE_MANAGER_EMAIL', 'gucheaddisu5@gmail.com'),
+            default=os.environ.get('STORE_MANAGER_EMAIL', 'gucheaddisu10@gmail.com'),
             help='Email for the Store Manager account'
         )
         parser.add_argument(
             '--manager-password',
+            '--store-manager-password',
             type=str,
             default=os.environ.get('STORE_MANAGER_PASSWORD'),
             help='Password for the Store Manager account'
+        )
+        parser.add_argument(
+            '--order-manager-email',
+            type=str,
+            default=os.environ.get('ORDER_MANAGER_EMAIL', 'ordermanager@ethiotech.com'),
+            help='Email for the Order Manager account'
+        )
+        parser.add_argument(
+            '--order-manager-password',
+            type=str,
+            default=os.environ.get('ORDER_MANAGER_PASSWORD'),
+            help='Password for the Order Manager account'
         )
         parser.add_argument(
             '--default-password',
@@ -43,13 +57,19 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        admin_email = options['admin_email'].strip().lower()
-        admin_password = options['admin_password'] or options['default_password']
+        raw_admin = options.get('admin_email') or os.environ.get('ADMIN_EMAIL') or 'addisuguche68@gmail.com'
+        admin_email = raw_admin.strip().lower() if raw_admin.strip() else 'addisuguche68@gmail.com'
+        admin_password = options.get('admin_password') or os.environ.get('ADMIN_PASSWORD') or options.get('default_password') or 'ad30@17#'
 
-        manager_email = options['manager_email'].strip().lower()
-        manager_password = options['manager_password'] or options['default_password']
+        raw_manager = options.get('manager_email') or os.environ.get('STORE_MANAGER_EMAIL') or 'gucheaddisu10@gmail.com'
+        manager_email = raw_manager.strip().lower() if raw_manager.strip() else 'gucheaddisu10@gmail.com'
+        manager_password = options.get('manager_password') or os.environ.get('STORE_MANAGER_PASSWORD') or options.get('default_password') or 'ad30@17#'
 
-        self.stdout.write(self.style.NOTICE("Initializing privileged account configuration..."))
+        raw_order = options.get('order_manager_email') or os.environ.get('ORDER_MANAGER_EMAIL') or 'ordermanager@ethiotech.com'
+        order_manager_email = raw_order.strip().lower() if raw_order.strip() else 'ordermanager@ethiotech.com'
+        order_manager_password = options.get('order_manager_password') or os.environ.get('ORDER_MANAGER_PASSWORD') or options.get('default_password') or 'ad30@17#'
+
+        self.stdout.write(self.style.NOTICE("Initializing privileged staff accounts configuration..."))
 
         # 1. Provision Administrator
         admin_user = self._provision_account(
@@ -71,13 +91,26 @@ class Command(BaseCommand):
             role=User.Role.STORE_MANAGER,
             is_staff=True,
             is_superuser=False,
-            first_name='Addisu',
-            last_name='Guche'
+            first_name='Store',
+            last_name='Manager'
+        )
+
+        # 3. Provision Order Manager
+        order_manager_user = self._provision_account(
+            email=order_manager_email,
+            preferred_username='ordermanager',
+            password=order_manager_password,
+            role=User.Role.ORDER_MANAGER,
+            is_staff=True,
+            is_superuser=False,
+            first_name='Order',
+            last_name='Manager'
         )
 
         self.stdout.write(self.style.SUCCESS(
             f"Successfully configured Administrator: {admin_user.email} (Role: {admin_user.role})\n"
-            f"Successfully configured Store Manager: {manager_user.email} (Role: {manager_user.role})"
+            f"Successfully configured Store Manager: {manager_user.email} (Role: {manager_user.role})\n"
+            f"Successfully configured Order Manager: {order_manager_user.email} (Role: {order_manager_user.role})"
         ))
 
     def _provision_account(self, email, preferred_username, password, role, is_staff, is_superuser, first_name, last_name):

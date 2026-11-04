@@ -4,24 +4,12 @@ import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { formatETB } from '../utils/currency';
 import { getProductPricing } from '../utils/pricing';
+import { getProductImage } from '../utils/productImages';
 
 const CartPage = () => {
   const { cart, updateQuantity, removeFromCart, clearCart, loading } = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
-
-  if (!user) {
-    return (
-      <div className="container py-5 text-center">
-        <div className="card border-0 shadow-sm rounded-4 p-5 mx-auto" style={{ maxWidth: '500px' }}>
-          <i className="bi bi-person-lock fs-1 text-primary mb-3"></i>
-          <h4 className="fw-bold">Sign In Required</h4>
-          <p className="text-muted small mb-4">Please log in to view and manage your shopping cart.</p>
-          <Link to="/login" className="btn btn-primary-gradient rounded-pill px-4">Log In to Continue</Link>
-        </div>
-      </div>
-    );
-  }
 
   if (user?.role === 'admin') {
     return (
@@ -72,6 +60,21 @@ const CartPage = () => {
         </div>
       )}
 
+      {/* Guest Shopping Notice Banner */}
+      {!user && cart.items && cart.items.length > 0 && (
+        <div className="alert alert-info border-0 rounded-4 mb-4 d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2 p-3 bg-blue-50 border border-blue-200">
+          <div className="d-flex align-items-center gap-2 text-xs text-blue-900">
+            <i className="bi bi-info-circle-fill text-primary fs-5 shrink-0"></i>
+            <span>
+              Shopping as a <strong>Guest</strong>. Your cart items are preserved on this device. Sign in or proceed to checkout to save your order.
+            </span>
+          </div>
+          <Link to="/login?redirect=/cart" className="btn btn-primary btn-sm rounded-pill px-3 py-1 text-xs font-semibold shrink-0">
+            Sign In
+          </Link>
+        </div>
+      )}
+
       {cart.items && cart.items.length === 0 ? (
         <div className="card border-0 shadow-sm rounded-4 p-5 text-center my-4">
           <div className="mx-auto rounded-circle d-flex align-items-center justify-content-center mb-3" style={{ width: '80px', height: '80px', background: '#f1f5f9' }}>
@@ -110,17 +113,17 @@ const CartPage = () => {
                               className="rounded-3 p-1 d-flex align-items-center justify-content-center"
                               style={{ width: '64px', height: '64px', background: '#f8fafc', border: '1px solid #e2e8f0' }}
                             >
-                              {item.product.image ? (
-                                <img src={item.product.image} alt={item.product.name} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
+                              {getProductImage(item.product) ? (
+                                <img src={getProductImage(item.product)} alt={item.product?.name} style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
                               ) : (
                                 <i className="bi bi-laptop text-muted fs-4"></i>
                               )}
                             </div>
                             <div>
-                              <Link to={`/product/${item.product.id}`} className="text-dark fw-bold text-decoration-none small text-truncate-2" style={{ maxWidth: '220px' }}>
-                                {item.product.name}
+                              <Link to={`/product/${item.product?.id || item.product_id}`} className="text-dark fw-bold text-decoration-none small text-truncate-2" style={{ maxWidth: '220px' }}>
+                                {item.product?.name}
                               </Link>
-                              <div className="text-muted" style={{ fontSize: '0.72rem' }}>{item.product.category_name}</div>
+                              <div className="text-muted" style={{ fontSize: '0.72rem' }}>{item.product?.category_name}</div>
                             </div>
                           </div>
                         </td>
@@ -222,8 +225,15 @@ const CartPage = () => {
               </div>
 
               <button
+                id="cart-proceed-checkout-btn"
                 className="btn btn-primary-gradient w-100 rounded-full py-3 fw-bold shadow-sm mb-3"
-                onClick={() => navigate('/checkout')}
+                onClick={() => {
+                  if (!user) {
+                    navigate('/login?redirect=/checkout');
+                  } else {
+                    navigate('/checkout');
+                  }
+                }}
               >
                 Proceed to Checkout
               </button>

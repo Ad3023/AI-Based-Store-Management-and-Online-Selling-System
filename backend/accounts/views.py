@@ -8,8 +8,15 @@ from django.utils.encoding import force_bytes, force_str
 from django.db.models import Count, Sum, Q
 from django.conf import settings
 import sys
+import secrets
+import random
+import datetime
+from django.utils import timezone
 import django
-from .models import User, AuditLog, CustomerProfile, Permission, Role
+from .models import User, AuditLog, CustomerProfile, Permission, Role, EmailVerificationToken, PasswordResetToken
+from .email_service import (
+    send_verification_email, send_password_reset_email, send_password_changed_notification
+)
 from .serializers import (
     UserSerializer, AdminUserSerializer, RegisterSerializer, LoginSerializer,
     AuditLogSerializer, CustomerProfileSerializer, PasswordResetRequestSerializer,
@@ -20,6 +27,24 @@ from .permissions import (
     IsAdminUserRole, IsStoreManagerOrAdmin, IsSuperAdmin, require_permission
 )
 from .rbac import PERMISSION_TEMPLATES, init_rbac
+
+
+def mask_email(email_str):
+    """
+    Masks customer email for privacy on verification page, e.g. add***@gmail.com.
+    """
+    if not email_str or '@' not in email_str:
+        return email_str or ''
+    local, domain = email_str.split('@', 1)
+    if len(local) <= 2:
+        masked_local = local[0] + '*'
+    elif len(local) <= 3:
+        masked_local = local[:2] + '*'
+    elif len(local) <= 5:
+        masked_local = local[:3] + '**'
+    else:
+        masked_local = local[:3] + '***'
+    return f"{masked_local}@{domain}"
 
 
 def log_action(user, action, details=None, request=None):
@@ -40,31 +65,355 @@ class RegisterView(APIView):
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
-            token, _ = Token.objects.get_or_create(user=user)
-            log_action(user, "User Registration", f"Registered with role {user.role}", request)
+
+            # Invalidate any prior unused tokens for this user
+            EmailVerificationToken.objects.filter(user=user, is_used=False).update(is_used=True)
+
+            # Generate cryptographically secure 6-digit numeric OTP
+            otp_code = f"{secrets.randbelow(900000) + 100000}"
+            token_str = secrets.token_urlsafe(32)
+            # Expire in 10 minutes strictly
+            expires = timezone.now() + datetime.timedelta(minutes=10)
+
+            token_obj = EmailVerificationToken(
+                user=user,
+                token=token_str,
+                purpose='email_verification',
+                expires_at=expires
+            )
+            # Hash OTP securely into otp_hash (never store raw OTP)
+            token_obj.set_otp(otp_code)
+            token_obj.save()
+
+            # Send verification email synchronously to verify SMTP delivery
+            success, err_msg = send_verification_email(user, otp_code, token_str)
+            if not success:
+                # Do NOT tell customer email was sent when SMTP fails
+                log_action(user, "User Registration Email Failed", f"SMTP delivery failed for {user.email}", request)
+                return Response({
+                    'requires_verification': True,
+                    'email': user.email,
+                    'masked_email': mask_email(user.email),
+                    'email_sent': False,
+                    'error': err_msg or 'We could not send the verification email at this time. Please try again later.'
+                }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+            log_action(user, "User Registration", f"Registered customer account {user.email}. Verification email dispatched.", request)
+
             return Response({
-                'token': token.key,
-                'user': UserSerializer(user).data,
-                'message': 'Account registered successfully.'
+                'requires_verification': True,
+                'email': user.email,
+                'masked_email': mask_email(user.email),
+                'email_sent': True,
+                'message': 'Account registered successfully! A 6-digit verification code has been sent to your email address. Please enter the code to activate your account.'
             }, status=status.HTTP_201_CREATED)
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class VerifyEmailView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email', '').strip().lower()
+        token = request.data.get('token', '').strip()
+        otp = (request.data.get('otp') or request.data.get('otp_code') or request.data.get('code') or '').strip()
+
+        # If token was supplied as a 6-digit numeric OTP, treat it as OTP
+        if not otp and len(token) == 6 and token.isdigit():
+            otp = token
+            token = ''
+
+        if not email:
+            return Response({'error': 'Email address is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not token and not otp:
+            return Response({'error': 'Please provide the 6-digit verification code.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(email__iexact=email)
+        except User.DoesNotExist:
+            return Response({'error': 'No account found with this email address.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if user.email_verified and user.is_active:
+            return Response({
+                'status': 'already_verified',
+                'message': 'Your email is already verified. You can now sign in and start shopping.'
+            }, status=status.HTTP_200_OK)
+
+        # Look up active verification record for this user
+        token_record = EmailVerificationToken.objects.filter(user=user, is_used=False).order_by('-created_at').first()
+        if not token_record:
+            return Response({
+                'error': 'No active verification code found for this account. Please request a new verification code.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check maximum failed attempts limit (max 5 attempts)
+        if token_record.failed_attempts >= 5:
+            token_record.is_used = True
+            token_record.save()
+            return Response({
+                'error': 'Maximum verification attempts exceeded (5/5). This code has been invalidated. Please request a new verification code.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check expiration (10 minutes)
+        if timezone.now() > token_record.expires_at:
+            token_record.is_used = True
+            token_record.save()
+            return Response({
+                'error': 'The verification code has expired. Please request a new verification code.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Verify OTP code or token
+        is_match = False
+        if otp:
+            is_match = token_record.verify_otp(otp)
+        elif token:
+            import hmac
+            is_match = hmac.compare_digest(token_record.token, token)
+
+        if not is_match:
+            token_record.failed_attempts += 1
+            if token_record.failed_attempts >= 5:
+                token_record.is_used = True
+            token_record.save()
+            remaining = max(0, 5 - token_record.failed_attempts)
+            if remaining == 0:
+                return Response({
+                    'error': 'Maximum verification attempts exceeded (5/5). This code has been invalidated. Please request a new code.'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            return Response({
+                'error': f'Invalid verification code. You have {remaining} attempt(s) remaining.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Success! Mark token as used and activate customer account
+        token_record.is_used = True
+        token_record.verified_at = timezone.now()
+        token_record.save()
+
+        # Invalidate any remaining tokens for this user
+        EmailVerificationToken.objects.filter(user=user, is_used=False).update(is_used=True)
+
+        user.is_active = True
+        user.email_verified = True
+        user.save(update_fields=['is_active', 'email_verified', 'updated_at'])
+
+        log_action(user, "EMAIL_VERIFICATION_SUCCESS", f"Customer {user.email} verified email successfully with OTP", request)
+
+        return Response({
+            'status': 'verified',
+            'message': 'Your EthioTech Market account has been activated. You can now sign in and start shopping.',
+            'redirect_url': '/login'
+        }, status=status.HTTP_200_OK)
+
+
+class ResendVerificationView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email', '').strip().lower()
+        if not email:
+            return Response({'error': 'Email address is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.filter(email__iexact=email).first()
+        if not user:
+            return Response({
+                'error': 'No account found with this email address. Please register a customer account.'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        if user.email_verified and user.is_active:
+            return Response({
+                'status': 'already_verified',
+                'message': 'Your account is already verified. You can log in.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check 60-second cooldown from latest token creation
+        latest = EmailVerificationToken.objects.filter(user=user).order_by('-created_at').first()
+        if latest:
+            elapsed = (timezone.now() - latest.created_at).total_seconds()
+            if elapsed < 60:
+                remaining = int(60 - elapsed)
+                return Response({
+                    'error': f'Please wait {remaining} seconds before requesting a new verification code.',
+                    'cooldown': remaining
+                }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+        # Invalidate all prior unused tokens
+        EmailVerificationToken.objects.filter(user=user, is_used=False).update(is_used=True)
+
+        otp_code = f"{secrets.randbelow(900000) + 100000}"
+        token_str = secrets.token_urlsafe(32)
+        expires = timezone.now() + datetime.timedelta(minutes=10)
+
+        token_obj = EmailVerificationToken(
+            user=user,
+            token=token_str,
+            purpose='email_verification',
+            expires_at=expires
+        )
+        token_obj.set_otp(otp_code)
+        token_obj.save()
+
+        # Send email
+        success, err_msg = send_verification_email(user, otp_code, token_str)
+        if not success:
+            log_action(user, "RESEND_VERIFICATION_FAILED", f"Failed to resend verification email to {user.email}", request)
+            return Response({
+                'error': err_msg or 'We could not send the verification email at this time. Please try again later.'
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        log_action(user, "RESEND_VERIFICATION", f"Verification email re-sent to {user.email}", request)
+
+        return Response({
+            'message': 'A new 6-digit verification code has been sent to your email address.',
+            'masked_email': mask_email(user.email),
+            'cooldown': 60
+        }, status=status.HTTP_200_OK)
+
+
+
+def get_dashboard_url_for_user(user):
+    """
+    Returns the canonical role-based dashboard URL determined authoritatively by the Django backend.
+    - Admin / Super Admin -> /admin/dashboard
+    - Store Manager -> /store-manager/dashboard
+    - Order Manager -> /order-manager/dashboard
+    - Customer -> /customer/dashboard
+    """
+    if getattr(user, 'is_super_admin', False) or user.role in [User.RoleChoices.SUPER_ADMIN, User.RoleChoices.ADMIN]:
+        return '/admin/dashboard'
+    if getattr(user, 'is_order_manager', lambda: False)() or user.role == User.RoleChoices.ORDER_MANAGER:
+        return '/order-manager/dashboard'
+    if (
+        user.role in [User.RoleChoices.STORE_MANAGER, User.RoleChoices.SUB_ADMIN] or
+        (user.custom_role is not None and getattr(user.custom_role, 'code', '') != 'customer')
+    ):
+        return '/store-manager/dashboard'
+    if getattr(user, 'is_supplier', lambda: False)() or user.role == User.RoleChoices.SUPPLIER:
+        return '/supplier/dashboard'
+    return '/customer/dashboard'
 
 
 class LoginView(APIView):
     permission_classes = [permissions.AllowAny]
+    portal_type = None
 
     def post(self, request):
-        serializer = LoginSerializer(data=request.data)
+        data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+        if self.portal_type and not data.get('portal'):
+            data['portal'] = self.portal_type
+
+        serializer = LoginSerializer(data=data, context={'request': request})
         if serializer.is_valid():
             user = serializer.validated_data['user']
+            portal = data.get('portal')
+
+            # Portal Role Separation Enforcement
+            if portal == 'staff':
+                if user.role == User.RoleChoices.SUPPLIER:
+                    return Response({
+                        'portal_access_denied': True,
+                        'portal': 'staff',
+                        'role': user.role,
+                        'redirect_url': '/supplier/login',
+                        'error': 'This portal is for internal staff only. Suppliers must sign in via the Supplier Portal.'
+                    }, status=status.HTTP_403_FORBIDDEN)
+                is_staff_user = bool(
+                    getattr(user, 'is_super_admin', False) or
+                    user.role in [
+                        User.RoleChoices.SUPER_ADMIN,
+                        User.RoleChoices.ADMIN,
+                        User.RoleChoices.SUB_ADMIN,
+                        User.RoleChoices.STORE_MANAGER,
+                        User.RoleChoices.ORDER_MANAGER,
+                        User.RoleChoices.CUSTOM,
+                    ] or
+                    (user.custom_role is not None and user.custom_role.code not in ['customer', 'supplier']) or
+                    (not user.is_customer() and user.role != User.RoleChoices.SUPPLIER)
+                )
+                if not is_staff_user:
+                    return Response({
+                        'portal_access_denied': True,
+                        'portal': 'staff',
+                        'role': user.role,
+                        'redirect_url': '/login',
+                        'error': 'This portal is for authorized staff only. Please use Customer Login.'
+                    }, status=status.HTTP_403_FORBIDDEN)
+            elif portal == 'customer':
+                if user.role == User.RoleChoices.SUPPLIER:
+                    return Response({
+                        'portal_access_denied': True,
+                        'portal': 'customer',
+                        'role': user.role,
+                        'redirect_url': '/supplier/login',
+                        'error': 'This login portal is reserved for customers only. Suppliers must sign in via the Supplier Portal.'
+                    }, status=status.HTTP_403_FORBIDDEN)
+                is_customer_user = bool(
+                    user.is_customer() and
+                    (user.custom_role is None or user.custom_role.code == 'customer') and
+                    not getattr(user, 'is_super_admin', False) and
+                    user.role == User.RoleChoices.CUSTOMER
+                )
+                if not is_customer_user:
+                    return Response({
+                        'portal_access_denied': True,
+                        'portal': 'customer',
+                        'role': user.role,
+                        'is_staff': True,
+                        'redirect_url': '/staff/login',
+                        'error': 'This login portal is reserved for customers only. Staff members (Administrator, Store Manager, Order Manager) must sign in via the Staff Login portal.'
+                    }, status=status.HTTP_403_FORBIDDEN)
+            elif portal == 'supplier':
+                is_supplier_user = bool(
+                    getattr(user, 'is_supplier', lambda: False)() or
+                    user.role == User.RoleChoices.SUPPLIER or
+                    (hasattr(user, 'supplier_profile') and user.supplier_profile is not None)
+                )
+                if not is_supplier_user:
+                    return Response({
+                        'portal_access_denied': True,
+                        'portal': 'supplier',
+                        'role': user.role,
+                        'redirect_url': '/login',
+                        'error': 'This portal is strictly reserved for registered hardware suppliers. Store staff and customers cannot log in here.'
+                    }, status=status.HTTP_403_FORBIDDEN)
+
             token, _ = Token.objects.get_or_create(user=user)
-            log_action(user, "User Login", f"Successful login (Role: {user.role})", request)
+            portal_label = portal or 'general'
+            log_action(user, "User Login", f"Successful login via {portal_label} portal (Role: {user.role})", request)
+            dashboard_url = get_dashboard_url_for_user(user)
             return Response({
                 'token': token.key,
-                'user': UserSerializer(user).data,
+                'user': UserSerializer(user, context={'request': request}).data,
+                'role': user.role,
+                'dashboard_url': dashboard_url,
                 'message': 'Logged in successfully.'
             })
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CustomerLoginView(LoginView):
+    """
+    Dedicated endpoint strictly for Customer login.
+    Staff members (Admin, Store Manager, Order Manager) are rejected with HTTP 403.
+    """
+    portal_type = 'customer'
+
+
+class StaffLoginView(LoginView):
+    """
+    Dedicated endpoint strictly for Staff (Admin, Store Manager, Order Manager) login.
+    Customers are rejected with HTTP 403.
+    """
+    portal_type = 'staff'
+
+
+class SupplierLoginView(LoginView):
+    """
+    Dedicated endpoint strictly for Supplier login.
+    Customers and staff are rejected with HTTP 403.
+    """
+    portal_type = 'supplier'
 
 
 class LogoutView(APIView):
@@ -86,16 +435,12 @@ class CurrentUserView(APIView):
         return Response(UserSerializer(request.user, context={'request': request}).data)
 
     def put(self, request):
-        # Prevent any attempt to change role via profile
-        if 'role' in request.data and request.data['role'] != request.user.role:
-            if request.user.is_super_admin:
-                return Response(
-                    {'error': "The Super Administrator's role is protected and cannot be changed."},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+        # Prevent any escalation attempt: role is strictly read-only and stripped from profile updates
+        data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+        data.pop('role', None)
 
-        if 'password' in request.data and str(request.data['password']).strip():
-            new_pwd = str(request.data['password']).strip()
+        if 'password' in data and str(data['password']).strip():
+            new_pwd = str(data['password']).strip()
             if len(new_pwd) < 6:
                 return Response({'error': 'Password must be at least 6 characters long.'}, status=status.HTTP_400_BAD_REQUEST)
             request.user.set_password(new_pwd)
@@ -103,7 +448,7 @@ class CurrentUserView(APIView):
             log_action(request.user, "Password Changed", "User updated their account password", request)
 
         old_email = request.user.email
-        serializer = UserSerializer(request.user, data=request.data, partial=True, context={'request': request})
+        serializer = UserSerializer(request.user, data=data, partial=True, context={'request': request})
         if serializer.is_valid():
             user = serializer.save()
             new_email = user.email
@@ -454,7 +799,7 @@ class UserRoleAssignView(APIView):
 # ============================================================================
 
 class AdminUserListView(generics.ListCreateAPIView):
-    permission_classes = [require_permission('users.manage')]
+    permission_classes = [IsAdminUserRole]
     serializer_class = AdminUserSerializer
 
     def get_queryset(self):
@@ -483,7 +828,7 @@ class AdminUserListView(generics.ListCreateAPIView):
 
 
 class AdminUserDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [require_permission('users.manage')]
+    permission_classes = [IsAdminUserRole]
     serializer_class = AdminUserSerializer
     queryset = User.objects.all()
 
@@ -549,6 +894,10 @@ class AdminUserDetailView(generics.RetrieveUpdateDestroyAPIView):
         if instance.is_super_admin or instance.username == 'addisuguche_admin':
             return Response({'error': 'The Super Administrator account cannot be deleted.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Protect the last active administrator
+        if instance.is_admin() and User.active_admin_count() <= 1:
+            return Response({'error': 'Cannot delete the last active administrator. The system must retain at least one active administrator.'}, status=status.HTTP_400_BAD_REQUEST)
+
         # Only Super Admin can delete other administrators
         if instance.role in [User.RoleChoices.SUPER_ADMIN, User.RoleChoices.ADMIN] and not request.user.is_super_admin:
             return Response({'error': 'Only Super Administrators can delete administrator accounts.'}, status=status.HTTP_403_FORBIDDEN)
@@ -571,41 +920,26 @@ class PasswordResetRequestView(APIView):
         serializer = PasswordResetRequestSerializer(data=request.data)
         if serializer.is_valid():
             email = serializer.validated_data['email']
-            user = User.objects.get(email__iexact=email)
-            token = default_token_generator.make_token(user)
-            uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
-            log_action(user, "Password Reset Requested", f"Password reset requested for {email}", request)
-
-            # Send email instructions via configured Django email backend
-            try:
-                from django.core.mail import send_mail
-                from django.conf import settings
-                reset_link = f"{getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')}/reset-password?email={email}&token={token}"
-                send_mail(
-                    subject="Ethio Tech Market - Password Reset Instructions",
-                    message=(
-                        f"Hello {user.first_name or user.username},\n\n"
-                        f"We received a request to reset your password for your Ethio Tech Market account.\n\n"
-                        f"To reset your password, please use the following link:\n"
-                        f"{reset_link}\n\n"
-                        f"Recovery Token: {token}\n\n"
-                        f"This token expires in 24 hours. If you did not request this, please ignore this email.\n\n"
-                        f"Regards,\nEthio Tech Market Support Team\nDebre Birhan, Amhara, Ethiopia"
-                    ),
-                    from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@ethiotechmarket.com'),
-                    recipient_list=[email],
-                    fail_silently=True
+            user = User.objects.filter(email__iexact=email, is_active=True).first()
+            if user:
+                raw_otp = f"{secrets.randbelow(900000) + 100000}"
+                token_str = secrets.token_urlsafe(32)
+                expires = timezone.now() + datetime.timedelta(hours=24)
+                PasswordResetToken.objects.filter(user=user, is_used=False).update(is_used=True)
+                prt = PasswordResetToken(
+                    user=user,
+                    token=token_str,
+                    expires_at=expires
                 )
-            except Exception as mail_err:
-                pass
+                prt.set_otp(raw_otp)
+                prt.save()
+                send_password_reset_email(user, token_str, raw_otp=raw_otp)
+                log_action(user, "Password Reset Requested", f"Password reset instructions and OTP sent to {email}", request)
 
+            # Security requirement: Never return the secret token or reset URL to the browser.
+            # The user MUST check their email to obtain the OTP or click the link in Gmail.
             return Response({
-                'message': f"Password recovery instructions have been processed for {email}.",
-                'email': email,
-                'status': 'sent',
-                'reset_token': token,
-                'uidb64': uidb64,
-                'reset_url': f"/reset-password?email={email}&token={token}"
+                'message': 'If an account exists with that email address, password recovery instructions and a 6-digit verification code have been sent to your email.'
             }, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -617,22 +951,81 @@ class PasswordResetConfirmView(APIView):
         serializer = PasswordResetConfirmSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.validated_data['user']
-            token = serializer.validated_data['token']
+            token_or_otp = serializer.validated_data['token'].strip()
             new_password = serializer.validated_data['new_password']
 
-            is_valid_token = default_token_generator.check_token(user, token) or token == 'demo-reset-token'
+            # Check 1: Match full URL token from email reset link
+            reset_token = PasswordResetToken.objects.filter(user=user, token=token_or_otp, is_used=False).first()
+            is_valid_token = False
+            if reset_token and reset_token.is_valid():
+                is_valid_token = True
+                reset_token.is_used = True
+                reset_token.save()
+            elif len(token_or_otp) == 6:
+                # Check 2: Match 6-digit OTP code entered by the user
+                active_tokens = PasswordResetToken.objects.filter(user=user, is_used=False)
+                for rt in active_tokens:
+                    if rt.is_valid() and rt.verify_otp(token_or_otp):
+                        is_valid_token = True
+                        rt.is_used = True
+                        rt.save()
+                        break
+            elif default_token_generator.check_token(user, token_or_otp):
+                is_valid_token = True
+
             if not is_valid_token:
-                return Response({'error': 'The password reset token is invalid or has expired.'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({
+                    'error': 'The password reset link or verification code is invalid or has expired. Please check your email or request a new code.'
+                }, status=status.HTTP_400_BAD_REQUEST)
 
             user.set_password(new_password)
             user.save()
             Token.objects.filter(user=user).delete()
+            send_password_changed_notification(user)
             log_action(user, "Password Reset Completed", f"Password successfully changed for {user.email}", request)
             return Response({
                 'status': 'success',
                 'message': 'Password has been reset successfully. You can now log in with your new credentials.'
             }, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ChangePasswordView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        old_password = request.data.get('old_password')
+        new_password = request.data.get('new_password')
+        new_password_confirm = request.data.get('new_password_confirm')
+
+        if not old_password or not new_password:
+            return Response({'error': 'Current password and new password are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not request.user.check_password(old_password):
+            return Response({'old_password': ['Current password is incorrect.']}, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(new_password) < 6:
+            return Response({'new_password': ['New password must be at least 6 characters long.']}, status=status.HTTP_400_BAD_REQUEST)
+
+        if new_password != new_password_confirm:
+            return Response({'new_password_confirm': ['Confirmation password does not match new password.']}, status=status.HTTP_400_BAD_REQUEST)
+
+        request.user.set_password(new_password)
+        request.user.save()
+
+        try:
+            send_password_changed_notification(request.user)
+        except Exception:
+            pass
+
+        log_action(
+            request.user,
+            "PASSWORD_CHANGED",
+            f"User {request.user.username} successfully updated their password",
+            request
+        )
+
+        return Response({'message': 'Password changed successfully.'}, status=status.HTTP_200_OK)
 
 
 class SystemAnalyticsView(APIView):
@@ -813,6 +1206,15 @@ class GoogleAuthView(APIView):
         
         # Safe user lookup or creation
         user = User.objects.filter(email__iexact=email).first()
+        portal = request.data.get('portal', '').strip().lower()
+        if portal == 'customer' and user and not user.is_customer():
+            return Response({
+                'error': 'Access denied. Google Sign-In is only available for customer accounts. Staff members (Administrator, Store Manager, Order Manager) must sign in via the Staff Login portal using their staff credentials.',
+                'is_staff': True,
+                'role': user.role,
+                'staff_portal_url': '/staff/login'
+            }, status=status.HTTP_403_FORBIDDEN)
+
         is_new = False
         if not user:
             base_username = email.split('@')[0].replace('.', '_').replace('-', '_')
@@ -825,7 +1227,7 @@ class GoogleAuthView(APIView):
             customer_role = Role.objects.filter(code='customer').first()
 
             # New Google accounts are assigned the customer role strictly.
-            # Never grant admin, superuser, or store manager privileges.
+            # Verified Google accounts do not require a separate email OTP.
             user = User.objects.create(
                 username=username,
                 email=email,
@@ -834,7 +1236,9 @@ class GoogleAuthView(APIView):
                 role=User.Role.CUSTOMER,
                 custom_role=customer_role,
                 is_staff=False,
-                is_superuser=False
+                is_superuser=False,
+                is_active=True,
+                email_verified=True
             )
             user.set_unusable_password()
             user.save()
@@ -842,6 +1246,12 @@ class GoogleAuthView(APIView):
             from orders.models import Cart
             Cart.objects.get_or_create(user=user)
             is_new = True
+        else:
+            # If customer already existed and signed in via Google, verify email
+            if not user.email_verified or not user.is_active:
+                user.email_verified = True
+                user.is_active = True
+                user.save(update_fields=['email_verified', 'is_active', 'updated_at'])
 
         token_obj, _ = Token.objects.get_or_create(user=user)
         log_action(user, "Google Authentication", f"User authenticated via Google ({email})", request)
@@ -850,6 +1260,8 @@ class GoogleAuthView(APIView):
             'token': token_obj.key,
             'is_new_user': is_new,
             'user': UserSerializer(user, context={'request': request}).data,
+            'role': user.role,
+            'dashboard_url': '/customer/dashboard',
             'message': 'Account created via Google successfully.' if is_new else 'Signed in via Google successfully.'
         }, status=status.HTTP_200_OK)
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../../api';
+import { validateEmail, validatePhone } from '../../utils/validation';
 import { useAuth } from '../../context/AuthContext';
 import { formatETB } from '../../utils/currency';
 import { cleanDisplayName, getUserRoleLabel, getUserRoleBadgeClass } from '../../utils/orderStatus';
@@ -250,8 +251,22 @@ const AdminUsersPage = () => {
   // Create New Staff Account
   const handleCreateNewUser = async (e) => {
     e.preventDefault();
+    const emailRes = validateEmail(newUserFormData.email, true);
+    if (!emailRes.isValid) {
+      alert(emailRes.error);
+      return;
+    }
+    let formattedPhone = '';
+    if (newUserFormData.phone_number && newUserFormData.phone_number.trim()) {
+      const phoneRes = validatePhone(newUserFormData.phone_number, false);
+      if (!phoneRes.isValid) {
+        alert(phoneRes.error);
+        return;
+      }
+      formattedPhone = phoneRes.formatted;
+    }
     try {
-      await api.post('auth/users/', newUserFormData);
+      await api.post('auth/users/', { ...newUserFormData, email: emailRes.value, phone_number: formattedPhone || newUserFormData.phone_number });
       setFeedback({
         type: 'success',
         text: `New user account '${newUserFormData.username}' created successfully.`
@@ -309,7 +324,7 @@ const AdminUsersPage = () => {
           </div>
           <h2 className="fw-bolder mb-1 text-slate-900 tracking-tight">Role-Based Access Control (RBAC) & Governance</h2>
           <p className="text-slate-500 text-xs mb-0">
-            Manage system roles, configure granular permissions, audit security events, and control staff authorization with backend enforcement.
+            Manage system roles, configure granular permissions, audit security events, and control staff authorization with role-based access control.
           </p>
         </div>
 
@@ -1279,7 +1294,7 @@ const AdminUsersPage = () => {
                     <input
                       type="email"
                       className="form-control form-control-sm"
-                      placeholder="officer@ethio.com"
+                      placeholder="officer@gmail.com"
                       required
                       value={newUserFormData.email}
                       onChange={(e) => setNewUserFormData({ ...newUserFormData, email: e.target.value })}
@@ -1320,6 +1335,17 @@ const AdminUsersPage = () => {
                         onChange={(e) => setNewUserFormData({ ...newUserFormData, last_name: e.target.value })}
                       />
                     </div>
+                  </div>
+
+                  <div className="mb-2.5">
+                    <label className="form-label text-xs fw-bold">Phone Number (10 digits)</label>
+                    <input
+                      type="tel"
+                      className="form-control form-control-sm"
+                      placeholder="0911223344"
+                      value={newUserFormData.phone_number}
+                      onChange={(e) => setNewUserFormData({ ...newUserFormData, phone_number: e.target.value })}
+                    />
                   </div>
 
                   <div className="mb-3">

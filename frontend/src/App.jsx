@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Outlet } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Outlet, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
@@ -8,7 +8,7 @@ import { CompareProvider } from './context/CompareContext';
 import { LanguageProvider } from './context/LanguageContext';
 
 // Route Guards
-import { ProtectedRoute, ManagerRoute, AdminRoute, PermissionRoute, OrderManagerRoute } from './components/ProtectedRoute';
+import { ProtectedRoute, ManagerRoute, AdminRoute, PermissionRoute, OrderManagerRoute, StoreManagerRoute, SupplierRoute } from './components/ProtectedRoute';
 
 // Shared Components
 import Navbar from './components/Navbar';
@@ -38,17 +38,22 @@ import OrdersHistoryPage from './pages/OrdersHistoryPage';
 import ReceiptPage from './pages/ReceiptPage';
 import ProfilePage from './pages/ProfilePage';
 import CustomerDashboardPage from './pages/CustomerDashboardPage';
-import LoginPage from './pages/LoginPage';
+import CustomerLoginPage from './pages/CustomerLoginPage';
+import StaffLoginPage from './pages/StaffLoginPage';
 import RegisterPage from './pages/RegisterPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import UnsubscribePage from './pages/UnsubscribePage';
 import AIRecommendationsPage from './pages/AIRecommendationsPage';
 import TrackOrderPage from './pages/TrackOrderPage';
 import ComparePage from './pages/ComparePage';
 
 // Manager & Admin Portal
 import DashboardLayout from './pages/manager/DashboardLayout';
-import ManagerOverviewPage from './pages/manager/ManagerOverviewPage';
+import AdminDashboardPage from './pages/manager/AdminDashboardPage';
+import StoreManagerDashboardPage from './pages/manager/StoreManagerDashboardPage';
+import ManagerSuppliersPage from './pages/manager/ManagerSuppliersPage';
 import ManagerOrdersPage from './pages/manager/ManagerOrdersPage';
 import ManagerInventoryPage from './pages/manager/ManagerInventoryPage';
 import ManagerSegmentationPage from './pages/manager/ManagerSegmentationPage';
@@ -60,6 +65,26 @@ import ManagerFeedbackPage from './pages/manager/ManagerFeedbackPage';
 import ManagerPaymentsPage from './pages/manager/ManagerPaymentsPage';
 import ManagerCategoriesPage from './pages/manager/ManagerCategoriesPage';
 import OrderManagerDashboardPage from './pages/manager/OrderManagerDashboardPage';
+import AdminDeliveryHubPage from './pages/manager/AdminDeliveryHubPage';
+import OrderManagerShipmentsPage from './pages/manager/OrderManagerShipmentsPage';
+
+// Supplier Procurement & Payments
+import ProcurementSuppliersPage from './pages/procurement/ProcurementSuppliersPage';
+import CreatePurchaseOrderPage from './pages/procurement/CreatePurchaseOrderPage';
+import PurchaseOrderHistoryPage from './pages/procurement/PurchaseOrderHistoryPage';
+import ReceiveProductsPage from './pages/procurement/ReceiveProductsPage';
+import SupplierInvoicesPage from './pages/procurement/SupplierInvoicesPage';
+import SupplierPaymentsPage from './pages/procurement/SupplierPaymentsPage';
+import ProcurementReportsPage from './pages/procurement/ProcurementReportsPage';
+import ProcurementHistoryPage from './pages/procurement/ProcurementHistoryPage';
+
+// External Supplier Portal Pages
+import SupplierLoginPage from './pages/supplier/SupplierLoginPage';
+import SupplierLayout from './pages/supplier/SupplierLayout';
+import SupplierDashboardPage from './pages/supplier/SupplierDashboardPage';
+import SupplierPurchaseOrdersPage from './pages/supplier/SupplierPurchaseOrdersPage';
+import SupplierPortalInvoicesPage from './pages/supplier/SupplierInvoicesPage';
+import SupplierPortalPaymentsPage from './pages/supplier/SupplierPaymentsPage';
 
 // Layout with Navbar and Footer for public & customer pages
 const CustomerStoreLayout = () => {
@@ -107,11 +132,19 @@ function App() {
                   <Route path="/recommendations" element={<AIRecommendationsPage />} />
                   <Route path="/compare" element={<ComparePage />} />
 
-                  {/* Authentication Routes */}
-                  <Route path="/login" element={<LoginPage />} />
+                  {/* Authentication & Verification Routes */}
+                  <Route path="/login" element={<CustomerLoginPage />} />
+                  <Route path="/customer/login" element={<CustomerLoginPage />} />
+                  <Route path="/staff/login" element={<StaffLoginPage />} />
+                  <Route path="/supplier/login" element={<SupplierLoginPage />} />
+                  <Route path="/staff-login" element={<StaffLoginPage />} />
+                  <Route path="/manager/login" element={<Navigate to="/staff/login" replace />} />
                   <Route path="/register" element={<RegisterPage />} />
+                  <Route path="/verify-email" element={<VerifyEmailPage />} />
                   <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                   <Route path="/reset-password" element={<ResetPasswordPage />} />
+                  <Route path="/newsletter/unsubscribe" element={<UnsubscribePage />} />
+                  <Route path="/newsletter/verify" element={<UnsubscribePage />} />
 
                   {/* Protected Customer Routes */}
                   <Route
@@ -188,36 +221,61 @@ function App() {
                   />
                 </Route>
 
-                {/* Store Manager Protected Layout */}
+                {/* Store Manager Protected Layout (/store-manager and /manager) */}
                 <Route
-                  path="/manager"
+                  path="/store-manager"
                   element={
-                    <ManagerRoute>
+                    <StoreManagerRoute>
                       <DashboardLayout />
-                    </ManagerRoute>
+                    </StoreManagerRoute>
                   }
                 >
-                  <Route index element={<ManagerOverviewPage />} />
-                  <Route path="dashboard" element={<ManagerOverviewPage />} />
+                  <Route index element={<StoreManagerDashboardPage />} />
+                  <Route path="dashboard" element={<StoreManagerDashboardPage />} />
                   <Route path="products" element={<PermissionRoute permissions={['products.view', 'products.create', 'products.edit', 'products.delete']}><ManagerInventoryPage /></PermissionRoute>} />
                   <Route path="categories" element={<PermissionRoute permissions={['categories.manage', 'products.view']}><ManagerCategoriesPage /></PermissionRoute>} />
                   <Route path="inventory" element={<PermissionRoute permissions={['inventory.manage', 'products.view']}><ManagerInventoryPage /></PermissionRoute>} />
+                  <Route path="suppliers" element={<ProcurementSuppliersPage />} />
+                  <Route path="procurement/suppliers" element={<ProcurementSuppliersPage />} />
+                  <Route path="procurement/purchase-orders/create" element={<CreatePurchaseOrderPage />} />
+                  <Route path="procurement/purchase-orders" element={<PurchaseOrderHistoryPage />} />
+                  <Route path="procurement/receive" element={<ReceiveProductsPage />} />
+                  <Route path="procurement/invoices" element={<SupplierInvoicesPage />} />
+                  <Route path="procurement/history" element={<ProcurementHistoryPage />} />
+                  <Route path="promotions" element={<PermissionRoute permission="promotions.manage"><ManagerPromotionsPage /></PermissionRoute>} />
+                  <Route path="feedback" element={<PermissionRoute permissions={['products.edit', 'refunds.manage']}><ManagerFeedbackPage /></PermissionRoute>} />
+                  <Route path="warranty" element={<PermissionRoute permission="refunds.manage"><ManagerWarrantyPage /></PermissionRoute>} />
+                  <Route path="segmentation" element={<PermissionRoute permission="customers.view"><ManagerSegmentationPage /></PermissionRoute>} />
+                  <Route path="reports" element={<PermissionRoute permission="reports.view"><ManagerReportsPage /></PermissionRoute>} />
+                </Route>
+
+                <Route
+                  path="/manager"
+                  element={
+                    <StoreManagerRoute>
+                      <DashboardLayout />
+                    </StoreManagerRoute>
+                  }
+                >
+                  <Route index element={<StoreManagerDashboardPage />} />
+                  <Route path="dashboard" element={<StoreManagerDashboardPage />} />
+                  <Route path="products" element={<PermissionRoute permissions={['products.view', 'products.create', 'products.edit', 'products.delete']}><ManagerInventoryPage /></PermissionRoute>} />
+                  <Route path="categories" element={<PermissionRoute permissions={['categories.manage', 'products.view']}><ManagerCategoriesPage /></PermissionRoute>} />
+                  <Route path="inventory" element={<PermissionRoute permissions={['inventory.manage', 'products.view']}><ManagerInventoryPage /></PermissionRoute>} />
+                  <Route path="suppliers" element={<ProcurementSuppliersPage />} />
+                  <Route path="procurement/suppliers" element={<ProcurementSuppliersPage />} />
+                  <Route path="procurement/purchase-orders/create" element={<CreatePurchaseOrderPage />} />
+                  <Route path="procurement/purchase-orders" element={<PurchaseOrderHistoryPage />} />
+                  <Route path="procurement/receive" element={<ReceiveProductsPage />} />
+                  <Route path="procurement/invoices" element={<SupplierInvoicesPage />} />
+                  <Route path="procurement/history" element={<ProcurementHistoryPage />} />
                   <Route path="promotions" element={<PermissionRoute permission="promotions.manage"><ManagerPromotionsPage /></PermissionRoute>} />
                   <Route path="orders" element={<PermissionRoute permissions={['orders.view', 'orders.update']}><ManagerOrdersPage /></PermissionRoute>} />
                   <Route path="payments" element={<PermissionRoute permissions={['payments.view', 'payments.verify']}><ManagerPaymentsPage /></PermissionRoute>} />
                   <Route path="feedback" element={<PermissionRoute permissions={['products.edit', 'refunds.manage']}><ManagerFeedbackPage /></PermissionRoute>} />
                   <Route path="warranty" element={<PermissionRoute permission="refunds.manage"><ManagerWarrantyPage /></PermissionRoute>} />
-                  <Route path="warranty-policies" element={<PermissionRoute permission="refunds.manage"><ManagerWarrantyPage /></PermissionRoute>} />
                   <Route path="segmentation" element={<PermissionRoute permission="customers.view"><ManagerSegmentationPage /></PermissionRoute>} />
                   <Route path="reports" element={<PermissionRoute permission="reports.view"><ManagerReportsPage /></PermissionRoute>} />
-                  <Route
-                    path="admin/users"
-                    element={
-                      <AdminRoute>
-                        <AdminUsersPage />
-                      </AdminRoute>
-                    }
-                  />
                 </Route>
 
                 {/* Dedicated Order Manager Protected Layout */}
@@ -232,6 +290,7 @@ function App() {
                   <Route index element={<OrderManagerDashboardPage />} />
                   <Route path="dashboard" element={<OrderManagerDashboardPage />} />
                   <Route path="orders" element={<ManagerOrdersPage />} />
+                  <Route path="shipments" element={<OrderManagerShipmentsPage />} />
                   <Route path="reports" element={<ManagerReportsPage />} />
                 </Route>
 
@@ -244,9 +303,16 @@ function App() {
                     </AdminRoute>
                   }
                 >
-                  <Route index element={<ManagerOverviewPage />} />
-                  <Route path="dashboard" element={<ManagerOverviewPage />} />
+                  <Route index element={<AdminDashboardPage />} />
+                  <Route path="dashboard" element={<AdminDashboardPage />} />
+                  <Route path="delivery" element={<AdminDeliveryHubPage />} />
                   <Route path="users" element={<AdminUsersPage />} />
+                  <Route path="suppliers" element={<ProcurementSuppliersPage />} />
+                  <Route path="procurement/approvals" element={<PurchaseOrderHistoryPage adminApprovalMode={true} />} />
+                  <Route path="procurement/invoices" element={<SupplierInvoicesPage />} />
+                  <Route path="procurement/payments" element={<SupplierPaymentsPage defaultTab="disbursements" />} />
+                  <Route path="procurement/payment-history" element={<SupplierPaymentsPage defaultTab="history" />} />
+                  <Route path="procurement/reports" element={<ProcurementReportsPage />} />
                   <Route path="products" element={<ManagerInventoryPage />} />
                   <Route path="categories" element={<ManagerCategoriesPage />} />
                   <Route path="inventory" element={<ManagerInventoryPage />} />
@@ -255,7 +321,24 @@ function App() {
                   <Route path="promotions" element={<ManagerPromotionsPage />} />
                   <Route path="feedback" element={<ManagerFeedbackPage />} />
                   <Route path="warranty" element={<ManagerWarrantyPage />} />
+                  <Route path="segmentation" element={<ManagerSegmentationPage />} />
                   <Route path="reports" element={<ManagerReportsPage />} />
+                </Route>
+
+                {/* Dedicated External Supplier Protected Layout */}
+                <Route
+                  path="/supplier"
+                  element={
+                    <SupplierRoute>
+                      <SupplierLayout />
+                    </SupplierRoute>
+                  }
+                >
+                  <Route index element={<SupplierDashboardPage />} />
+                  <Route path="dashboard" element={<SupplierDashboardPage />} />
+                  <Route path="purchase-orders" element={<SupplierPurchaseOrdersPage />} />
+                  <Route path="invoices" element={<SupplierPortalInvoicesPage />} />
+                  <Route path="payments" element={<SupplierPortalPaymentsPage />} />
                 </Route>
 
                 {/* Fallback 404 */}

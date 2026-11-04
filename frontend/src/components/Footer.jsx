@@ -1,19 +1,41 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import EthioTechLogo from './EthioTechLogo';
+import api from '../api';
+import { validateEmail } from '../utils/validation';
 
 const CURRENT_YEAR = new Date().getFullYear();
 
 const Footer = () => {
   const [email, setEmail] = useState('');
-  const [subscribed, setSubscribed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [subscribeMessage, setSubscribeMessage] = useState('');
+  const [isError, setIsError] = useState(false);
 
-  const handleSubscribe = (e) => {
+  const handleSubscribe = async (e) => {
     e.preventDefault();
-    if (email.trim()) {
-      setSubscribed(true);
+    const emailRes = validateEmail(email, true);
+    if (!emailRes.isValid) {
+      setIsError(true);
+      setSubscribeMessage(emailRes.error);
+      setTimeout(() => setSubscribeMessage(''), 5000);
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setIsError(false);
+      const res = await api.post('notifications/newsletter/subscribe/', { email: emailRes.value });
+      setSubscribeMessage(res.data.message || 'Confirmation email sent! Please check your inbox.');
       setEmail('');
-      setTimeout(() => setSubscribed(false), 4000);
+      setTimeout(() => setSubscribeMessage(''), 8000);
+    } catch (err) {
+      setIsError(true);
+      const msg = err.response?.data?.error || 'Unable to subscribe. Please try again.';
+      setSubscribeMessage(msg);
+      setTimeout(() => setSubscribeMessage(''), 6000);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -55,6 +77,8 @@ const Footer = () => {
               <li><Link to="/shipping" className="hover:text-cyan-400 transition text-slate-400">Delivery Information</Link></li>
               <li><Link to="/faq" className="hover:text-cyan-400 transition text-slate-400">Help & FAQs</Link></li>
               <li><Link to="/contact" className="hover:text-cyan-400 transition text-slate-400">Contact Support</Link></li>
+              <li><Link to="/staff/login" className="hover:text-teal-300 transition text-slate-400 d-inline-flex align-items-center gap-1"><i className="bi bi-shield-lock-fill text-teal-400"></i> Staff Portal</Link></li>
+              <li><Link to="/supplier/login" className="hover:text-teal-300 transition text-slate-400 d-inline-flex align-items-center gap-1"><i className="bi bi-truck text-teal-400"></i> Supplier Portal</Link></li>
             </ul>
           </div>
 
@@ -75,13 +99,18 @@ const Footer = () => {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                 />
-                <button className="btn btn-ethio-primary btn-sm rounded-end-3 text-xs px-3 font-bold" type="submit">
-                  Subscribe
+                <button
+                  className="btn btn-ethio-primary btn-sm rounded-end-3 text-xs px-3 font-bold"
+                  type="submit"
+                  disabled={submitting}
+                >
+                  {submitting ? '...' : 'Subscribe'}
                 </button>
               </div>
-              {subscribed && (
-                <div className="text-info text-[11px] mt-1.5 font-semibold">
-                  <i className="bi bi-check-circle me-1"></i> Subscribed successfully!
+              {subscribeMessage && (
+                <div className={`${isError ? 'text-danger' : 'text-info'} text-[11px] mt-1.5 font-semibold`}>
+                  <i className={`bi ${isError ? 'bi-exclamation-circle' : 'bi-check-circle'} me-1`}></i>
+                  {subscribeMessage}
                 </div>
               )}
             </form>
@@ -113,6 +142,8 @@ const Footer = () => {
             <Link to="/terms" className="hover:text-slate-300 text-decoration-none">Terms</Link>
             <span>&bull;</span>
             <Link to="/about" className="hover:text-slate-300 text-decoration-none">About</Link>
+            <span>&bull;</span>
+            <Link to="/staff/login" className="hover:text-teal-300 text-decoration-none"><i className="bi bi-shield-lock me-1"></i>Staff Portal</Link>
           </div>
         </div>
       </div>

@@ -5,8 +5,13 @@ from dotenv import load_dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Load environment variables
-load_dotenv(BASE_DIR / '.env')
+# Load environment variables reliably from backend/.env and optional workspace root .env
+backend_env = BASE_DIR / '.env'
+if backend_env.exists():
+    load_dotenv(backend_env, override=True)
+root_env = BASE_DIR.parent / '.env'
+if root_env.exists():
+    load_dotenv(root_env, override=False)
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-ai-online-selling-secret-key-2026')
 
@@ -42,6 +47,7 @@ INSTALLED_APPS = [
     'orders.apps.OrdersConfig',
     'recommendations.apps.RecommendationsConfig',
     'notifications.apps.NotificationsConfig',
+    'delivery.apps.DeliveryConfig',
 ]
 
 MIDDLEWARE = [
@@ -177,18 +183,25 @@ CHAPA_SECRET_KEY = os.getenv('CHAPA_SECRET_KEY', '')
 CHAPA_API_URL = os.getenv('CHAPA_API_URL', 'https://api.chapa.co/v1').rstrip('/')
 CHAPA_WEBHOOK_SECRET = os.getenv('CHAPA_WEBHOOK_SECRET', '')
 
-# Email Configuration (Environment-driven with development console fallback)
-EMAIL_BACKEND = os.getenv(
-    'EMAIL_BACKEND',
-    'django.core.mail.backends.console.EmailBackend' if DEBUG else 'django.core.mail.backends.smtp.EmailBackend'
-)
-EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
+# Email Configuration (Gmail SMTP - smtp.gmail.com:587 TLS)
+EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend')
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com').strip()
 EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() in ('true', '1', 't')
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
-DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'Ethio Tech Market <noreply@ethiotechmarket.com>')
+EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False').lower() in ('true', '1', 't')
+EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', 15))
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '').strip()
+# Remove spaces if user pasted 16-character Google App Password with spaces (e.g. "abcd efgh ijkl mnop")
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '').replace(' ', '').strip()
+DEFAULT_FROM_EMAIL = os.getenv(
+    'DEFAULT_FROM_EMAIL',
+    f"EthioTech Market <{EMAIL_HOST_USER}>" if EMAIL_HOST_USER else "EthioTech Market <noreply@ethiotechmarket.com>"
+)
 
 # Google OAuth Client Configuration
 GOOGLE_OAUTH_CLIENT_ID = os.getenv('GOOGLE_OAUTH_CLIENT_ID', '')
+
+# Frontend URL for email verification, reset links, unsubscribe
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173').rstrip('/')
+
 

@@ -51,3 +51,9 @@ backend/verify_ethio_tech.py
 backend/verify_stage1.py
 backend/check_postgres_connection.py
 
+
+# Database backups & local scratch
+backups/
+*.sql
+scratch/
+* - Copy.*

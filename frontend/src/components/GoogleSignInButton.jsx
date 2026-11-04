@@ -148,16 +148,12 @@ const GoogleSignInButton = ({
           '[Google OAuth] Google Sign-In is unavailable: VITE_GOOGLE_CLIENT_ID is missing or invalid in frontend/.env. ' +
           'Please refer to documentation/GOOGLE_OAUTH_SETUP.md for developer configuration instructions.'
         );
-        handleAuthError(
-          'Developer Notice: Google OAuth is not configured. Set a valid VITE_GOOGLE_CLIENT_ID in frontend/.env to activate Google Sign-In.'
-        );
-      } else {
-        handleAuthError(
-          text === 'signup_with'
-            ? 'Google Sign-In is temporarily unavailable. Please register with your email and password.'
-            : 'Google Sign-In is temporarily unavailable. Please sign in with your email and password.'
-        );
       }
+      handleAuthError(
+        text === 'signup_with'
+          ? 'Google Sign-In is temporarily unavailable. Please register with your email and password.'
+          : 'Google Sign-In is temporarily unavailable. Please sign in with your email and password.'
+      );
       return;
     }
 

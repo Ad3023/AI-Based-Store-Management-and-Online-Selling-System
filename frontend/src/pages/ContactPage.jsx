@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api';
+import { validateEmail, validatePhone } from '../utils/validation';
 
 // Verified Business & Location Details
 // Note: When specific street/building GPS coordinates are supplied, update `exactCoordinates` and `physicalStoreAddressVerified`
@@ -50,17 +51,15 @@ const ContactPage = () => {
       errors.name = 'Please provide your full name (minimum 2 characters).';
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!formData.email.trim() || !emailRegex.test(formData.email.trim())) {
-      errors.email = 'Please provide a valid email address.';
+    const emailRes = validateEmail(formData.email, true);
+    if (!emailRes.isValid) {
+      errors.email = emailRes.error;
     }
 
-    // Optional phone validation: if provided, check Ethiopian format (09..., 07..., or +251...)
     if (formData.phone.trim()) {
-      const cleanPhone = formData.phone.replace(/[\s\-()]/g, '');
-      const ethiopianPhoneRegex = /^(\+?251|0)?[79]\d{8}$/;
-      if (!ethiopianPhoneRegex.test(cleanPhone)) {
-        errors.phone = 'Please provide a valid Ethiopian phone number (e.g., 0930232517 or +251 930 232 517).';
+      const phoneRes = validatePhone(formData.phone, false);
+      if (!phoneRes.isValid) {
+        errors.phone = phoneRes.error;
       }
     }
 

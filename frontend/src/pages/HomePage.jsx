@@ -152,7 +152,7 @@ const HomePage = () => {
         </div>
       )}
 
-      {/* 2. Responsive Hero Section (Optimized for all screen sizes) */}
+      {/* 2. Responsive Hero Section with Welcome Message, Shop Now, and Login Options */}
       <section className="py-3 py-md-4 px-3 px-lg-4">
         <div className="container-fluid max-w-7xl">
           <div
@@ -160,64 +160,118 @@ const HomePage = () => {
             style={{
               background: 'linear-gradient(135deg, #0b1a2d 0%, #0d2847 60%, #081525 100%)',
               border: '1px solid rgba(255, 255, 255, 0.1)',
-              boxShadow: '0 12px 30px rgba(11, 26, 45, 0.25)',
+              boxShadow: '0 16px 36px rgba(11, 26, 45, 0.3)',
             }}
           >
             <div className="row align-items-center g-4">
               {/* Hero Left Content */}
               <div className="col-lg-7 text-center text-lg-start">
-                <span
-                  className="badge rounded-pill px-3 py-1.5 text-xs fw-bold text-uppercase mb-3 d-inline-flex align-items-center gap-1.5"
-                  style={{ backgroundColor: 'rgba(27, 100, 218, 0.25)', color: '#60a5fa', border: '1px solid rgba(96, 165, 250, 0.3)' }}
-                >
-                  <i className="bi bi-shield-check"></i> {t('heroBadge', 'Genuine Electronics & Verified Delivery')}
-                </span>
+                <div className="d-inline-flex align-items-center gap-2 mb-3 px-3 py-1.5 rounded-pill" style={{ backgroundColor: 'rgba(27, 100, 218, 0.25)', border: '1px solid rgba(96, 165, 250, 0.35)' }}>
+                  <span className="badge rounded-pill bg-success px-2 py-0.5 text-[10px] fw-bold">ONLINE</span>
+                  <span className="text-xs fw-semibold text-blue-200">
+                    <i className="bi bi-shield-check me-1 text-primary"></i> EthioTech Market &bull; Ethiopia's Tech Hub
+                  </span>
+                </div>
                 
-                <h1 className="display-6 display-md-5 fw-bolder mb-3 text-white tracking-tight" style={{ lineHeight: '1.25' }}>
-                  {t('heroTitle1', 'Discover the Latest Tech')} <br />
-                  <span style={{ color: '#60a5fa' }}>{t('heroTitle2', 'for a Smarter You')}</span>
+                <h1 className="display-6 display-md-5 fw-bolder mb-3 text-white tracking-tight" style={{ lineHeight: '1.2' }}>
+                  Welcome to <span style={{ color: '#2dd4bf' }}>EthioTech Market</span><br />
+                  <span style={{ color: '#60a5fa' }}>Discover the Latest Tech</span> for a Smarter You
                 </h1>
                 
-                <p className="text-slate-300 text-xs text-md-sm mb-4 mx-auto mx-lg-0" style={{ maxWidth: '520px', lineHeight: '1.7' }}>
-                  {t('heroDesc', 'High-quality electronics, competitive ETB prices, and prompt delivery across Ethiopia. Powered by AI recommendations and secure Chapa checkout.')}
+                <p className="text-slate-300 text-xs text-md-sm mb-4 mx-auto mx-lg-0" style={{ maxWidth: '540px', lineHeight: '1.75' }}>
+                  Explore genuine electronics, high-performance laptops, smartphones, and accessories with verified warranties, competitive ETB pricing, and prompt delivery across Ethiopia.
                 </p>
 
+                {/* Primary Action Buttons: Shop Now + Two Login Options */}
                 <div className="d-flex flex-wrap align-items-center justify-content-center justify-content-lg-start gap-2.5">
                   <a
                     href="#featured-catalog"
-                    className="btn btn-ethio-primary px-4 py-2.5 rounded-pill font-bold text-xs text-md-sm shadow-md d-inline-flex align-items-center gap-1.5"
-                    style={{ backgroundColor: '#1b64da', color: '#ffffff' }}
+                    className="btn px-4 py-2.5 rounded-pill fw-bold text-xs text-md-sm shadow-md d-inline-flex align-items-center gap-2 text-white transition"
+                    style={{ backgroundColor: '#1b64da', border: '1px solid #144cb8' }}
                   >
-                    <span>{t('shopNow', 'Shop Now')}</span>
+                    <i className="bi bi-bag-check-fill"></i>
+                    <span>Shop Now</span>
                     <i className="bi bi-arrow-down"></i>
                   </a>
-                  <Link
-                    to="/shop"
-                    className="btn btn-outline-light px-4 py-2.5 rounded-pill font-semibold text-xs text-md-sm"
-                  >
-                    {t('viewAllProducts', 'View All Products')}
-                  </Link>
+
+                  {!user ? (
+                    <>
+                      {/* Customer Login (Green Button) */}
+                      <Link
+                        to="/login"
+                        className="btn px-3.5 py-2.5 rounded-pill fw-bold text-xs text-md-sm shadow-md d-inline-flex align-items-center gap-1.5 text-white transition"
+                        style={{ backgroundColor: '#10b981', border: '1px solid #059669' }}
+                        title="Customer Shopping Sign In"
+                      >
+                        <i className="bi bi-person-fill"></i>
+                        <span>Customer Login</span>
+                      </Link>
+
+                      {/* Staff Login (Blue Button) */}
+                      <Link
+                        to="/staff/login"
+                        className="btn px-3.5 py-2.5 rounded-pill fw-bold text-xs text-md-sm shadow-md d-inline-flex align-items-center gap-1.5 text-white transition"
+                        style={{ backgroundColor: 'rgba(255, 255, 255, 0.12)', border: '1px solid rgba(255, 255, 255, 0.25)' }}
+                        title="Staff Portal Sign In"
+                      >
+                        <i className="bi bi-shield-lock-fill text-info"></i>
+                        <span>Staff Login</span>
+                      </Link>
+                    </>
+                  ) : (
+                    <Link
+                      to={
+                        user.role === 'admin'
+                          ? '/admin/dashboard'
+                          : user.role === 'order_manager'
+                          ? '/order-manager/dashboard'
+                          : user.role === 'store_manager'
+                          ? '/store-manager/dashboard'
+                          : '/customer/dashboard'
+                      }
+                      className="btn btn-outline-light px-4 py-2.5 rounded-pill fw-bold text-xs text-md-sm d-inline-flex align-items-center gap-2"
+                    >
+                      <i className="bi bi-speedometer2"></i>
+                      <span>My Dashboard &rarr;</span>
+                    </Link>
+                  )}
                 </div>
               </div>
 
-              {/* Hero Right Visual: Responsive Electronics Display */}
+              {/* Hero Right Visual: High-Impact Electronics & Shopping Visual */}
               <div className="col-lg-5 text-center position-relative">
                 <div
-                  className="p-2 p-md-3 rounded-4 d-inline-block position-relative"
+                  className="p-3 rounded-4 d-inline-block position-relative shadow-2xl"
                   style={{
-                    background: 'radial-gradient(ellipse at center, rgba(27, 100, 218, 0.3) 0%, rgba(11, 26, 45, 0) 70%)',
+                    background: 'radial-gradient(ellipse at center, rgba(27, 100, 218, 0.35) 0%, rgba(11, 26, 45, 0.8) 75%)',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
                   }}
                 >
                   <img
-                    src="https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=600&auto=format&fit=crop&q=80"
-                    alt="Ethio Tech Electronics"
+                    src="https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=700&auto=format&fit=crop&q=80"
+                    alt="EthioTech Market Electronics"
                     className="img-fluid rounded-4 shadow-lg"
                     style={{
-                      maxHeight: '260px',
+                      maxHeight: '270px',
                       objectFit: 'contain',
-                      filter: 'drop-shadow(0 15px 25px rgba(0, 0, 0, 0.45))',
+                      filter: 'drop-shadow(0 18px 30px rgba(0, 0, 0, 0.55))',
                     }}
                   />
+                  
+                  {/* Floating Badges */}
+                  <div
+                    className="position-absolute top-0 start-0 translate-middle-y bg-white text-dark rounded-pill px-3 py-1 shadow-md d-flex align-items-center gap-1.5"
+                    style={{ border: '1px solid #e2e8f0', fontSize: '11px', fontWeight: 700 }}
+                  >
+                    <i className="bi bi-lightning-charge-fill text-warning"></i> Fast Dispatch
+                  </div>
+
+                  <div
+                    className="position-absolute bottom-0 end-0 translate-middle-y text-white rounded-pill px-3 py-1 shadow-md d-flex align-items-center gap-1.5"
+                    style={{ backgroundColor: '#10b981', fontSize: '11px', fontWeight: 700 }}
+                  >
+                    <i className="bi bi-shield-check"></i> Chapa Verified
+                  </div>
                 </div>
               </div>
             </div>
@@ -481,51 +535,60 @@ const HomePage = () => {
         </section>
       )}
 
-      {/* 7. Value Propositions: Accurate, Verified Store Features */}
+      {/* 7. Benefits Section: Fast Delivery, Secure Payments, Customer Support */}
       <section className="py-4 px-3 px-lg-4 pb-5">
         <div className="container-fluid max-w-7xl">
           <div className="row g-3">
+            {/* 1. Fast Delivery */}
             <div className="col-md-4">
-              <div className="card ethio-card border-0 shadow-sm rounded-4 p-3.5 d-flex flex-row align-items-center gap-3 bg-white border border-slate-200 h-100">
+              <div className="card ethio-card border-0 shadow-sm rounded-4 p-3.5 d-flex flex-row align-items-center gap-3 bg-white border border-slate-200 h-100 transition hover-shadow-md">
                 <div
-                  className="rounded-3 d-flex align-items-center justify-content-center text-white flex-shrink-0"
-                  style={{ width: '44px', height: '44px', backgroundColor: '#1b64da' }}
+                  className="rounded-3 d-flex align-items-center justify-content-center text-white flex-shrink-0 shadow-sm"
+                  style={{ width: '48px', height: '48px', background: 'linear-gradient(135deg, #1b64da 0%, #2563eb 100%)' }}
                 >
-                  <i className="bi bi-shield-check fs-5"></i>
+                  <i className="bi bi-truck fs-4"></i>
                 </div>
                 <div>
-                  <h6 className="fw-bold text-slate-900 mb-0 text-sm">{t('warrantyProtection', 'Store Warranty Protection')}</h6>
-                  <p className="text-muted text-xs mb-0 mt-0.5">{t('warrantyDesc', 'Hardware warranty coverage with digital claim submissions on verified orders.')}</p>
+                  <h6 className="fw-bold text-slate-900 mb-0 text-sm">Fast Delivery</h6>
+                  <p className="text-muted text-xs mb-0 mt-0.5">
+                    Express doorstep delivery in Addis Ababa &amp; reliable regional courier shipping with real-time tracking across Ethiopia.
+                  </p>
                 </div>
               </div>
             </div>
 
+            {/* 2. Secure Payments */}
             <div className="col-md-4">
-              <div className="card ethio-card border-0 shadow-sm rounded-4 p-3.5 d-flex flex-row align-items-center gap-3 bg-white border border-slate-200 h-100">
+              <div className="card ethio-card border-0 shadow-sm rounded-4 p-3.5 d-flex flex-row align-items-center gap-3 bg-white border border-slate-200 h-100 transition hover-shadow-md">
                 <div
-                  className="rounded-3 d-flex align-items-center justify-content-center text-white flex-shrink-0"
-                  style={{ width: '44px', height: '44px', backgroundColor: '#10b981' }}
+                  className="rounded-3 d-flex align-items-center justify-content-center text-white flex-shrink-0 shadow-sm"
+                  style={{ width: '48px', height: '48px', background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)' }}
                 >
-                  <i className="bi bi-credit-card-2-front fs-5"></i>
+                  <i className="bi bi-shield-lock-fill fs-4"></i>
                 </div>
                 <div>
-                  <h6 className="fw-bold text-slate-900 mb-0 text-sm">{t('chapaPayments', 'Chapa Verified Payments')}</h6>
-                  <p className="text-muted text-xs mb-0 mt-0.5">{t('chapaDesc', 'Instant checkout via Telebirr, CBE Birr, Awash, and debit cards in ETB.')}</p>
+                  <h6 className="fw-bold text-slate-900 mb-0 text-sm">Secure Payments</h6>
+                  <p className="text-muted text-xs mb-0 mt-0.5">
+                    100% secure checkout via Chapa, Telebirr, CBE Birr, Awash, and verified debit cards in ETB.
+                  </p>
                 </div>
               </div>
             </div>
 
+            {/* 3. Customer Support */}
             <div className="col-md-4">
-              <div className="card ethio-card border-0 shadow-sm rounded-4 p-3.5 d-flex flex-row align-items-center gap-3 bg-white border border-slate-200 h-100">
+              <div className="card ethio-card border-0 shadow-sm rounded-4 p-3.5 d-flex flex-row align-items-center gap-3 bg-white border border-slate-200 h-100 transition hover-shadow-md">
                 <div
-                  className="rounded-3 d-flex align-items-center justify-content-center text-white flex-shrink-0"
-                  style={{ width: '44px', height: '44px', backgroundColor: '#f59e0b' }}
+                  className="rounded-3 d-flex align-items-center justify-content-center text-white flex-shrink-0 shadow-sm"
+                  style={{ width: '48px', height: '48px', background: 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)' }}
                 >
-                  <i className="bi bi-truck fs-5"></i>
+                  <i className="bi bi-headset fs-4"></i>
                 </div>
                 <div>
-                  <h6 className="fw-bold text-slate-900 mb-0 text-sm">{t('nationwideDispatch', 'Nationwide Delivery')}</h6>
-                  <p className="text-muted text-xs mb-0 mt-0.5">{t('nationwideDesc', 'Next-day express delivery to Addis Ababa, local Debre Birhan pickup, and reliable regional courier options across Ethiopia.')}</p>
+                  <h6 className="fw-bold text-slate-900 mb-0 text-sm">Customer Support</h6>
+                  <p className="text-muted text-xs mb-0 mt-0.5">
+                    Dedicated technical and customer support ready to assist with orders, warranty coverage, and product inquiries.
+                  </p>
                 </div>
               </div>
             </div>

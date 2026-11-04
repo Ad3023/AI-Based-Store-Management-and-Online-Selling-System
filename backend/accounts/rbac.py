@@ -119,6 +119,26 @@ CANONICAL_PERMISSIONS = [
         'description': 'Inspect system audit trails, access history, login events, and administrative security logs.'
     },
 
+    # Suppliers & Logistics Partners
+    {
+        'code': 'suppliers.manage',
+        'name': 'Manage Hardware Suppliers & Procurement',
+        'module': 'Suppliers',
+        'description': 'Create, edit, view supplier partner records, purchase orders, and stock receipts.'
+    },
+    {
+        'code': 'couriers.manage',
+        'name': 'Manage Couriers & Logistics',
+        'module': 'Logistics',
+        'description': 'Register, update, and manage courier personnel records and dispatch operations.'
+    },
+    {
+        'code': 'settlements.manage',
+        'name': 'Manage Settlements & Supplier Payments',
+        'module': 'Finance',
+        'description': 'Authorize and record supplier payments and courier settlements.'
+    },
+
     # Reports & Analytics
     {
         'code': 'reports.view',
@@ -138,7 +158,7 @@ SYSTEM_ROLES = {
     },
     'admin': {
         'name': 'Admin',
-        'description': 'Manage products, categories, inventory, orders, customers, promotions, and reports according to assigned permissions. Cannot modify Super Admin ownership.',
+        'description': 'Manage products, categories, inventory, orders, customers, promotions, suppliers, couriers, settlements, and reports.',
         'is_system_role': True,
         'permissions': [
             'products.view', 'products.create', 'products.edit', 'products.delete',
@@ -147,6 +167,11 @@ SYSTEM_ROLES = {
             'payments.view', 'payments.verify',
             'promotions.manage',
             'customers.view',
+            'users.manage',
+            'settings.manage',
+            'suppliers.manage',
+            'couriers.manage',
+            'settlements.manage',
             'reports.view',
             'audit_logs.view'
         ]
@@ -165,29 +190,37 @@ SYSTEM_ROLES = {
     },
     'store_manager': {
         'name': 'Store Manager',
-        'description': 'Manage store catalog, inventory stock movements, customer orders, and fulfillment.',
+        'description': 'Manage store catalog, product categories, inventory stock movements, low-stock alerts, suppliers, and purchase orders.',
         'is_system_role': True,
         'permissions': [
             'products.view', 'products.create', 'products.edit',
             'categories.manage', 'inventory.manage',
-            'orders.view', 'orders.update', 'refunds.manage',
-            'payments.view',
+            'suppliers.manage',
+            'orders.view',
+            'refunds.manage',
             'customers.view',
             'reports.view'
         ]
     },
     'order_manager': {
         'name': 'Order Manager',
-        'description': 'Process customer orders, view order details and customer info, confirm or reject orders, advance fulfillment statuses, and generate order reports.',
+        'description': 'Process customer orders, check payment status, assign registered couriers, and track delivery progress.',
         'is_system_role': True,
         'permissions': [
             'orders.view',
             'orders.update',
             'products.view',
             'customers.view',
-            'reports.view',
-            'payments.view'
+            'couriers.manage',
+            'payments.view',
+            'reports.view'
         ]
+    },
+    'supplier': {
+        'name': 'Supplier',
+        'description': 'External hardware supplier: view assigned purchase orders, accept or reject orders, submit delivery updates, upload invoices, and review payment history.',
+        'is_system_role': True,
+        'permissions': []
     }
 }
 

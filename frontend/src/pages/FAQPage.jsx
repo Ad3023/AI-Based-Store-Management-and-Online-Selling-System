@@ -8,7 +8,7 @@ const FAQPage = () => {
     payments: [
       {
         q: 'How does payment with Chapa work?',
-        a: 'When you select "Pay with Chapa" during checkout, Ethio Tech Market connects directly to the secure Chapa payment gateway. You are redirected to a verified payment interface supporting Ethiopian local banks, cards, and Telebirr. Once completed, Chapa immediately notifies our Django backend, our server authoritatively validates the transaction amount and currency (ETB), marks your order as paid, and issues your verifiable digital receipt instantly.'
+        a: 'When you select "Pay with Chapa" during checkout, Ethio Tech Market connects directly to the secure Chapa payment gateway. You are redirected to a verified payment interface supporting Ethiopian local banks, cards, and Telebirr. Once completed, Chapa immediately notifies our secure system, verifies the payment amount in ETB, updates your order, and generates your verifiable digital receipt instantly.'
       },
       {
         q: 'What payment methods does Chapa support?',

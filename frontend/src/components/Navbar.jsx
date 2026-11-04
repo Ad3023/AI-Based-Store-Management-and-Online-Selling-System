@@ -512,20 +512,35 @@ const Navbar = () => {
                 </ul>
               </div>
             ) : (
-              <div className="d-flex align-items-center gap-2">
+              <div className="d-flex align-items-center gap-2 flex-wrap">
+                {/* 1. Customer Login (Green Button) */}
                 <Link
                   to="/login"
-                  className="btn btn-sm text-white px-3 py-1.5 rounded-2 fw-semibold text-xs text-decoration-none"
-                  style={{ background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255, 255, 255, 0.2)' }}
+                  className="btn btn-sm text-white px-3 py-1.5 rounded-pill fw-bold text-xs text-decoration-none shadow-sm d-inline-flex align-items-center gap-1.5 transition"
+                  style={{ backgroundColor: '#10b981', border: '1px solid #059669' }}
+                  title="Customer Login"
                 >
-                  {t('signIn')}
+                  <i className="bi bi-person-fill"></i>
+                  <span>Customer Login</span>
                 </Link>
+
+                {/* 2. Staff Login (Blue Button) */}
+                <Link
+                  to="/staff/login"
+                  className="btn btn-sm text-white px-3 py-1.5 rounded-pill fw-bold text-xs text-decoration-none shadow-sm d-inline-flex align-items-center gap-1.5 transition"
+                  style={{ backgroundColor: '#1b64da', border: '1px solid #144cb8' }}
+                  title="Staff Portal (Administrator, Store Manager, Order Manager)"
+                >
+                  <i className="bi bi-shield-lock-fill"></i>
+                  <span>Staff Login</span>
+                </Link>
+
+                {/* Optional Register Link */}
                 <Link
                   to="/register"
-                  className="btn btn-sm text-white px-3 py-1.5 rounded-2 fw-bold text-xs text-decoration-none"
-                  style={{ backgroundColor: '#1b64da' }}
+                  className="btn btn-sm btn-link text-white text-opacity-75 hover-text-white px-2 py-1 text-xs text-decoration-none d-none d-lg-inline-block fw-semibold"
                 >
-                  {t('createAccount')}
+                  Register
                 </Link>
               </div>
             )}
@@ -548,13 +563,13 @@ const Navbar = () => {
       <nav className={`bg-white border-bottom py-2 px-3 px-lg-4 shadow-sm ${mobileMenuOpen ? 'd-block' : 'd-none d-md-block'}`}>
         <div className="container-fluid max-w-7xl d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
           
-          {/* Quick Category / Page Links */}
+          {/* Quick Category / Page Links: Home, Products, About, Contact */}
           <div className="d-flex flex-wrap align-items-center gap-1 gap-md-3 text-xs fw-semibold">
             <Link to="/" className="text-slate-700 hover-text-blue px-2 py-1 rounded text-decoration-none" onClick={() => setMobileMenuOpen(false)}>
-              {t('home')}
+              <i className="bi bi-house-door me-1 text-primary"></i> Home
             </Link>
             <Link to="/shop" className="text-slate-700 hover-text-blue px-2 py-1 rounded text-decoration-none" onClick={() => setMobileMenuOpen(false)}>
-              {t('allProducts')}
+              <i className="bi bi-grid me-1 text-primary"></i> Products
             </Link>
             <Link to="/categories" className="text-slate-700 hover-text-blue px-2 py-1 rounded text-decoration-none" onClick={() => setMobileMenuOpen(false)}>
               {t('categories')}
@@ -562,16 +577,41 @@ const Navbar = () => {
             <Link to="/deals" className="text-rose-600 hover-text-blue px-2 py-1 rounded text-decoration-none d-flex align-items-center gap-1" onClick={() => setMobileMenuOpen(false)}>
               <i className="bi bi-lightning-charge-fill text-danger"></i> {t('deals')}
             </Link>
-            <Link to="/recommendations" className="text-slate-700 hover-text-blue px-2 py-1 rounded text-decoration-none d-flex align-items-center gap-1" onClick={() => setMobileMenuOpen(false)}>
-              <i className="bi bi-stars text-primary"></i> {t('aiPicks')}
-            </Link>
-            <Link to="/track" className="text-slate-700 hover-text-blue px-2 py-1 rounded text-decoration-none" onClick={() => setMobileMenuOpen(false)}>
-              {t('orderTracking')}
+            <Link to="/about" className="text-slate-700 hover-text-blue px-2 py-1 rounded text-decoration-none" onClick={() => setMobileMenuOpen(false)}>
+              About
             </Link>
             <Link to="/contact" className="text-slate-700 hover-text-blue px-2 py-1 rounded text-decoration-none" onClick={() => setMobileMenuOpen(false)}>
-              {t('helpSupport')}
+              Contact
+            </Link>
+            <Link to="/recommendations" className="text-slate-700 hover-text-blue px-2 py-1 rounded text-decoration-none d-none d-lg-inline-flex align-items-center gap-1" onClick={() => setMobileMenuOpen(false)}>
+              <i className="bi bi-stars text-primary"></i> {t('aiPicks')}
+            </Link>
+            <Link to="/track" className="text-slate-700 hover-text-blue px-2 py-1 rounded text-decoration-none d-none d-lg-inline-flex" onClick={() => setMobileMenuOpen(false)}>
+              {t('orderTracking')}
             </Link>
           </div>
+
+          {/* Mobile Login Options (Visible inside mobile drawer when not logged in) */}
+          {!user && (
+            <div className="d-md-none pt-2 border-top mt-2 d-flex gap-2">
+              <Link
+                to="/login"
+                className="btn btn-sm text-white fw-bold text-xs w-50 py-2 rounded-3 text-center text-decoration-none shadow-sm d-flex align-items-center justify-content-center gap-1"
+                style={{ backgroundColor: '#10b981' }}
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <i className="bi bi-person-fill"></i> Customer Login
+              </Link>
+              <Link
+                to="/staff/login"
+                className="btn btn-sm text-white fw-bold text-xs w-50 py-2 rounded-3 text-center text-decoration-none shadow-sm d-flex align-items-center justify-content-center gap-1"
+                style={{ backgroundColor: '#1b64da' }}
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <i className="bi bi-shield-lock-fill"></i> Staff Login
+              </Link>
+            </div>
+          )}
 
           {/* Manager / Admin Direct Portal Link if authenticated staff */}
           {isManagerOrAdmin && (

@@ -33,14 +33,14 @@ ChartJS.register(
 );
 
 const ManagerOverviewPage = () => {
-  const { user, isAdmin, isSuperAdmin, hasPermission, hasAnyPermission } = useAuth();
+  const { user, isAdmin, isSuperAdmin, isStoreManager, hasPermission, hasAnyPermission } = useAuth();
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorState, setErrorState] = useState(null);
   const [reportTimeframe, setReportTimeframe] = useState('Monthly');
 
-  const canViewReports = isSuperAdmin || isAdmin || hasPermission('reports.view');
+  const canViewReports = isSuperAdmin || isAdmin || isStoreManager || user?.role === 'store_manager' || hasPermission('reports.view');
   const isOrderManagerRole = user?.role === 'order_manager';
 
   const fetchDashboard = useCallback(async (tf = reportTimeframe) => {
@@ -55,7 +55,7 @@ const ManagerOverviewPage = () => {
       setData(res.data);
     } catch (err) {
       console.error("Dashboard metrics error", err);
-      setErrorState("Failed to retrieve store analytics from PostgreSQL. Please check your network connection or sign in again.");
+      setErrorState("Failed to retrieve store analytics. Please check your network connection or sign in again.");
     } finally {
       setLoading(false);
     }
@@ -82,7 +82,7 @@ const ManagerOverviewPage = () => {
     return (
       <div className="text-center py-5">
         <div className="spinner-border text-primary" role="status"></div>
-        <p className="text-muted small mt-2">Computing verified store analytics from PostgreSQL...</p>
+        <p className="text-muted small mt-2">Loading store analytics...</p>
       </div>
     );
   }
@@ -92,7 +92,7 @@ const ManagerOverviewPage = () => {
       <div className="card ethio-card border-0 shadow-sm rounded-4 p-4 p-md-5 text-center mx-auto my-4" style={{ maxWidth: '560px' }}>
         <i className="bi bi-exclamation-octagon text-danger fs-1 mb-2"></i>
         <h5 className="fw-bold text-slate-900 mb-1">Failed to load store metrics</h5>
-        <p className="text-muted small mb-4">{errorState || "Please check your database connection or authentication session."}</p>
+        <p className="text-muted small mb-4">{errorState || "Please check your network connection or authentication session."}</p>
         <button
           type="button"
           className="btn btn-ethio-primary rounded-pill px-4 mx-auto text-xs font-semibold d-inline-flex align-items-center gap-2"
@@ -201,7 +201,16 @@ const ManagerOverviewPage = () => {
     );
   }
 
-  const { kpis, monthly_sales, yearly_sales, sales_chart, category_distribution, pending_verifications_queue, recent_orders, low_stock_items } = data;
+  const {
+    kpis,
+    monthly_sales,
+    yearly_sales,
+    sales_chart,
+    category_distribution,
+    pending_verifications_queue = [],
+    recent_orders = [],
+    low_stock_items = []
+  } = data || {};
 
   // Active sales chart data driven by timeframe filter
   const activeSeries = reportTimeframe === 'Yearly'
@@ -691,7 +700,7 @@ const ManagerOverviewPage = () => {
           ) : (
             <div className="card ethio-card p-4">
               <h6 className="fw-bolder mb-3 text-slate-900">Payment Evidence Queue</h6>
-              {pending_verifications_queue.length === 0 ? (
+              {(pending_verifications_queue || []).length === 0 ? (
                 <div className="text-center py-3 text-slate-400 text-xs">
                   <i className="bi bi-check-circle text-success fs-4 d-block mb-1"></i>
                   All payment slips verified.

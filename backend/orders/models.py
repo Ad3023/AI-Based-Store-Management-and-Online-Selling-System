@@ -46,6 +46,7 @@ class Order(models.Model):
         SHIPPED = 'SHIPPED', 'Shipped'
         DELIVERED = 'DELIVERED', 'Delivered'
         CANCELLED = 'CANCELLED', 'Cancelled'
+        REJECTED = 'REJECTED', 'Rejected'
 
     class PaymentStatus(models.TextChoices):
         PENDING = 'PENDING', 'Pending'
@@ -64,6 +65,7 @@ class Order(models.Model):
         SHIPPED = 'SHIPPED', 'Shipped'
         DELIVERED = 'DELIVERED', 'Delivered'
         CANCELLED = 'CANCELLED', 'Cancelled'
+        REJECTED = 'REJECTED', 'Rejected'
         REFUNDED = 'REFUNDED', 'Refunded'
 
     order_number = models.CharField(max_length=32, unique=True, editable=False)
@@ -103,6 +105,7 @@ class Order(models.Model):
     shipping_address = models.TextField()
     shipping_city = models.CharField(max_length=100)
     notes = models.TextField(blank=True, null=True)
+    rejection_reason = models.TextField(blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

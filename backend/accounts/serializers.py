@@ -91,16 +91,18 @@ class UserSerializer(serializers.ModelSerializer):
     is_super_admin = serializers.BooleanField(read_only=True)
     is_sub_admin = serializers.SerializerMethodField()
     permissions = serializers.SerializerMethodField()
+    supplier_id = serializers.SerializerMethodField()
+    supplier_name = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
             'role', 'custom_role', 'is_super_admin', 'is_sub_admin', 'is_staff', 'is_superuser',
-            'phone_number', 'address', 'city', 'avatar',
-            'permissions', 'created_at', 'profile'
+            'phone_number', 'address', 'city', 'avatar', 'email_verified', 'is_active',
+            'permissions', 'supplier_id', 'supplier_name', 'created_at', 'profile'
         ]
-        read_only_fields = ['id', 'created_at', 'role', 'custom_role', 'is_staff', 'is_superuser', 'permissions']
+        read_only_fields = ['id', 'created_at', 'role', 'custom_role', 'is_staff', 'is_superuser', 'permissions', 'email_verified', 'supplier_id', 'supplier_name']
 
     def get_is_sub_admin(self, obj):
         return obj.is_sub_admin()
@@ -108,16 +110,35 @@ class UserSerializer(serializers.ModelSerializer):
     def get_permissions(self, obj):
         return list(obj.get_all_permissions())
 
+    def get_supplier_id(self, obj):
+        sp = getattr(obj, 'supplier_profile', None)
+        return sp.id if sp else None
+
+    def get_supplier_name(self, obj):
+        sp = getattr(obj, 'supplier_profile', None)
+        return sp.name if sp else None
+
     def validate_email(self, value):
-        if not value or not str(value).strip():
-            raise serializers.ValidationError("Email address cannot be empty.")
-        normalized = str(value).strip().lower()
+        from .validators import validate_email_address
+        normalized = validate_email_address(value, required=True)
         qs = User.objects.filter(email__iexact=normalized)
         if self.instance and self.instance.pk:
             qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():
             raise serializers.ValidationError("An account with this email address already exists. Please choose a different email.")
         return normalized
+
+    def validate_phone_number(self, value):
+        if not value or not str(value).strip():
+            return ''
+        from .validators import validate_phone_number_format
+        formatted = validate_phone_number_format(value, required=False)
+        qs = User.objects.filter(phone_number=formatted)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if formatted and qs.exists():
+            raise serializers.ValidationError("An account with this phone number already exists.")
+        return formatted
 
     def validate(self, attrs):
         request = self.context.get('request')
@@ -158,7 +179,7 @@ class AdminUserSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'username', 'email', 'password', 'first_name', 'last_name',
             'role', 'custom_role', 'custom_role_id', 'direct_permission_codes',
-            'is_active', 'is_staff', 'is_superuser', 'is_super_admin', 'is_sub_admin',
+            'is_active', 'email_verified', 'is_staff', 'is_superuser', 'is_super_admin', 'is_sub_admin',
             'phone_number', 'address', 'city', 'avatar',
             'permissions', 'created_at', 'profile'
         ]
@@ -171,15 +192,26 @@ class AdminUserSerializer(serializers.ModelSerializer):
         return list(obj.get_all_permissions())
 
     def validate_email(self, value):
-        if not value or not str(value).strip():
-            raise serializers.ValidationError("Email address cannot be empty.")
-        normalized = str(value).strip().lower()
+        from .validators import validate_email_address
+        normalized = validate_email_address(value, required=True)
         qs = User.objects.filter(email__iexact=normalized)
         if self.instance and self.instance.pk:
             qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():
             raise serializers.ValidationError("An account with this email address already exists. Please choose a different email.")
         return normalized
+
+    def validate_phone_number(self, value):
+        if not value or not str(value).strip():
+            return ''
+        from .validators import validate_phone_number_format
+        formatted = validate_phone_number_format(value, required=False)
+        qs = User.objects.filter(phone_number=formatted)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if formatted and qs.exists():
+            raise serializers.ValidationError("An account with this phone number already exists.")
+        return formatted
 
     def validate(self, attrs):
         request = self.context.get('request')
@@ -223,6 +255,15 @@ class AdminUserSerializer(serializers.ModelSerializer):
             if actor and actor.is_sub_admin():
                 raise serializers.ValidationError({
                     'error': "Sub-Administrators cannot modify Administrator accounts."
+                })
+
+        # 6. Protect the last active administrator from demotion or deactivation
+        if instance and instance.is_admin():
+            will_demote = new_role and new_role not in [User.RoleChoices.SUPER_ADMIN, User.RoleChoices.ADMIN]
+            will_deactivate = 'is_active' in attrs and not attrs['is_active']
+            if (will_demote or will_deactivate) and User.active_admin_count() <= 1:
+                raise serializers.ValidationError({
+                    'error': "Cannot remove or demote the last active administrator. The system must retain at least one active administrator."
                 })
 
         return attrs
@@ -301,40 +342,70 @@ class RoleAssignmentSerializer(serializers.Serializer):
         if actor and actor.is_sub_admin():
             raise serializers.ValidationError("Sub-Administrators cannot assign roles or permissions.")
 
+        # Protection of the last active administrator
+        if target_user and target_user.is_admin():
+            if role and role not in [User.RoleChoices.SUPER_ADMIN, User.RoleChoices.ADMIN]:
+                if User.active_admin_count() <= 1:
+                    raise serializers.ValidationError("Cannot demote the last active administrator. The system must retain at least one active administrator.")
+
         return attrs
 
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=6)
     password_confirm = serializers.CharField(write_only=True, required=False)
+    confirm_password = serializers.CharField(write_only=True, required=False)
     full_name = serializers.CharField(write_only=True, required=False)
+    phone_number = serializers.CharField(required=False, allow_blank=True, default='')
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'password', 'password_confirm', 'full_name', 'first_name', 'last_name', 'phone_number']
+        fields = ['username', 'email', 'password', 'password_confirm', 'confirm_password', 'full_name', 'first_name', 'last_name', 'phone_number']
         extra_kwargs = {
             'username': {'required': False},
         }
 
     def validate_email(self, value):
-        normalized = value.strip().lower()
-        if User.objects.filter(email__iexact=normalized).exists():
+        from .validators import validate_email_address
+        normalized = validate_email_address(value, required=True)
+        existing = User.objects.filter(email__iexact=normalized).first()
+        if existing:
+            if not existing.email_verified:
+                raise serializers.ValidationError("An unverified account with this email already exists. Please verify your email to activate it.")
             raise serializers.ValidationError("An account with this email address already exists. Please sign in instead.")
         return normalized
 
+    def validate_phone_number(self, value):
+        if not value or not str(value).strip():
+            return ''
+        from .validators import validate_phone_number_format
+        formatted = validate_phone_number_format(value, required=False)
+
+        # Check whether the phone number is already registered
+        if formatted and User.objects.filter(phone_number=formatted).exists():
+            raise serializers.ValidationError("An account with this phone number already exists. Please sign in instead.")
+
+        return formatted
+
     def validate(self, data):
         pwd = data.get('password')
-        pwd_conf = data.get('password_confirm')
+        conf_field = 'confirm_password' if 'confirm_password' in data else 'password_confirm'
+        pwd_conf = data.get('confirm_password') or data.get('password_confirm')
         if pwd_conf and pwd != pwd_conf:
-            raise serializers.ValidationError({'password_confirm': 'Passwords do not match.'})
+            raise serializers.ValidationError({conf_field: 'Passwords do not match.'})
+
+        # Check terms_accepted if passed by client
+        terms = self.initial_data.get('terms_accepted')
+        if terms is not None and not terms:
+            raise serializers.ValidationError({'terms_accepted': 'You must agree to the Terms and Conditions.'})
 
         # Auto-generate unique username if not provided
         if not data.get('username'):
-            base_user = data['email'].split('@')[0]
+            base_user = data['email'].split('@')[0].replace('.', '_').replace('-', '_')
             candidate = base_user
             counter = 1
             while User.objects.filter(username__iexact=candidate).exists():
-                candidate = f"{base_user}{counter}"
+                candidate = f"{base_user}_{counter}"
                 counter += 1
             data['username'] = candidate
 
@@ -347,15 +418,16 @@ class RegisterSerializer(serializers.ModelSerializer):
                 data['last_name'] = parts[1]
 
         data.pop('password_confirm', None)
+        data.pop('confirm_password', None)
         return data
 
     def validate_role(self, value):
-        # Public self-registration is strictly restricted to Customer role
         return User.RoleChoices.CUSTOMER
 
     def create(self, validated_data):
         password = validated_data.pop('password')
         customer_role = Role.objects.filter(code='customer').first()
+        # Newly registered customer is inactive until email verification
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data['email'],
@@ -364,19 +436,22 @@ class RegisterSerializer(serializers.ModelSerializer):
             last_name=validated_data.get('last_name', ''),
             phone_number=validated_data.get('phone_number', ''),
             role=User.RoleChoices.CUSTOMER,
-            custom_role=customer_role
+            custom_role=customer_role,
+            is_active=False,
+            email_verified=False
         )
-        Token.objects.create(user=user)
+        CustomerProfile.objects.get_or_create(user=user)
+        from orders.models import Cart
+        Cart.objects.get_or_create(user=user)
         return user
 
 
 class PasswordResetRequestSerializer(serializers.Serializer):
-    email = serializers.EmailField()
+    email = serializers.CharField(required=True)
 
     def validate_email(self, value):
-        if not User.objects.filter(email__iexact=value).exists():
-            raise serializers.ValidationError("No registered account found with this email address.")
-        return value.strip().lower()
+        from .validators import validate_email_address
+        return validate_email_address(value, required=True)
 
 
 class PasswordResetConfirmSerializer(serializers.Serializer):
@@ -387,10 +462,9 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 
     def validate(self, data):
         email = data.get('email', '').strip().lower()
-        try:
-            user = User.objects.get(email__iexact=email)
-        except User.DoesNotExist:
-            raise serializers.ValidationError({'email': 'No registered account found with this email address.'})
+        user = User.objects.filter(email__iexact=email).first()
+        if not user:
+            raise serializers.ValidationError({'email': 'Invalid password reset request.'})
 
         pwd = data.get('new_password')
         pwd_conf = data.get('new_password_confirm')
@@ -402,24 +476,62 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 
 
 class LoginSerializer(serializers.Serializer):
-    username = serializers.CharField()
+    username = serializers.CharField(required=False, allow_blank=True)
+    email = serializers.CharField(required=False, allow_blank=True)
+    identifier = serializers.CharField(required=False, allow_blank=True)
     password = serializers.CharField(write_only=True)
+    portal = serializers.ChoiceField(
+        choices=['customer', 'staff', 'supplier'],
+        required=False,
+        allow_null=True
+    )
 
     def validate(self, data):
-        username = data.get('username')
-        password = data.get('password')
+        from django.db.models import Q
+        raw_identifier = (
+            data.get('username') or
+            data.get('email') or
+            data.get('identifier') or
+            ''
+        ).strip()
+        password = data.get('password', '')
 
-        # Allow logging in with either username or email
-        if '@' in username:
-            try:
-                user_obj = User.objects.get(email__iexact=username)
-                username = user_obj.username
-            except User.DoesNotExist:
-                pass
-
-        user = authenticate(username=username, password=password)
-        if not user:
+        if not raw_identifier:
             raise serializers.ValidationError("Invalid username/email or password.")
+        if not password:
+            raise serializers.ValidationError("Invalid username/email or password.")
+
+        # Robust case-insensitive lookup supporting username or email in PostgreSQL
+        user_obj = User.objects.filter(
+            Q(username__iexact=raw_identifier) | Q(email__iexact=raw_identifier)
+        ).first()
+
+        user_lookup = user_obj.username if user_obj else raw_identifier
+
+        # Authenticate using exact database username
+        user = authenticate(
+            request=self.context.get('request'),
+            username=user_lookup,
+            password=password
+        )
+
+        if not user:
+            if user_obj:
+                # Customer unverified email check (must be checked before generic inactive check)
+                if user_obj.check_password(password):
+                    if not user_obj.email_verified and user_obj.role == User.RoleChoices.CUSTOMER:
+                        raise serializers.ValidationError({
+                            'unverified': True,
+                            'email': user_obj.email,
+                            'error': 'Your email address is not verified yet. Please check your inbox or request a new verification code.'
+                        })
+                    if not user_obj.is_active:
+                        raise serializers.ValidationError("This account has been deactivated.")
+                elif not user_obj.has_usable_password():
+                    raise serializers.ValidationError("This account does not have a password configured. Please use Google Sign-In or use Forgot Password to set a password.")
+
+            raise serializers.ValidationError("Invalid username/email or password.")
+
         if not user.is_active:
             raise serializers.ValidationError("This account has been deactivated.")
 

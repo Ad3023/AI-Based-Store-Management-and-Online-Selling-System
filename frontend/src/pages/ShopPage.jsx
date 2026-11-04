@@ -323,7 +323,7 @@ const ShopPage = () => {
           {loading ? (
             <div className="text-center py-5">
               <div className="spinner-border text-primary" role="status"></div>
-              <p className="text-muted small mt-2">Loading products from PostgreSQL catalog...</p>
+              <p className="text-muted small mt-2">Loading products...</p>
             </div>
           ) : products.length === 0 ? (
             <div className="card border-0 shadow-sm rounded-4 p-5 text-center bg-white border border-slate-200">

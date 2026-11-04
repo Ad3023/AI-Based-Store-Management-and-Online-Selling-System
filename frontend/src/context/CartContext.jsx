@@ -34,20 +34,44 @@ export const CartProvider = ({ children }) => {
   // Sync guest cart to backend upon login
   const syncGuestCartToBackend = async (guestCart) => {
     if (user?.role === 'admin') return;
-    if (!guestCart.items || guestCart.items.length === 0) return;
+    if (!guestCart || !guestCart.items || guestCart.items.length === 0) {
+      localStorage.removeItem(GUEST_CART_STORAGE_KEY);
+      localStorage.removeItem('nexus_guest_cart');
+      return;
+    }
+
     try {
+      // 1. Bulk sync guest cart items in a single server call
+      const payloadItems = guestCart.items
+        .map((it) => ({
+          product_id: it.product_id || it.product?.id,
+          quantity: it.quantity || 1,
+        }))
+        .filter((it) => !!it.product_id);
+
+      if (payloadItems.length > 0) {
+        await api.post('orders/cart/', { items: payloadItems });
+      }
+    } catch (err) {
+      console.warn('Bulk guest cart sync attempt, falling back to individual items:', err);
+      // Fallback: sync items individually, catching individual errors (e.g. 404 for deleted products)
       for (const item of guestCart.items) {
         const pid = item.product_id || item.product?.id;
         if (pid) {
-          await api.post('orders/cart/', {
-            product_id: pid,
-            quantity: item.quantity || 1,
-          });
+          try {
+            await api.post('orders/cart/', {
+              product_id: pid,
+              quantity: item.quantity || 1,
+            });
+          } catch (itemErr) {
+            console.warn(`Skipping invalid guest cart item ${pid}:`, itemErr?.response?.data?.error || itemErr.message);
+          }
         }
       }
+    } finally {
+      // Always remove guest carts from localStorage so obsolete IDs are never retried
       localStorage.removeItem(GUEST_CART_STORAGE_KEY);
-    } catch (err) {
-      console.warn('Failed to sync guest cart items to user account:', err);
+      localStorage.removeItem('nexus_guest_cart');
     }
   };
 
@@ -58,7 +82,7 @@ export const CartProvider = ({ children }) => {
       return;
     }
 
-    if (token && user?.role === 'customer') {
+    if (token && (!user || user?.role !== 'admin')) {
       try {
         setLoading(true);
         // If guest cart exists, sync first
@@ -73,7 +97,7 @@ export const CartProvider = ({ children }) => {
       } finally {
         setLoading(false);
       }
-    } else if (!token || user?.role !== 'admin') {
+    } else if (!token) {
       // Guest mode (unauthenticated)
       const guest = loadGuestCart();
       setCart(guest);
@@ -94,7 +118,7 @@ export const CartProvider = ({ children }) => {
     const productId = typeof productOrId === 'object' && productOrId !== null ? productOrId.id : productOrId;
     const resolvedProduct = typeof productOrId === 'object' && productOrId !== null ? productOrId : productObj;
 
-    if (token && user?.role === 'customer') {
+    if (token && (!user || user?.role !== 'admin')) {
       // Authenticated server cart
       const res = await api.post('orders/cart/', { product_id: productId, quantity });
       setCart(res.data);
@@ -107,23 +131,24 @@ export const CartProvider = ({ children }) => {
       );
 
       let updatedItems = [...current.items];
+      const productPrice = Number(resolvedProduct?.current_price || resolvedProduct?.price || 0);
+
       if (existingIdx >= 0) {
         const item = updatedItems[existingIdx];
         const newQty = item.quantity + quantity;
-        const price = Number(item.product?.price || 0);
+        const price = Number(item.product?.current_price || item.product?.price || productPrice);
         updatedItems[existingIdx] = {
           ...item,
           quantity: newQty,
           subtotal: (price * newQty).toFixed(2),
         };
       } else {
-        const price = Number(resolvedProduct?.price || 0);
         const newItem = {
           id: `guest-${productId}-${Date.now()}`,
-          product: resolvedProduct || { id: productId, name: 'Product', price: price },
+          product: resolvedProduct || { id: productId, name: 'Product', price: productPrice, current_price: productPrice },
           product_id: productId,
           quantity: quantity,
-          subtotal: (price * quantity).toFixed(2),
+          subtotal: (productPrice * quantity).toFixed(2),
           added_at: new Date().toISOString(),
         };
         updatedItems.push(newItem);
@@ -143,7 +168,7 @@ export const CartProvider = ({ children }) => {
       throw new Error('Administrators cannot modify cart.');
     }
 
-    if (token && user?.role === 'customer') {
+    if (token && (!user || user?.role !== 'admin')) {
       const res = await api.put('orders/cart/', { item_id: itemId, quantity });
       setCart(res.data);
       return res.data;
@@ -151,7 +176,7 @@ export const CartProvider = ({ children }) => {
       const current = loadGuestCart();
       let updatedItems = current.items.map((it) => {
         if (it.id === itemId) {
-          const price = Number(it.product?.price || 0);
+          const price = Number(it.product?.current_price || it.product?.price || 0);
           return {
             ...it,
             quantity: quantity,
@@ -175,7 +200,7 @@ export const CartProvider = ({ children }) => {
       throw new Error('Administrators cannot modify cart.');
     }
 
-    if (token && user?.role === 'customer') {
+    if (token && (!user || user?.role !== 'admin')) {
       const res = await api.delete(`orders/cart/`, { data: { item_id: itemId } });
       setCart(res.data);
       return res.data;
@@ -197,7 +222,7 @@ export const CartProvider = ({ children }) => {
       return;
     }
 
-    if (token && user?.role === 'customer') {
+    if (token && (!user || user?.role !== 'admin')) {
       const res = await api.delete(`orders/cart/`);
       setCart(res.data);
       return res.data;

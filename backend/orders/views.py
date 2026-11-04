@@ -48,10 +48,53 @@ class CartView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Add item to cart
+        # Add item to cart or bulk sync guest cart items
         cart, _ = Cart.objects.get_or_create(user=request.user)
+
+        # 1. Handle bulk synchronization payload from guest cart (e.g. { items: [...] })
+        items_data = request.data.get('items')
+        if items_data and isinstance(items_data, list):
+            for it in items_data:
+                pid = it.get('product_id') or (it.get('product', {}).get('id') if isinstance(it.get('product'), dict) else None)
+                try:
+                    qty = int(it.get('quantity', 1))
+                except (ValueError, TypeError):
+                    qty = 1
+
+                if not pid or qty <= 0:
+                    continue
+
+                try:
+                    product = Product.objects.get(id=pid, is_active=True)
+                except Product.DoesNotExist:
+                    # Skip obsolete/deleted product IDs gracefully without failing entire sync
+                    continue
+
+                if product.stock <= 0:
+                    continue
+
+                cart_item, created = CartItem.objects.get_or_create(cart=cart, product=product)
+                if not created:
+                    # Merge quantity, capped at available stock
+                    cart_item.quantity = min(cart_item.quantity + qty, product.stock)
+                else:
+                    cart_item.quantity = min(qty, product.stock)
+                cart_item.save()
+
+            return Response(CartSerializer(cart).data, status=status.HTTP_200_OK)
+
+        # 2. Handle single item addition
         product_id = request.data.get('product_id')
-        quantity = int(request.data.get('quantity', 1))
+        if not product_id:
+            return Response({'error': 'product_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            quantity = int(request.data.get('quantity', 1))
+        except (ValueError, TypeError):
+            quantity = 1
+
+        if quantity <= 0:
+            return Response({'error': 'Quantity must be at least 1.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             product = Product.objects.get(id=product_id, is_active=True)
@@ -156,6 +199,14 @@ class CheckoutView(APIView):
         if not shipping_phone or not shipping_address:
             return Response({'error': 'Shipping phone and address are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Enforce canonical phone validation on shipping contact
+        from accounts.validators import validate_phone_number_format
+        try:
+            shipping_phone = validate_phone_number_format(shipping_phone, required=True)
+        except serializers.ValidationError as err:
+            err_msg = err.detail[0] if isinstance(err.detail, list) else str(err.detail)
+            return Response({'error': err_msg}, status=status.HTTP_400_BAD_REQUEST)
+
         # Validate stock for all items and calculate authoritative server price
         subtotal = Decimal('0.00')
         for item in cart_items:
@@ -167,13 +218,17 @@ class CheckoutView(APIView):
             subtotal += (unit_price * item.quantity)
 
         # Dynamic delivery method calculation
-        delivery_method = request.data.get('delivery_method', 'standard')
-        DELIVERY_RATES = {
-            'standard': Decimal('50.00'),
-            'express': Decimal('100.00'),
-            'regional': Decimal('150.00')
-        }
-        shipping_fee = DELIVERY_RATES.get(delivery_method, Decimal('50.00'))
+        delivery_method = request.data.get('delivery_method', 'THIRD_PARTY_COURIER')
+        from delivery.services import DeliveryFeeService
+        from delivery.models import Shipment, ShipmentStatus, DeliveryMethod
+        d_method = 'express' if str(delivery_method).lower() == 'express' else (DeliveryMethod.OWN_DELIVERY if str(delivery_method).upper() in ['OWN_DELIVERY', 'OWN'] else DeliveryMethod.THIRD_PARTY_COURIER)
+        fee_info = DeliveryFeeService.calculate_shipping_fee(
+            destination_city=shipping_city,
+            delivery_method=d_method,
+            weight_kg=1.0,
+            origin_city='Addis Ababa'
+        )
+        shipping_fee = Decimal(str(fee_info['total_shipping_fee']))
         tax = round(subtotal * Decimal('0.15'), 2)  # Standard 15% VAT
         total_amount = subtotal + shipping_fee + tax
 
@@ -195,6 +250,21 @@ class CheckoutView(APIView):
             currency='ETB',
             payment_initiated_at=timezone.now(),
             status=Order.Status.PENDING_PAYMENT
+        )
+
+        # Initialize Shipment tracking record
+        Shipment.objects.get_or_create(
+            order=order,
+            defaults={
+                'delivery_method': d_method,
+                'origin_city': 'Addis Ababa',
+                'destination_city': shipping_city,
+                'recipient_name': shipping_name,
+                'recipient_phone': shipping_phone,
+                'delivery_address': shipping_address,
+                'shipping_fee': shipping_fee,
+                'status': ShipmentStatus.PENDING,
+            }
         )
 
         # Record initial OrderStatusHistory
@@ -235,6 +305,18 @@ class CheckoutView(APIView):
                 reference=f"Order {order.order_number}",
                 created_by=request.user
             )
+
+            # Trigger automatic low-stock supplier notification if stock dropped below threshold
+            try:
+                from products.low_stock_service import LowStockAlertService
+                LowStockAlertService.evaluate_and_notify_product(
+                    item.product,
+                    trigger_type='AUTOMATIC',
+                    requested_by=request.user
+                )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Error checking low stock for {item.product.name}: {e}")
 
             # Log purchase activity for AI
             try:
@@ -565,6 +647,7 @@ class StoreManagerOrderStatusUpdateView(APIView):
             'SHIPPED': Order.FulfillmentStatus.SHIPPED,
             'DELIVERED': Order.FulfillmentStatus.DELIVERED,
             'CANCELLED': Order.FulfillmentStatus.CANCELLED,
+            'REJECTED': Order.FulfillmentStatus.REJECTED,
             'REFUNDED': Order.FulfillmentStatus.REFUNDED,
         }
         target_status = status_map.get(raw_status.strip().upper())
@@ -575,12 +658,13 @@ class StoreManagerOrderStatusUpdateView(APIView):
 
         # Controlled status transitions
         ALLOWED_TRANSITIONS = {
-            Order.FulfillmentStatus.PENDING: [Order.FulfillmentStatus.CONFIRMED, Order.FulfillmentStatus.CANCELLED],
-            Order.FulfillmentStatus.CONFIRMED: [Order.FulfillmentStatus.PROCESSING, Order.FulfillmentStatus.CANCELLED],
+            Order.FulfillmentStatus.PENDING: [Order.FulfillmentStatus.CONFIRMED, Order.FulfillmentStatus.CANCELLED, Order.FulfillmentStatus.REJECTED],
+            Order.FulfillmentStatus.CONFIRMED: [Order.FulfillmentStatus.PROCESSING, Order.FulfillmentStatus.CANCELLED, Order.FulfillmentStatus.REJECTED],
             Order.FulfillmentStatus.PROCESSING: [Order.FulfillmentStatus.SHIPPED, Order.FulfillmentStatus.CANCELLED],
             Order.FulfillmentStatus.SHIPPED: [Order.FulfillmentStatus.DELIVERED, Order.FulfillmentStatus.CANCELLED],
             Order.FulfillmentStatus.DELIVERED: [Order.FulfillmentStatus.REFUNDED],
             Order.FulfillmentStatus.CANCELLED: [],
+            Order.FulfillmentStatus.REJECTED: [],
             Order.FulfillmentStatus.REFUNDED: [],
         }
 
@@ -633,7 +717,47 @@ class StoreManagerOrderStatusUpdateView(APIView):
         # Update order fulfillment status
         prev_status = curr_status
         order.fulfillment_status = target_status
+        if target_status == Order.FulfillmentStatus.REJECTED:
+            rejection_reason = request.data.get('reason') or comment
+            if not rejection_reason:
+                return Response({'error': 'A rejection reason is required when rejecting an order.'}, status=status.HTTP_400_BAD_REQUEST)
+            order.rejection_reason = rejection_reason
+            order.status = Order.Status.REJECTED
+            # Return reserved inventory stock back to warehouse
+            for item in order.items.select_related('product').all():
+                if item.product:
+                    item.product.stock += item.quantity
+                    item.product.save()
+                    StockMovement.objects.create(
+                        product=item.product,
+                        quantity=item.quantity,
+                        movement_type=StockMovement.MovementType.RETURN,
+                        reference=f"Order {order.order_number} Rejection Stock Return",
+                        created_by=request.user
+                    )
         order.save()
+
+        # Keep delivery Shipment synchronized
+        from delivery.models import Shipment, ShipmentStatus, DeliveryMethod
+        shipment, _ = Shipment.objects.get_or_create(
+            order=order,
+            defaults={
+                'delivery_method': DeliveryMethod.THIRD_PARTY_COURIER,
+                'origin_city': 'Addis Ababa',
+                'destination_city': order.shipping_city or 'Addis Ababa',
+                'recipient_name': order.shipping_name or order.customer.get_full_name(),
+                'recipient_phone': order.shipping_phone or '',
+                'delivery_address': order.shipping_address or '',
+                'shipping_fee': order.shipping_fee or 0.00,
+                'status': ShipmentStatus.PENDING,
+            }
+        )
+        if target_status == Order.FulfillmentStatus.CONFIRMED and shipment.status == ShipmentStatus.PENDING:
+            shipment.status = ShipmentStatus.CONFIRMED
+            shipment.save(update_fields=['status'])
+        elif target_status in [Order.FulfillmentStatus.CANCELLED, Order.FulfillmentStatus.REJECTED]:
+            shipment.status = ShipmentStatus.CANCELLED
+            shipment.save(update_fields=['status'])
 
         # Record in OrderStatusHistory
         OrderStatusHistory.objects.create(
@@ -677,6 +801,11 @@ class StoreManagerOrderStatusUpdateView(APIView):
             Order.FulfillmentStatus.CANCELLED: (
                 "Order Cancelled",
                 f"Your order #{order.order_number} has been cancelled. Reason: {comment or 'Customer requested or cancelled by administrator.'}",
+                Notification.NotificationType.ORDER_CANCELLED
+            ),
+            Order.FulfillmentStatus.REJECTED: (
+                "Order Rejected",
+                f"Your order #{order.order_number} was rejected. Reason: {order.rejection_reason or comment or 'Requirements could not be met.'}",
                 Notification.NotificationType.ORDER_CANCELLED
             ),
             Order.FulfillmentStatus.REFUNDED: (

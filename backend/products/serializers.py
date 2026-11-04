@@ -1,5 +1,84 @@
 from rest_framework import serializers
-from .models import Category, Product, ProductReview, StockMovement, Promotion, WarrantyPolicy, CustomerFeedback
+from .models import (
+    Category, Product, ProductReview, StockMovement, Promotion,
+    WarrantyPolicy, CustomerFeedback, Supplier, SupplierNotificationLog, PurchaseRequest, StockAlertHistory,
+    SupplierPayment, PurchaseOrderItem, SupplierInvoice
+)
+
+
+class SupplierSerializer(serializers.ModelSerializer):
+    product_count = serializers.IntegerField(source='products.count', read_only=True)
+    company_name = serializers.CharField(source='name', required=False)
+    phone_number = serializers.CharField(source='phone', required=False)
+    business_address = serializers.CharField(source='address', required=False)
+    supplied_categories_details = serializers.SerializerMethodField()
+    total_purchases_amount = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    total_paid_amount = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    outstanding_balance = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    supplied_products = serializers.SerializerMethodField()
+
+    user_username = serializers.CharField(source='user.username', read_only=True, allow_null=True)
+    has_account = serializers.SerializerMethodField()
+
+    def get_has_account(self, obj):
+        return obj.user is not None
+
+    class Meta:
+        model = Supplier
+        fields = [
+            'id', 'name', 'company_name', 'contact_person', 'email', 'phone', 'phone_number',
+            'address', 'business_address', 'notes', 'status', 'supplied_categories',
+            'supplied_categories_details', 'is_active', 'product_count',
+            'total_purchases_amount', 'total_paid_amount', 'outstanding_balance',
+            'supplied_products', 'user', 'user_username', 'has_account', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'total_purchases_amount', 'total_paid_amount', 'outstanding_balance', 'created_at', 'updated_at']
+
+    def get_supplied_categories_details(self, obj):
+        return [{'id': c.id, 'name': c.name, 'slug': c.slug} for c in obj.supplied_categories.all()]
+
+    def get_supplied_products(self, obj):
+        prods = obj.products.all()[:20]
+        return [
+            {
+                'id': p.id,
+                'name': p.name,
+                'sku': p.sku,
+                'stock': p.stock,
+                'price': str(p.price),
+                'cost_price': str(p.cost_price),
+                'image': p.image.url if p.image else None
+            }
+            for p in prods
+        ]
+
+    def to_internal_value(self, data):
+        data = data.copy() if hasattr(data, 'copy') else dict(data)
+        if 'company_name' in data and not data.get('name'):
+            data['name'] = data['company_name']
+        if 'phone_number' in data and not data.get('phone'):
+            data['phone'] = data['phone_number']
+        if 'business_address' in data and not data.get('address'):
+            data['address'] = data['business_address']
+        return super().to_internal_value(data)
+
+    def validate_email(self, value):
+        if not value or not str(value).strip():
+            return ''
+        from accounts.validators import validate_email_address
+        return validate_email_address(value, required=False)
+
+    def validate_phone(self, value):
+        if not value or not str(value).strip():
+            return ''
+        from accounts.validators import validate_phone_number_format
+        return validate_phone_number_format(value, required=False)
+
+    def validate_phone_number(self, value):
+        if not value or not str(value).strip():
+            return ''
+        from accounts.validators import validate_phone_number_format
+        return validate_phone_number_format(value, required=False)
 
 
 class WarrantyPolicySerializer(serializers.ModelSerializer):
@@ -138,6 +217,14 @@ class ProductReviewSerializer(serializers.ModelSerializer):
 
 class ProductSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+    supplier_email = serializers.CharField(source='supplier.email', read_only=True, allow_null=True)
+    supplier_phone = serializers.CharField(source='supplier.phone', read_only=True, allow_null=True)
+    min_stock_level = serializers.IntegerField(source='low_stock_threshold', required=False)
+    suggested_reorder_quantity = serializers.IntegerField(source='reorder_quantity', required=False)
+    low_stock_alert_active = serializers.BooleanField(read_only=True)
+    is_out_of_stock = serializers.BooleanField(read_only=True)
+    supplier_email_status = serializers.CharField(read_only=True)
     reviews = ProductReviewSerializer(many=True, read_only=True)
     is_in_stock = serializers.BooleanField(read_only=True)
     is_low_stock = serializers.BooleanField(read_only=True)
@@ -147,18 +234,43 @@ class ProductSerializer(serializers.ModelSerializer):
     compare_at_price = serializers.SerializerMethodField()
     promotion_title = serializers.SerializerMethodField()
     warranty_info = serializers.SerializerMethodField()
+    latest_notification = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = [
-            'id', 'category', 'category_name', 'warranty_policy', 'name', 'slug', 'sku',
+            'id', 'category', 'category_name', 'supplier', 'supplier_name', 'supplier_email', 'supplier_phone',
+            'warranty_policy', 'name', 'slug', 'sku',
             'description', 'price', 'current_price', 'has_promotion', 'discount_label',
             'promotion_title', 'compare_at_price', 'cost_price',
-            'stock', 'low_stock_threshold', 'is_in_stock', 'is_low_stock',
+            'stock', 'low_stock_threshold', 'min_stock_level', 'reorder_quantity', 'suggested_reorder_quantity',
+            'low_stock_notified', 'out_of_stock_notified', 'last_low_stock_notification', 'latest_notification',
+            'is_in_stock', 'is_low_stock', 'is_out_of_stock', 'low_stock_alert_active', 'supplier_email_status',
             'image', 'rating_average', 'rating_count', 'is_featured',
             'is_active', 'warranty_info', 'created_at', 'updated_at', 'reviews'
         ]
-        read_only_fields = ['id', 'slug', 'sku', 'rating_average', 'rating_count', 'created_at', 'updated_at']
+        read_only_fields = [
+            'id', 'slug', 'sku', 'rating_average', 'rating_count',
+            'low_stock_notified', 'out_of_stock_notified', 'last_low_stock_notification',
+            'is_in_stock', 'is_low_stock', 'is_out_of_stock', 'low_stock_alert_active', 'supplier_email_status',
+            'created_at', 'updated_at'
+        ]
+
+    def get_latest_notification(self, obj):
+        log = obj.supplier_notifications.first()
+        if not log:
+            return None
+        return {
+            'id': log.id,
+            'status': log.status,
+            'status_display': log.get_status_display(),
+            'trigger_type': log.trigger_type,
+            'trigger_type_display': log.get_trigger_type_display(),
+            'supplier_name': log.supplier_name,
+            'supplier_email': log.supplier_email,
+            'error_message': log.error_message,
+            'created_at': log.created_at.isoformat()
+        }
 
     def get_current_price(self, obj):
         return str(obj.current_price)
@@ -230,3 +342,221 @@ class StockMovementSerializer(serializers.ModelSerializer):
             'created_at'
         ]
         read_only_fields = ['id', 'created_by', 'created_at']
+
+
+class SupplierNotificationLogSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_image = serializers.SerializerMethodField()
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    trigger_type_display = serializers.CharField(source='get_trigger_type_display', read_only=True)
+    sent_by_username = serializers.CharField(source='sent_by.username', read_only=True, allow_null=True)
+
+    class Meta:
+        model = SupplierNotificationLog
+        fields = [
+            'id', 'product', 'product_name', 'product_image',
+            'supplier', 'supplier_name', 'supplier_email',
+            'current_stock', 'min_stock_level', 'reorder_quantity',
+            'status', 'status_display', 'trigger_type', 'trigger_type_display',
+            'subject', 'error_message', 'sent_by', 'sent_by_username',
+            'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+
+    def get_product_image(self, obj):
+        if obj.product and obj.product.image:
+            return obj.product.image.url
+        return None
+
+
+class PurchaseOrderItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_sku = serializers.CharField(source='product.sku', read_only=True)
+    product_image = serializers.SerializerMethodField()
+    outstanding_quantity = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = PurchaseOrderItem
+        fields = [
+            'id', 'purchase_order', 'product', 'product_name', 'product_sku', 'product_image',
+            'quantity', 'confirmed_quantity', 'unit_price', 'total_cost', 'received_quantity', 'damaged_quantity',
+            'outstanding_quantity', 'notes', 'created_at'
+        ]
+        read_only_fields = ['id', 'total_cost', 'outstanding_quantity', 'created_at']
+
+    def get_product_image(self, obj):
+        if obj.product and obj.product.image:
+            return obj.product.image.url
+        return None
+
+
+class PurchaseRequestSerializer(serializers.ModelSerializer):
+    items = PurchaseOrderItemSerializer(many=True, read_only=True)
+    product_name = serializers.CharField(source='product.name', read_only=True, allow_null=True)
+    product_image = serializers.SerializerMethodField()
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True, allow_null=True)
+    supplier_email = serializers.CharField(source='supplier.email', read_only=True, allow_null=True)
+    supplier_phone = serializers.CharField(source='supplier.phone', read_only=True, allow_null=True)
+    supplier_contact = serializers.CharField(source='supplier.contact_person', read_only=True, allow_null=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    requested_by_username = serializers.CharField(source='requested_by.username', read_only=True, allow_null=True)
+    approved_by_username = serializers.CharField(source='approved_by.username', read_only=True, allow_null=True)
+    outstanding_quantity = serializers.IntegerField(read_only=True)
+    total_cost = serializers.DecimalField(max_digits=12, decimal_places=2, source='total_estimated_cost', read_only=True)
+    invoices_count = serializers.IntegerField(source='invoices.count', read_only=True)
+
+    class Meta:
+        model = PurchaseRequest
+        fields = [
+            'id', 'request_number', 'product', 'product_name', 'product_image',
+            'supplier', 'supplier_name', 'supplier_email', 'supplier_phone', 'supplier_contact',
+            'quantity', 'received_quantity', 'damaged_quantity', 'outstanding_quantity',
+            'agreed_price', 'estimated_unit_cost', 'total_estimated_cost', 'total_cost',
+            'expected_supply_date', 'status', 'status_display',
+            'requested_by', 'requested_by_username',
+            'approved_by', 'approved_by_username', 'approval_date',
+            'admin_feedback', 'supplier_confirmed_at', 'supplier_confirmation_notes',
+            'supplier_response', 'supplier_rejection_reason', 'supplier_suggested_delivery_date',
+            'supplier_shipping_carrier', 'supplier_tracking_number', 'supplier_dispatched_at',
+            'notes', 'notification_log', 'items', 'invoices_count',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'request_number', 'total_estimated_cost', 'outstanding_quantity',
+            'requested_by', 'approved_by', 'approval_date', 'created_at', 'updated_at'
+        ]
+
+    def get_product_image(self, obj):
+        if obj.product and obj.product.image:
+            return obj.product.image.url
+        return None
+
+
+class SupplierInvoiceSerializer(serializers.ModelSerializer):
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True, allow_null=True)
+    supplier_email = serializers.CharField(source='supplier.email', read_only=True, allow_null=True)
+    purchase_order_number = serializers.CharField(source='purchase_order.request_number', read_only=True, allow_null=True)
+    submitted_by_username = serializers.CharField(source='submitted_by.username', read_only=True, allow_null=True)
+    reviewed_by_username = serializers.CharField(source='reviewed_by.username', read_only=True, allow_null=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    outstanding_amount = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    attachment_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SupplierInvoice
+        fields = [
+            'id', 'invoice_number', 'supplier', 'supplier_name', 'supplier_email',
+            'purchase_order', 'purchase_order_number',
+            'invoice_date', 'due_date', 'total_amount', 'paid_amount', 'outstanding_amount',
+            'status', 'status_display', 'notes', 'attachment', 'attachment_url',
+            'submitted_by', 'submitted_by_username',
+            'reviewed_by', 'reviewed_by_username', 'reviewed_at', 'review_notes',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'paid_amount', 'outstanding_amount', 'submitted_by',
+            'reviewed_by', 'reviewed_at', 'created_at', 'updated_at'
+        ]
+
+    def get_attachment_url(self, obj):
+        if obj.attachment:
+            return obj.attachment.url
+        return None
+
+
+class SupplierPaymentSerializer(serializers.ModelSerializer):
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True, allow_null=True)
+    authorized_by_username = serializers.CharField(source='authorized_by.username', read_only=True, allow_null=True)
+    payment_status_display = serializers.CharField(source='get_payment_status_display', read_only=True)
+    payment_method_display = serializers.CharField(source='get_payment_method_display', read_only=True)
+    invoice_number = serializers.CharField(source='invoice.invoice_number', read_only=True, allow_null=True)
+
+    class Meta:
+        model = SupplierPayment
+        fields = [
+            'id', 'supplier', 'supplier_name', 'purchase_order',
+            'invoice', 'invoice_number',
+            'supplier_invoice', 'purchase_order_reference',
+            'total_purchase_amount', 'amount_paid', 'outstanding_balance',
+            'payment_method', 'payment_method_display',
+            'transaction_reference', 'payment_date',
+            'payment_status', 'payment_status_display',
+            'authorized_by', 'authorized_by_username',
+            'notes', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'authorized_by', 'created_at', 'updated_at']
+
+
+
+class LowStockProductSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True, default='')
+    supplier_email = serializers.CharField(source='supplier.email', read_only=True, default='')
+    supplier_phone = serializers.CharField(source='supplier.phone', read_only=True, default='')
+    supplier_contact = serializers.CharField(source='supplier.contact_person', read_only=True, default='')
+    min_stock_level = serializers.IntegerField(source='low_stock_threshold', read_only=True)
+    suggested_reorder_quantity = serializers.IntegerField(source='reorder_quantity', read_only=True)
+    is_out_of_stock = serializers.BooleanField(read_only=True)
+    low_stock_alert_active = serializers.BooleanField(read_only=True)
+    supplier_email_status = serializers.CharField(read_only=True)
+    has_supplier = serializers.SerializerMethodField()
+    has_supplier_email = serializers.SerializerMethodField()
+    notification_status = serializers.SerializerMethodField()
+    last_notification_date = serializers.DateTimeField(source='last_low_stock_notification', read_only=True)
+    latest_log = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Product
+        fields = [
+            'id', 'name', 'slug', 'sku', 'image',
+            'category', 'category_name',
+            'supplier', 'supplier_name', 'supplier_email', 'supplier_phone', 'supplier_contact',
+            'has_supplier', 'has_supplier_email',
+            'stock', 'low_stock_threshold', 'min_stock_level', 'reorder_quantity', 'suggested_reorder_quantity',
+            'price', 'cost_price', 'is_out_of_stock', 'low_stock_alert_active', 'supplier_email_status',
+            'low_stock_notified', 'out_of_stock_notified', 'last_notification_date', 'notification_status', 'latest_log'
+        ]
+
+    def get_has_supplier(self, obj):
+        return bool(obj.supplier_id)
+
+    def get_has_supplier_email(self, obj):
+        return bool(obj.supplier and obj.supplier.email and '@' in obj.supplier.email)
+
+    def get_notification_status(self, obj):
+        latest = obj.supplier_notifications.first()
+        if not latest:
+            return 'NEVER_NOTIFIED'
+        return latest.status
+
+    def get_latest_log(self, obj):
+        log = obj.supplier_notifications.first()
+        if not log:
+            return None
+        return {
+            'id': log.id,
+            'status': log.status,
+            'trigger_type': log.trigger_type,
+            'recipient': log.supplier_email,
+            'error_message': log.error_message,
+            'created_at': log.created_at.isoformat()
+        }
+
+
+class StockAlertHistorySerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_sku = serializers.CharField(source='product.sku', read_only=True)
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True, default='')
+    triggered_by_username = serializers.CharField(source='triggered_by.username', read_only=True, default='System')
+    alert_type_display = serializers.CharField(source='get_alert_type_display', read_only=True)
+
+    class Meta:
+        model = StockAlertHistory
+        fields = [
+            'id', 'product', 'product_name', 'product_sku', 'alert_type', 'alert_type_display',
+            'current_stock', 'min_stock_level', 'reorder_quantity',
+            'supplier', 'supplier_name', 'supplier_email',
+            'email_status', 'email_sent_at', 'details',
+            'triggered_by', 'triggered_by_username', 'created_at'
+        ]
+        read_only_fields = fields

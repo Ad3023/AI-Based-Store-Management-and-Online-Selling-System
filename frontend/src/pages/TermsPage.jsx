@@ -21,7 +21,7 @@ const TermsPage = () => {
 
         <h5 className="fw-bolder text-slate-900 mb-2">2. Pricing & Currency</h5>
         <p className="text-slate-600 text-xs mb-4" style={{ lineHeight: '1.8' }}>
-          All prices displayed across the storefront are denominated in <strong>Ethiopian Birr (ETB)</strong> and include applicable 15% Value-Added Tax (VAT). Prices are calculated and enforced server-side by Django to protect against client-side tampering.
+          All prices displayed across the storefront are denominated in <strong>Ethiopian Birr (ETB)</strong> and include applicable 15% Value-Added Tax (VAT). Prices are calculated and verified authoritatively server-side to guarantee accuracy and consumer protection.
         </p>
 
         <h5 className="fw-bolder text-slate-900 mb-2">3. Payment Verification & Order Fulfillment</h5>

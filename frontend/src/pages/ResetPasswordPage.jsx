@@ -4,9 +4,11 @@ import api from '../api';
 
 const ResetPasswordPage = () => {
   const [searchParams] = useSearchParams();
+  const isStaff = searchParams.get('portal') === 'staff';
   const navigate = useNavigate();
 
   const [email, setEmail] = useState(searchParams.get('email') || '');
+  const isFromEmailLink = Boolean(searchParams.get('token'));
   const [token, setToken] = useState(searchParams.get('token') || '');
   const [newPassword, setNewPassword] = useState('');
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
@@ -47,7 +49,7 @@ const ResetPasswordPage = () => {
     }
 
     if (!token.trim()) {
-      setError('Password reset token is required. Please request a new token if expired.');
+      setError('Please enter the 6-digit recovery OTP code sent to your Gmail inbox or open the reset link from your email.');
       return;
     }
 
@@ -127,13 +129,42 @@ const ResetPasswordPage = () => {
                 <p className="text-slate-500 text-xs mb-4">
                   Your credentials have been securely updated in the database. You can now sign in using your new password.
                 </p>
-                <button
-                  type="button"
-                  className="btn btn-primary-gradient rounded-pill px-4 py-2.5 fw-bold text-sm shadow-md"
-                  onClick={() => navigate('/login')}
-                >
-                  Proceed to Sign In &rarr;
-                </button>
+                {isStaff ? (
+                  <div className="d-flex flex-column gap-2">
+                    <button
+                      type="button"
+                      className="btn rounded-pill px-4 py-2.5 fw-bold text-sm shadow-md text-white"
+                      style={{ backgroundColor: '#0f766e', border: '1px solid #14b8a6' }}
+                      onClick={() => navigate('/staff/login')}
+                    >
+                      <i className="bi bi-shield-lock-fill me-1.5"></i> Sign In to Staff Console &rarr;
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm rounded-pill py-1.5"
+                      onClick={() => navigate('/login')}
+                    >
+                      Customer Login
+                    </button>
+                  </div>
+                ) : (
+                  <div className="d-flex flex-column gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-primary-gradient rounded-pill px-4 py-2.5 fw-bold text-sm shadow-md"
+                      onClick={() => navigate('/login')}
+                    >
+                      Proceed to Customer Sign In &rarr;
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm rounded-pill py-1.5"
+                      onClick={() => navigate('/staff/login')}
+                    >
+                      Staff Portal Login
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <form onSubmit={handleResetPassword} noValidate>
@@ -159,27 +190,45 @@ const ResetPasswordPage = () => {
                   </div>
                 </div>
 
-                {/* Reset Token */}
-                <div className="mb-3">
-                  <label className="form-label text-xs fw-bold text-slate-700" htmlFor="reset-token">
-                    Reset Token / Code *
-                  </label>
-                  <div className="input-group">
-                    <span className="input-group-text bg-slate-50 border-slate-200 text-slate-400">
-                      <i className="bi bi-key"></i>
-                    </span>
-                    <input
-                      id="reset-token"
-                      type="text"
-                      className="form-control text-sm py-2 font-mono"
-                      placeholder="Paste recovery token"
-                      value={token}
-                      onChange={(e) => setToken(e.target.value)}
-                      required
-                      disabled={loading}
-                    />
+                {/* Reset Token or 6-Digit OTP */}
+                {isFromEmailLink ? (
+                  <div className="alert alert-success d-flex align-items-center gap-2 p-2.5 rounded-3 mb-3 text-xs border-success border-opacity-25 bg-emerald-50 text-emerald-900">
+                    <i className="bi bi-shield-check fs-5 text-success shrink-0"></i>
+                    <div>
+                      <span className="fw-bold d-block">Verified Reset Link from Gmail</span>
+                      Your email recovery link has been verified. Enter your new password below.
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="mb-3">
+                    <div className="d-flex justify-content-between align-items-center mb-1">
+                      <label className="form-label text-xs fw-bold text-slate-700 mb-0" htmlFor="reset-token">
+                        6-Digit Recovery Code (OTP) *
+                      </label>
+                      <span className="text-[11px] text-primary fw-semibold">Sent to Gmail</span>
+                    </div>
+                    <div className="input-group">
+                      <span className="input-group-text bg-slate-50 border-slate-200 text-slate-400">
+                        <i className="bi bi-shield-lock-fill"></i>
+                      </span>
+                      <input
+                        id="reset-token"
+                        type="text"
+                        className="form-control text-sm py-2 font-mono"
+                        placeholder="Enter 6-digit code (e.g. 542918)"
+                        value={token}
+                        onChange={(e) => setToken(e.target.value.trim())}
+                        required
+                        disabled={loading}
+                        maxLength={120}
+                      />
+                    </div>
+                    <div className="form-text text-[11px] text-slate-500 mt-1">
+                      <i className="bi bi-envelope-open me-1 text-primary"></i>
+                      Enter the 6-digit verification code sent to your Gmail inbox, or click the direct link in the email.
+                    </div>
+                  </div>
+                )}
 
                 {/* New Password */}
                 <div className="mb-2">
@@ -287,9 +336,27 @@ const ResetPasswordPage = () => {
                 </button>
 
                 <div className="text-center text-xs text-slate-500 pt-2 border-top border-slate-100">
-                  <Link to="/login" className="text-primary fw-bold text-decoration-none hover:underline">
-                    Back to Sign In
-                  </Link>
+                  {isStaff ? (
+                    <>
+                      <Link to="/staff/login" className="text-teal-600 fw-bold text-decoration-none hover:underline">
+                        Back to Staff Login
+                      </Link>
+                      <span className="mx-2 text-slate-300">|</span>
+                      <Link to="/login" className="text-slate-400 text-decoration-none hover:underline">
+                        Customer Login
+                      </Link>
+                    </>
+                  ) : (
+                    <>
+                      <Link to="/login" className="text-primary fw-bold text-decoration-none hover:underline">
+                        Back to Sign In
+                      </Link>
+                      <span className="mx-2 text-slate-300">|</span>
+                      <Link to="/staff/login" className="text-slate-400 text-decoration-none hover:underline">
+                        Staff Portal
+                      </Link>
+                    </>
+                  )}
                 </div>
               </form>
             )}

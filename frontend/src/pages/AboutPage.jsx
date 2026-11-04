@@ -27,9 +27,9 @@ const AboutPage = () => {
             >
               <i className="bi bi-stars fs-4"></i>
             </div>
-            <h5 className="fw-bolder text-slate-900 mb-2">Machine Learning Engine</h5>
+            <h5 className="fw-bolder text-slate-900 mb-2">Smart Product Discovery</h5>
             <p className="text-slate-500 text-xs mb-0" style={{ lineHeight: '1.7' }}>
-              Built with Scikit-learn and Pandas. Features TF-IDF vectorization for content similarity, order item co-occurrence matrices for 'Frequently Bought Together' bundles, and RFM K-Means clustering for customer segmentation.
+              Personalized product recommendations powered by intelligent algorithms to help you discover authentic tech products, compatible accessories, and matching bundles tailored to your lifestyle.
             </p>
           </div>
         </div>
@@ -42,9 +42,9 @@ const AboutPage = () => {
             >
               <i className="bi bi-shield-check fs-4"></i>
             </div>
-            <h5 className="fw-bolder text-slate-900 mb-2">Verified Ethiopian Payments</h5>
+            <h5 className="fw-bolder text-slate-900 mb-2">Secure Ethiopian Payments</h5>
             <p className="text-slate-500 text-xs mb-0" style={{ lineHeight: '1.7' }}>
-              Dual payment architecture supporting instant Chapa hosted online payments as well as manual CBE and Telebirr bank transfer verification with manager auditing and tamper-proof printable digital receipts.
+              Shop with total confidence using verified Chapa digital checkout, Telebirr, and direct bank transfers with instant digital receipts and payment verification.
             </p>
           </div>
         </div>
@@ -55,42 +55,46 @@ const AboutPage = () => {
               className="rounded-2xl p-3 d-inline-flex align-items-center justify-content-center text-white mb-3 shadow-sm"
               style={{ width: '52px', height: '52px', background: 'linear-gradient(135deg, #7c3aed, #a855f7)' }}
             >
-              <i className="bi bi-speedometer2 fs-4"></i>
+              <i className="bi bi-truck fs-4"></i>
             </div>
-            <h5 className="fw-bolder text-slate-900 mb-2">Multi-Role Control Center</h5>
+            <h5 className="fw-bolder text-slate-900 mb-2">Nationwide Tracked Delivery</h5>
             <p className="text-slate-500 text-xs mb-0" style={{ lineHeight: '1.7' }}>
-              Strict Role-Based Access Control (RBAC) separating Shopper, Store Manager, and Administrator operations with audit log ledgers and dynamic inventory stock tracking.
+              End-to-end delivery tracking from our fulfillment center directly to your doorstep with trusted couriers, SMS and email milestones, and verified delivery.
             </p>
           </div>
         </div>
       </div>
 
-      {/* Tech Stack Grid */}
+      {/* Customer Commitment Grid */}
       <div className="card border-0 shadow-sm rounded-4 p-4 p-md-5 mb-5 bg-slate-900 text-white">
-        <h4 className="fw-bolder mb-4 text-center">Technical Architecture & Stack</h4>
+        <h4 className="fw-bolder mb-4 text-center">Our Commitment to Quality & Service</h4>
         <div className="row g-4 text-center">
           <div className="col-6 col-md-3">
             <div className="p-3 bg-slate-800 rounded-3xl border border-slate-700">
-              <div className="fw-bold text-cyan-400 fs-5 mb-1">React 19 + Vite</div>
-              <small className="text-slate-400">High-speed modular SPA UI</small>
+              <i className="bi bi-patch-check-fill text-cyan-400 fs-3 d-block mb-2"></i>
+              <div className="fw-bold text-white fs-6 mb-1">100% Genuine</div>
+              <small className="text-slate-400">Authentic tech from vetted suppliers</small>
             </div>
           </div>
           <div className="col-6 col-md-3">
             <div className="p-3 bg-slate-800 rounded-3xl border border-slate-700">
-              <div className="fw-bold text-cyan-400 fs-5 mb-1">Django 5.2 & DRF</div>
-              <small className="text-slate-400">Atomic transactions & REST</small>
+              <i className="bi bi-shield-lock-fill text-cyan-400 fs-3 d-block mb-2"></i>
+              <div className="fw-bold text-white fs-6 mb-1">Official Warranty</div>
+              <small className="text-slate-400">Full manufacturer warranty protection</small>
             </div>
           </div>
           <div className="col-6 col-md-3">
             <div className="p-3 bg-slate-800 rounded-3xl border border-slate-700">
-              <div className="fw-bold text-cyan-400 fs-5 mb-1">PostgreSQL 18</div>
-              <small className="text-slate-400">Relational DB & Audit logging</small>
+              <i className="bi bi-lightning-charge-fill text-cyan-400 fs-3 d-block mb-2"></i>
+              <div className="fw-bold text-white fs-6 mb-1">Express Dispatch</div>
+              <small className="text-slate-400">Same-day and next-day processing</small>
             </div>
           </div>
           <div className="col-6 col-md-3">
             <div className="p-3 bg-slate-800 rounded-3xl border border-slate-700">
-              <div className="fw-bold text-cyan-400 fs-5 mb-1">Scikit-learn 1.9</div>
-              <small className="text-slate-400">TF-IDF & K-Means Machine Learning</small>
+              <i className="bi bi-headset text-cyan-400 fs-3 d-block mb-2"></i>
+              <div className="fw-bold text-white fs-6 mb-1">Dedicated Support</div>
+              <small className="text-slate-400">Expert customer assistance 6 days a week</small>
             </div>
           </div>
         </div>

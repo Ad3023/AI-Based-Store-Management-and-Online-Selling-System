@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../api';
+import { validatePhone } from '../utils/validation';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { formatETB } from '../utils/currency';
 import { getProductImage } from '../utils/productImages';
 
 const CheckoutPage = () => {
-  const { cart, fetchCart } = useCart();
+  const { cart, fetchCart, loading: cartLoading } = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -25,10 +26,50 @@ const CheckoutPage = () => {
     notes: '',
   });
 
-  const [deliveryMethod, setDeliveryMethod] = useState('standard');
+  // Keep form data synchronized if user data loads asynchronously
+  useEffect(() => {
+    if (user) {
+      const uFullName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username || '';
+      const [uFirst, ...uRest] = uFullName.split(' ');
+      setFormData((prev) => ({
+        ...prev,
+        first_name: prev.first_name || uFirst || '',
+        last_name: prev.last_name || uRest.join(' ') || '',
+        shipping_phone: prev.shipping_phone || user.phone_number || '',
+        shipping_address: prev.shipping_address || user.address || '',
+        shipping_city: prev.shipping_city || user.city || 'Addis Ababa',
+      }));
+    }
+  }, [user]);
+
+  const [deliveryMethod, setDeliveryMethod] = useState('THIRD_PARTY_COURIER');
+  const [feeInfo, setFeeInfo] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
   const [error, setError] = useState('');
+
+  // Fetch dynamic fee based on destination city and delivery method
+  useEffect(() => {
+    let isCurrent = true;
+    const calculateFee = async () => {
+      try {
+        const res = await api.post('delivery/calculate-fee/', {
+          destination_city: formData.shipping_city || 'Addis Ababa',
+          delivery_method: deliveryMethod,
+          weight_kg: 1.0,
+        });
+        if (isCurrent && res.data) {
+          setFeeInfo(res.data);
+        }
+      } catch (err) {
+        console.error('Fee calculation error', err);
+      }
+    };
+    calculateFee();
+    return () => {
+      isCurrent = false;
+    };
+  }, [formData.shipping_city, deliveryMethod]);
 
   if (user?.role === 'admin') {
     return (
@@ -54,6 +95,15 @@ const CheckoutPage = () => {
     );
   }
 
+  if (cartLoading && (!cart.items || cart.items.length === 0)) {
+    return (
+      <div className="container py-5 text-center">
+        <div className="spinner-border text-primary spinner-border-sm mb-2" role="status"></div>
+        <p className="text-muted small">Loading checkout details...</p>
+      </div>
+    );
+  }
+
   if (!cart.items || cart.items.length === 0) {
     return (
       <div className="container py-5 text-center">
@@ -71,26 +121,28 @@ const CheckoutPage = () => {
 
   const subtotal = Number(cart.total_price || 0);
 
-  // Delivery methods, rates and estimates dispatched from Debre Birhan, Amhara, Ethiopia
+  // EthioTech delivery options
+  const calculatedCost = feeInfo ? Number(feeInfo.total_shipping_fee) : 150.0;
+  const calculatedEta = feeInfo
+    ? `${feeInfo.estimated_days_min}–${feeInfo.estimated_days_max} business days`
+    : '2–3 business days';
+
   const DELIVERY_OPTIONS = {
-    standard: {
-      name: 'Debre Birhan Local Hub Dispatch',
-      cost: 50.0,
-      estimate: 'Same-day / 1 business day',
+    THIRD_PARTY_COURIER: {
+      name: 'Third-Party Courier Partner (Default)',
+      cost: calculatedCost,
+      estimate: calculatedEta,
+      badge: 'ABC Express / Ethio Post',
     },
-    express: {
-      name: 'Addis Ababa & Express Dispatch',
-      cost: 100.0,
-      estimate: '1–2 business days',
-    },
-    regional: {
-      name: 'Nationwide Ethiopian Courier',
-      cost: 150.0,
-      estimate: '2–3 business days',
+    OWN_DELIVERY: {
+      name: 'Own Fleet Delivery Service',
+      cost: calculatedCost,
+      estimate: calculatedEta,
+      badge: 'Direct Company Fleet',
     },
   };
 
-  const selectedDelivery = DELIVERY_OPTIONS[deliveryMethod];
+  const selectedDelivery = DELIVERY_OPTIONS[deliveryMethod] || DELIVERY_OPTIONS.THIRD_PARTY_COURIER;
   const shippingFee = selectedDelivery.cost;
   const tax = Math.round(subtotal * 0.15 * 100) / 100;
   const total = subtotal + shippingFee + tax;
@@ -124,11 +176,17 @@ const CheckoutPage = () => {
       return;
     }
 
+    const phoneRes = validatePhone(formData.shipping_phone, true);
+    if (!phoneRes.isValid) {
+      setError(phoneRes.error);
+      return;
+    }
+
     try {
       setSubmitting(true);
       const payload = {
         shipping_name: `${formData.first_name} ${formData.last_name}`.trim(),
-        shipping_phone: formData.shipping_phone.trim(),
+        shipping_phone: phoneRes.formatted,
         shipping_address: formData.shipping_address.trim(),
         shipping_city: formData.shipping_city.trim(),
         notes: formData.notes?.trim() || '',
@@ -277,7 +335,7 @@ const CheckoutPage = () => {
                   id="shipping_phone"
                   name="shipping_phone"
                   className="form-control rounded-2 text-xs py-2"
-                  placeholder="+251 9XX XXX XXX"
+                  placeholder="0911223344 (10 digits)"
                   value={formData.shipping_phone}
                   onChange={handleChange}
                   required
@@ -307,7 +365,7 @@ const CheckoutPage = () => {
                   {Object.entries(DELIVERY_OPTIONS).map(([key, opt]) => {
                     const isSelected = deliveryMethod === key;
                     return (
-                      <div key={key} className="col-12 col-md-4 d-flex">
+                      <div key={key} className="col-12 col-md-6 d-flex">
                         <label
                           htmlFor={`delivery-${key}`}
                           className={`w-100 p-3 rounded-3 border cursor-pointer d-flex flex-column justify-content-between transition mb-0 ${
@@ -333,8 +391,9 @@ const CheckoutPage = () => {
                               {formatETB(opt.cost)}
                             </div>
                           </div>
-                          <div className="text-slate-500 text-[11px]">
-                            {opt.estimate}
+                          <div className="d-flex justify-content-between align-items-center text-slate-500 text-[11px] mt-1">
+                            <span><i className="bi bi-clock me-1"></i>{opt.estimate}</span>
+                            <span className="badge bg-light text-slate-600 border text-[10px]">{opt.badge}</span>
                           </div>
                         </label>
                       </div>

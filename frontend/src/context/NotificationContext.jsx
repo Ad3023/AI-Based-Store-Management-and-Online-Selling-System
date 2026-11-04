@@ -8,17 +8,28 @@ export const NotificationProvider = ({ children }) => {
   const { token } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [counts, setCounts] = useState({
+    all: 0,
+    unread: 0,
+    low_stock: 0,
+    out_of_stock: 0,
+    supplier_email_sent: 0,
+    supplier_email_failed: 0,
+  });
 
-  const fetchNotifications = useCallback(async () => {
+  const fetchNotifications = useCallback(async (filterType = 'all') => {
     if (!token) {
       setNotifications([]);
       setUnreadCount(0);
       return;
     }
     try {
-      const res = await api.get('notifications/');
+      const res = await api.get(`notifications/?filter=${filterType}`);
       setNotifications(res.data.notifications || []);
       setUnreadCount(res.data.unread_count || 0);
+      if (res.data.counts) {
+        setCounts(res.data.counts);
+      }
     } catch {
       // ignore in background
     }
@@ -89,6 +100,7 @@ export const NotificationProvider = ({ children }) => {
       value={{
         notifications,
         unreadCount,
+        counts,
         fetchNotifications,
         markAsRead,
         markAllAsRead,

@@ -5,6 +5,7 @@ import CustomerSidebar from '../components/CustomerSidebar';
 import { cleanDisplayName, getUserRoleLabel } from '../utils/orderStatus';
 import { getMediaUrl, getDefaultAvatar } from '../utils/imageUrl';
 import api from '../api';
+import { validateEmail, validatePhone } from '../utils/validation';
 
 const ProfilePage = () => {
   const { user, updateProfile, uploadAvatar, removeAvatar, logout } = useAuth();
@@ -145,23 +146,28 @@ const ProfilePage = () => {
     e.preventDefault();
     setProfileMsg({ type: '', text: '' });
 
-    const trimmedEmail = (formData.email || '').trim();
-    if (!trimmedEmail) {
-      setProfileMsg({ type: 'danger', text: 'Email address cannot be empty.' });
+    const emailRes = validateEmail(formData.email, true);
+    if (!emailRes.isValid) {
+      setProfileMsg({ type: 'danger', text: emailRes.error });
       return;
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(trimmedEmail)) {
-      setProfileMsg({ type: 'danger', text: 'Please enter a valid email address format (e.g. name@domain.com).' });
-      return;
+    let formattedPhone = '';
+    if (formData.phone_number && String(formData.phone_number).trim()) {
+      const phoneRes = validatePhone(formData.phone_number, false);
+      if (!phoneRes.isValid) {
+        setProfileMsg({ type: 'danger', text: phoneRes.error });
+        return;
+      }
+      formattedPhone = phoneRes.formatted;
     }
 
     try {
       setSavingProfile(true);
       await updateProfile({
         ...formData,
-        email: trimmedEmail.toLowerCase(),
+        email: emailRes.value,
+        phone_number: formattedPhone || (formData.phone_number || '').trim(),
       });
       setProfileMsg({ type: 'success', text: 'Profile details and email saved successfully!' });
     } catch (err) {

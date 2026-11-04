@@ -180,16 +180,21 @@ const OrderManagerDashboardPage = () => {
   const handleQuickRejectSubmit = async (e) => {
     e.preventDefault();
     if (!rejectOrderTarget) return;
+    if (!rejectReason.trim()) {
+      alert('Please provide a reason for rejecting this order.');
+      return;
+    }
     try {
       setRejecting(true);
       const payload = {
-        fulfillment_status: 'CANCELLED',
-        comment: rejectReason.trim() || 'Order rejected by Order Manager.',
+        fulfillment_status: 'REJECTED',
+        reason: rejectReason.trim(),
+        comment: rejectReason.trim(),
       };
       const res = await api.patch(`orders/${rejectOrderTarget.id}/status/`, payload);
       setFeedback({
         type: 'warning',
-        text: `Order #${res.data.order_number} was rejected and marked as Cancelled.`,
+        text: `Order #${res.data.order_number} was rejected with reason: "${rejectReason.trim()}". Customer notified.`,
       });
       setRejectOrderTarget(null);
       setRejectReason('');
@@ -230,14 +235,15 @@ const OrderManagerDashboardPage = () => {
   const getAllowedTransitions = (currStatus) => {
     const s = String(currStatus || 'PENDING').toUpperCase();
     const transitions = {
-      PENDING: ['CONFIRMED', 'CANCELLED'],
-      PENDING_PAYMENT: ['CONFIRMED', 'CANCELLED'],
-      PAYMENT_SUBMITTED: ['CONFIRMED', 'CANCELLED'],
-      CONFIRMED: ['PROCESSING', 'CANCELLED'],
+      PENDING: ['CONFIRMED', 'CANCELLED', 'REJECTED'],
+      PENDING_PAYMENT: ['CONFIRMED', 'CANCELLED', 'REJECTED'],
+      PAYMENT_SUBMITTED: ['CONFIRMED', 'CANCELLED', 'REJECTED'],
+      CONFIRMED: ['PROCESSING', 'CANCELLED', 'REJECTED'],
       PROCESSING: ['SHIPPED', 'CANCELLED'],
       SHIPPED: ['DELIVERED', 'CANCELLED'],
       DELIVERED: [],
       CANCELLED: [],
+      REJECTED: [],
       REFUNDED: [],
     };
     return transitions[s] || [];
@@ -259,6 +265,14 @@ const OrderManagerDashboardPage = () => {
         </div>
 
         <div className="d-flex align-items-center gap-2">
+          <Link
+            to="/order-manager/shipments"
+            className="btn btn-warning btn-sm rounded-pill px-3.5 py-2 text-xs fw-bold d-flex align-items-center gap-1.5 shadow-sm text-slate-900"
+          >
+            <i className="bi bi-truck-front-fill"></i>
+            Logistics &amp; Shipments
+          </Link>
+
           <button
             onClick={fetchOrders}
             className="btn btn-outline-secondary btn-sm rounded-pill px-3 py-2 text-xs d-flex align-items-center gap-1.5 shadow-sm"

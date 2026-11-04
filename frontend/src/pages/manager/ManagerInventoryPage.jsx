@@ -30,15 +30,18 @@ const ManagerInventoryPage = () => {
   // Add / Edit Product Modal state
   const [showProductModal, setShowProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null); // null => Create, object => Edit
+  const [suppliers, setSuppliers] = useState([]);
   const [productForm, setProductForm] = useState({
     name: '',
     category: '',
+    supplier: '',
     description: '',
     price: '',
     compare_at_price: '',
     cost_price: '',
     stock: 10,
     low_stock_threshold: 5,
+    reorder_quantity: 20,
     is_featured: false,
     is_active: true,
   });
@@ -49,15 +52,17 @@ const ManagerInventoryPage = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [invRes, prodRes, catRes] = await Promise.all([
+      const [invRes, prodRes, catRes, supRes] = await Promise.all([
         api.get('products/inventory/'),
         api.get('products/items/'),
-        api.get('products/categories/')
+        api.get('products/categories/'),
+        api.get('products/suppliers/')
       ]);
       setInventoryData(invRes.data);
       const prodList = prodRes.data.results || prodRes.data || [];
       setProducts(prodList);
       setCategories(catRes.data.results || catRes.data || []);
+      setSuppliers(supRes.data.results || supRes.data || []);
     } catch (err) {
       console.error("Inventory error", err);
     } finally {
@@ -107,12 +112,14 @@ const ManagerInventoryPage = () => {
     setProductForm({
       name: '',
       category: categories.length > 0 ? categories[0].id : '',
+      supplier: suppliers.length > 0 ? suppliers[0].id : '',
       description: '',
       price: '',
       compare_at_price: '',
       cost_price: '',
       stock: 10,
       low_stock_threshold: 5,
+      reorder_quantity: 20,
       is_featured: false,
       is_active: true,
     });
@@ -163,12 +170,14 @@ const ManagerInventoryPage = () => {
     setProductForm({
       name: product.name,
       category: product.category,
+      supplier: product.supplier || '',
       description: product.description || '',
       price: product.price,
       compare_at_price: product.compare_at_price || '',
       cost_price: product.cost_price || 0,
       stock: product.stock,
-      low_stock_threshold: product.low_stock_threshold || 5,
+      low_stock_threshold: product.low_stock_threshold || product.min_stock_level || 5,
+      reorder_quantity: product.reorder_quantity || 20,
       is_featured: !!product.is_featured,
       is_active: product.is_active !== undefined ? product.is_active : true,
     });
@@ -183,12 +192,14 @@ const ManagerInventoryPage = () => {
       const payload = {
         name: productForm.name,
         category: Number(productForm.category),
+        supplier: productForm.supplier ? Number(productForm.supplier) : null,
         description: productForm.description,
         price: parseFloat(productForm.price),
         compare_at_price: productForm.compare_at_price ? parseFloat(productForm.compare_at_price) : null,
         cost_price: productForm.cost_price ? parseFloat(productForm.cost_price) : 0,
         stock: parseInt(productForm.stock, 10),
         low_stock_threshold: parseInt(productForm.low_stock_threshold, 10),
+        reorder_quantity: parseInt(productForm.reorder_quantity, 10) || 20,
         is_featured: productForm.is_featured,
         is_active: productForm.is_active,
       };
@@ -587,7 +598,7 @@ const ManagerInventoryPage = () => {
           {forecastingLoading ? (
             <div className="text-center py-5">
               <div className="spinner-border text-primary spinner-border-sm" role="status"></div>
-              <p className="text-muted small mt-2">Computing 30-day demand forecast from PostgreSQL orders...</p>
+              <p className="text-muted small mt-2">Computing 30-day demand forecast...</p>
             </div>
           ) : filteredForecasts.length === 0 ? (
             <div className="text-center py-5 text-slate-400 text-xs">
@@ -752,7 +763,7 @@ const ManagerInventoryPage = () => {
               <form onSubmit={handleProductSubmit}>
                 <div className="modal-body">
                   <div className="row g-3">
-                    <div className="col-md-8">
+                    <div className="col-md-5">
                       <label className="form-label small fw-bold">Product Name *</label>
                       <input
                         type="text"
@@ -763,7 +774,7 @@ const ManagerInventoryPage = () => {
                         required
                       />
                     </div>
-                    <div className="col-md-4">
+                    <div className="col-md-3">
                       <label className="form-label small fw-bold">Category *</label>
                       <select
                         className="form-select"
@@ -774,6 +785,21 @@ const ManagerInventoryPage = () => {
                         <option value="">Select Category</option>
                         {categories.map((c) => (
                           <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="col-md-4">
+                      <label className="form-label small fw-bold">Hardware Supplier</label>
+                      <select
+                        className="form-select"
+                        value={productForm.supplier}
+                        onChange={(e) => setProductForm({ ...productForm, supplier: e.target.value })}
+                      >
+                        <option value="">-- No Supplier Assigned --</option>
+                        {suppliers.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} ({s.email || 'No email'})
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -828,7 +854,7 @@ const ManagerInventoryPage = () => {
                       />
                     </div>
 
-                    <div className="col-md-6">
+                    <div className="col-md-4">
                       <label className="form-label small fw-bold">Current Stock Quantity</label>
                       <input
                         type="number"
@@ -839,14 +865,27 @@ const ManagerInventoryPage = () => {
                         required
                       />
                     </div>
-                    <div className="col-md-6">
-                      <label className="form-label small fw-bold">Low Stock Alert Threshold</label>
+                    <div className="col-md-4">
+                      <label className="form-label small fw-bold">Minimum Stock Level</label>
                       <input
                         type="number"
                         min="1"
                         className="form-control"
+                        title="Alert triggers when stock reaches or drops below this number"
                         value={productForm.low_stock_threshold}
                         onChange={(e) => setProductForm({ ...productForm, low_stock_threshold: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="col-md-4">
+                      <label className="form-label small fw-bold">Reorder Quantity (Units)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        className="form-control"
+                        title="Recommended replenishment quantity requested from supplier"
+                        value={productForm.reorder_quantity}
+                        onChange={(e) => setProductForm({ ...productForm, reorder_quantity: e.target.value })}
                         required
                       />
                     </div>

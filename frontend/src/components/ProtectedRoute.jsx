@@ -104,7 +104,7 @@ export const ManagerRoute = ({ children }) => {
           </p>
           <div className="d-flex justify-content-center gap-2">
             <Link to="/" className="btn btn-primary rounded-pill px-4">Return to Storefront</Link>
-            <Link to="/profile" className="btn btn-outline-secondary rounded-pill px-4">Customer Dashboard</Link>
+            <Link to="/customer/dashboard" className="btn btn-outline-secondary rounded-pill px-4">Customer Dashboard</Link>
           </div>
         </div>
       </div>
@@ -115,10 +115,11 @@ export const ManagerRoute = ({ children }) => {
 };
 
 /**
- * OrderManagerRoute: Requires Order Manager, Store Manager, Admin, or orders.view permission.
+ * StoreManagerRoute: Requires Store Manager or Admin role.
+ * Order Manager and Customers cannot access.
  */
-export const OrderManagerRoute = ({ children }) => {
-  const { user, loading, isOrderManager, isStoreManager, isAdmin, hasPermission } = useAuth();
+export const StoreManagerRoute = ({ children }) => {
+  const { user, loading, isAdmin, isSuperAdmin, hasAnyPermission } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -133,7 +134,56 @@ export const OrderManagerRoute = ({ children }) => {
     return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
   }
 
-  const authorized = isOrderManager || isStoreManager || isAdmin || hasPermission('orders.view');
+  const authorized =
+    user?.role !== 'supplier' && (
+      isAdmin ||
+      isSuperAdmin ||
+      user?.role === 'store_manager' ||
+      hasAnyPermission(['inventory.manage', 'products.view'])
+    );
+
+  if (!authorized) {
+    return (
+      <div className="container py-5 text-center">
+        <div className="card border-0 shadow-lg rounded-4 p-5 mx-auto max-w-lg bg-white">
+          <i className="bi bi-shield-x fs-1 text-danger mb-3"></i>
+          <h4 className="fw-bolder text-slate-900">403 - Store Manager Access Required</h4>
+          <p className="text-slate-500 small mb-4">
+            Your account ({user.username}, Role: <strong className="text-uppercase">{user.role}</strong>) does not have product catalog or inventory management privileges.
+          </p>
+          <div className="d-flex justify-content-center gap-2">
+            <Link to="/" className="btn btn-primary rounded-pill px-4">Return to Storefront</Link>
+            <Link to="/customer/dashboard" className="btn btn-outline-secondary rounded-pill px-4">Customer Dashboard</Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return children;
+};
+
+/**
+ * OrderManagerRoute: Requires Order Manager or Admin role.
+ * Store Manager and Customers cannot access.
+ */
+export const OrderManagerRoute = ({ children }) => {
+  const { user, loading, isOrderManager, isAdmin, isSuperAdmin, hasPermission } = useAuth();
+  const location = useLocation();
+
+  if (loading) {
+    return (
+      <div className="container py-5 text-center">
+        <div className="spinner-border text-primary" role="status"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
+  }
+
+  const authorized = user?.role !== 'supplier' && (isOrderManager || isAdmin || isSuperAdmin || hasPermission('orders.view'));
 
   if (!authorized) {
     return (
@@ -146,7 +196,7 @@ export const OrderManagerRoute = ({ children }) => {
           </p>
           <div className="d-flex justify-content-center gap-2">
             <Link to="/" className="btn btn-primary rounded-pill px-4">Return to Storefront</Link>
-            <Link to="/profile" className="btn btn-outline-secondary rounded-pill px-4">Customer Dashboard</Link>
+            <Link to="/customer/dashboard" className="btn btn-outline-secondary rounded-pill px-4">Customer Dashboard</Link>
           </div>
         </div>
       </div>
@@ -175,7 +225,7 @@ export const AdminRoute = ({ children }) => {
     return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
   }
 
-  const authorized = isAdmin || isSuperAdmin || hasAnyPermission(['users.manage', 'roles.manage', 'audit_logs.view', 'settings.manage']);
+  const authorized = user?.role !== 'supplier' && (isAdmin || isSuperAdmin || hasAnyPermission(['users.manage', 'roles.manage', 'audit_logs.view', 'settings.manage']));
 
   if (!authorized) {
     return (
@@ -238,3 +288,47 @@ export const SuperAdminRoute = ({ children }) => {
 };
 
 export default ProtectedRoute;
+
+/**
+ * SupplierRoute: Strictly requires authenticated Supplier role with a linked supplier profile.
+ * Customers and internal staff are prohibited.
+ */
+export const SupplierRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+
+  if (loading) {
+    return (
+      <div className="container py-5 text-center">
+        <div className="spinner-border text-primary" role="status"></div>
+        <p className="text-muted small mt-2">Checking supplier credentials...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to={`/supplier/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
+  }
+
+  const isSupplier = user?.role === 'supplier' || Boolean(user?.is_supplier);
+
+  if (!isSupplier) {
+    return (
+      <div className="container py-5 text-center">
+        <div className="card border-0 shadow-lg rounded-4 p-5 mx-auto max-w-lg bg-white">
+          <i className="bi bi-shield-x fs-1 text-warning mb-3"></i>
+          <h4 className="fw-bolder text-slate-900">403 - Supplier Access Required</h4>
+          <p className="text-slate-500 small mb-4">
+            Your account ({user.username}, Role: <strong className="text-uppercase">{user.role}</strong>) does not have access to the external Supplier Portal.
+          </p>
+          <div className="d-flex justify-content-center gap-2">
+            <Link to="/" className="btn btn-primary rounded-pill px-4">Return to Storefront</Link>
+            <Link to="/supplier/login" className="btn btn-outline-warning rounded-pill px-4">Supplier Sign In</Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return children;
+};

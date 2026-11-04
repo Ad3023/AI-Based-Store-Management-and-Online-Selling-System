@@ -83,6 +83,20 @@ const CustomerDashboardPage = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
+  // Newsletter Subscription State
+  const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
+  const [newsletterLoading, setNewsletterLoading] = useState(false);
+  const [newsletterFeedback, setNewsletterFeedback] = useState('');
+
+  // Password Change State
+  const [passwordForm, setPasswordForm] = useState({
+    old_password: '',
+    new_password: '',
+    new_password_confirm: '',
+  });
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordFeedback, setPasswordFeedback] = useState({ type: '', text: '' });
+
   useEffect(() => {
     const tabFromUrl = queryParams.get('tab');
     if (tabFromUrl && tabFromUrl !== activeTab) {
@@ -153,6 +167,16 @@ const CustomerDashboardPage = () => {
       } catch {
         // Silently handle
       }
+
+      // 6. Newsletter Subscription Status
+      try {
+        const nRes = await api.get('notifications/newsletter/status/').catch(() => ({ data: { is_subscribed: false } }));
+        if (isMounted && nRes.data) {
+          setNewsletterSubscribed(Boolean(nRes.data.is_subscribed));
+        }
+      } catch {
+        // Silently handle
+      }
     };
 
     fetchUserData();
@@ -161,6 +185,65 @@ const CustomerDashboardPage = () => {
       isMounted = false;
     };
   }, [user]);
+
+  const handleNewsletterToggle = async () => {
+    try {
+      setNewsletterLoading(true);
+      setNewsletterFeedback('');
+      const nextState = !newsletterSubscribed;
+      const res = await api.post('notifications/newsletter/status/', { subscribe: nextState });
+      setNewsletterSubscribed(Boolean(res.data.is_subscribed));
+      setNewsletterFeedback(
+        nextState
+          ? 'Subscribed! You will receive genuine EthioTech Market promotions, discounts, and product launches.'
+          : 'You have been unsubscribed from promotional marketing emails.'
+      );
+    } catch {
+      setNewsletterFeedback('Failed to update newsletter preferences. Please try again.');
+    } finally {
+      setNewsletterLoading(false);
+    }
+  };
+
+  const handlePasswordSubmit = async (e) => {
+    e.preventDefault();
+    setPasswordFeedback({ type: '', text: '' });
+
+    if (!passwordForm.old_password || !passwordForm.new_password) {
+      setPasswordFeedback({ type: 'danger', text: 'Please enter both your current and new password.' });
+      return;
+    }
+
+    if (passwordForm.new_password.length < 6) {
+      setPasswordFeedback({ type: 'danger', text: 'New password must contain at least 6 characters.' });
+      return;
+    }
+
+    if (passwordForm.new_password !== passwordForm.new_password_confirm) {
+      setPasswordFeedback({ type: 'danger', text: 'New passwords do not match. Please verify confirmation password.' });
+      return;
+    }
+
+    try {
+      setChangingPassword(true);
+      await api.post('auth/change-password/', passwordForm);
+      setPasswordFeedback({
+        type: 'success',
+        text: 'Your password has been changed successfully! A security confirmation was sent to your email.',
+      });
+      setPasswordForm({ old_password: '', new_password: '', new_password_confirm: '' });
+    } catch (err) {
+      const errMsg =
+        err.response?.data?.old_password?.[0] ||
+        err.response?.data?.new_password?.[0] ||
+        err.response?.data?.error ||
+        err.response?.data?.detail ||
+        'Failed to change password. Please ensure your current password is correct.';
+      setPasswordFeedback({ type: 'danger', text: errMsg });
+    } finally {
+      setChangingPassword(false);
+    }
+  };
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -485,6 +568,13 @@ const CustomerDashboardPage = () => {
                                 <Link to={`/orders/${o.id}`} className="btn btn-outline-primary btn-sm rounded-pill px-3 py-1 text-xs">
                                   Details
                                 </Link>
+                                <Link
+                                  to={`/track-order?tracking_number=${o.tracking_number || o.order_number}`}
+                                  className="btn btn-outline-info btn-sm rounded-pill px-2.5 py-1 text-xs"
+                                  title="Live Delivery Tracking"
+                                >
+                                  <i className="bi bi-geo-alt"></i> Track
+                                </Link>
                                 {o.receipt && o.receipt.receipt_number && (
                                   <Link to={`/receipts/${o.id}`} className="btn btn-outline-success btn-sm rounded-pill px-2.5 py-1 text-xs">
                                     <i className="bi bi-receipt"></i> Receipt
@@ -590,6 +680,13 @@ const CustomerDashboardPage = () => {
                             <div className="d-flex justify-content-end gap-1.5">
                               <Link to={`/orders/${o.id}`} className="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-1">
                                 View
+                              </Link>
+                              <Link
+                                to={`/track-order?tracking_number=${o.tracking_number || o.order_number}`}
+                                className="btn btn-sm btn-outline-info rounded-pill px-2.5 py-1"
+                                title="Live Delivery Tracking"
+                              >
+                                <i className="bi bi-geo-alt"></i> Track
                               </Link>
                               {o.receipt && o.receipt.receipt_number && (
                                 <Link to={`/receipts/${o.id}`} className="btn btn-sm btn-outline-success rounded-pill px-2.5 py-1">
@@ -1033,7 +1130,7 @@ const CustomerDashboardPage = () => {
                   />
                 </div>
                 <div className="col-12 col-md-6">
-                  <label className="form-label text-xs fw-bold text-slate-700">Account Role (Backend Authorization)</label>
+                  <label className="form-label text-xs fw-bold text-slate-700">Account Role</label>
                   <input
                     type="text"
                     className="form-control text-sm py-2 bg-slate-50 rounded-3 text-uppercase fw-bold text-primary"
@@ -1051,6 +1148,110 @@ const CustomerDashboardPage = () => {
                 {saving ? 'Saving...' : 'Save Profile Changes'}
               </button>
             </form>
+
+            <hr className="my-4" />
+
+            {/* Newsletter & Marketing Preferences */}
+            <div className="p-3.5 bg-slate-50 rounded-3 border border-slate-200 mb-4">
+              <div className="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3">
+                <div>
+                  <div className="d-flex align-items-center gap-2 mb-1">
+                    <i className="bi bi-envelope-paper-heart-fill text-primary fs-5"></i>
+                    <h6 className="fw-bold text-slate-900 mb-0">Promotions & Newsletter Subscription</h6>
+                  </div>
+                  <p className="text-slate-500 text-xs mb-0">
+                    Receive verified discount codes, weekly tech launches, and exclusive member campaigns.
+                  </p>
+                  {newsletterFeedback && (
+                    <small className="text-primary text-xs mt-1 d-block font-semibold">
+                      {newsletterFeedback}
+                    </small>
+                  )}
+                </div>
+
+                <div className="d-flex align-items-center gap-2 shrink-0">
+                  <span className={`badge rounded-pill text-xs ${newsletterSubscribed ? 'bg-success bg-opacity-10 text-success border border-success border-opacity-25' : 'bg-secondary bg-opacity-10 text-secondary'}`}>
+                    {newsletterSubscribed ? 'Subscribed' : 'Not Subscribed'}
+                  </span>
+                  <button
+                    type="button"
+                    className={`btn btn-sm rounded-pill px-3 py-1.5 text-xs fw-bold ${newsletterSubscribed ? 'btn-outline-danger' : 'btn-primary-gradient'}`}
+                    onClick={handleNewsletterToggle}
+                    disabled={newsletterLoading}
+                  >
+                    {newsletterLoading ? 'Updating...' : newsletterSubscribed ? 'Unsubscribe' : 'Subscribe Now'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <hr className="my-4" />
+
+            {/* Change Password Form */}
+            <div>
+              <div className="mb-3">
+                <div className="d-flex align-items-center gap-2 mb-1">
+                  <i className="bi bi-shield-lock-fill text-slate-700 fs-5"></i>
+                  <h6 className="fw-bold text-slate-900 mb-0">Change Account Password</h6>
+                </div>
+                <p className="text-slate-500 text-xs mb-0">
+                  Update your account credentials. A confirmation notification will be sent to your email.
+                </p>
+              </div>
+
+              {passwordFeedback.text && (
+                <div className={`alert alert-${passwordFeedback.type} alert-dismissible fade show rounded-3 text-xs mb-3 shadow-sm`} role="alert">
+                  {passwordFeedback.text}
+                  <button type="button" className="btn-close" onClick={() => setPasswordFeedback({ type: '', text: '' })}></button>
+                </div>
+              )}
+
+              <form onSubmit={handlePasswordSubmit}>
+                <div className="row g-3 mb-3">
+                  <div className="col-12 col-md-4">
+                    <label className="form-label text-xs fw-bold text-slate-700">Current Password *</label>
+                    <input
+                      type="password"
+                      className="form-control text-sm py-2 rounded-3"
+                      placeholder="Enter current password"
+                      value={passwordForm.old_password}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, old_password: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="col-12 col-md-4">
+                    <label className="form-label text-xs fw-bold text-slate-700">New Password *</label>
+                    <input
+                      type="password"
+                      className="form-control text-sm py-2 rounded-3"
+                      placeholder="At least 6 characters"
+                      value={passwordForm.new_password}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, new_password: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="col-12 col-md-4">
+                    <label className="form-label text-xs fw-bold text-slate-700">Confirm New Password *</label>
+                    <input
+                      type="password"
+                      className="form-control text-sm py-2 rounded-3"
+                      placeholder="Repeat new password"
+                      value={passwordForm.new_password_confirm}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, new_password_confirm: e.target.value })}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="btn btn-outline-primary rounded-pill px-4 py-2 fw-bold text-xs shadow-sm"
+                  disabled={changingPassword}
+                >
+                  {changingPassword ? 'Updating Password...' : 'Update Password'}
+                </button>
+              </form>
+            </div>
           </div>
         )}
       </main>

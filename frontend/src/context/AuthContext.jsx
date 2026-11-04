@@ -40,9 +40,28 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token, logout]);
 
-  const login = async (username, password, rememberMe = true) => {
-    const res = await api.post('auth/login/', { username, password });
-    const { token: authToken, user: userData } = res.data;
+  const login = async (username, password, rememberMe = true, portal = null) => {
+    const cleanId = (username || '').trim();
+    const payload = {
+      username: cleanId,
+      email: cleanId,
+      identifier: cleanId,
+      password
+    };
+    if (portal) {
+      payload.portal = portal;
+    }
+
+    const endpoint = portal === 'staff'
+      ? 'auth/login/staff/'
+      : portal === 'customer'
+        ? 'auth/login/customer/'
+        : portal === 'supplier'
+          ? 'auth/login/supplier/'
+          : 'auth/login/';
+
+    const res = await api.post(endpoint, payload);
+    const { token: authToken, user: userData, dashboard_url: dashboardUrl } = res.data;
     const storage = rememberMe ? localStorage : sessionStorage;
     
     // Clear the opposite storage to prevent desync
@@ -58,7 +77,7 @@ export const AuthProvider = ({ children }) => {
     storage.setItem('user', JSON.stringify(userData));
     setToken(authToken);
     setUser(userData);
-    return userData;
+    return { ...userData, dashboard_url: dashboardUrl };
   };
 
   const register = async (userData) => {
@@ -133,13 +152,14 @@ export const AuthProvider = ({ children }) => {
     user?.is_sub_admin
   );
   const isOrderManager = Boolean(user?.role === 'order_manager');
+  const isSupplier = Boolean(user?.role === 'supplier' || user?.is_supplier);
   // Store Manager has operational access; Admin has complete supervisory access
   const isStoreManager = Boolean(
     isAdmin ||
     user?.role === 'store_manager' ||
-    (user?.is_staff && user?.role !== 'customer' && user?.role !== 'order_manager' && user?.role !== 'sub_admin')
+    (user?.is_staff && user?.role !== 'customer' && user?.role !== 'order_manager' && user?.role !== 'sub_admin' && user?.role !== 'supplier')
   );
-  const isCustomer = user?.role === 'customer' || (!isAdmin && !isSubAdmin && !isStoreManager && !isOrderManager);
+  const isCustomer = user?.role === 'customer' || (!isAdmin && !isSubAdmin && !isStoreManager && !isOrderManager && !isSupplier);
   const isManagerOrAdmin = isAdmin || isSubAdmin || isStoreManager || isOrderManager;
 
   const userPermissions = useMemo(() => {
@@ -159,6 +179,24 @@ export const AuthProvider = ({ children }) => {
     return permissionCodes.some((code) => userPermissions.includes(code));
   }, [user, isAdmin, userPermissions]);
 
+  const getRoleDashboardUrl = useCallback((targetUser) => {
+    const u = targetUser || user;
+    if (!u) return '/login';
+    if (u.role === 'admin' || u.is_super_admin || u.is_superuser) {
+      return '/admin/dashboard';
+    }
+    if (u.role === 'order_manager') {
+      return '/order-manager/dashboard';
+    }
+    if (u.role === 'supplier') {
+      return '/supplier/dashboard';
+    }
+    if (u.role === 'store_manager' || u.role === 'sub_admin') {
+      return '/store-manager/dashboard';
+    }
+    return '/customer/dashboard';
+  }, [user]);
+
   return (
     <AuthContext.Provider
       value={{
@@ -176,12 +214,14 @@ export const AuthProvider = ({ children }) => {
         isAdmin,
         isSubAdmin,
         isCustomer,
+        isSupplier,
         isStoreManager,
         isOrderManager,
         isManagerOrAdmin,
         userPermissions,
         hasPermission,
         hasAnyPermission,
+        getRoleDashboardUrl,
       }}
     >
       {children}

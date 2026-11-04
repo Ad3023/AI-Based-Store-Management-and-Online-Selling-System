@@ -50,6 +50,9 @@ class DashboardAnalyticsView(APIView):
 
         total_users = User.objects.count()
         total_customers = User.objects.filter(role=User.Role.CUSTOMER).count()
+        total_store_managers = User.objects.filter(role=User.Role.STORE_MANAGER).count()
+        total_order_managers = User.objects.filter(role=User.Role.ORDER_MANAGER).count()
+        total_admins = User.objects.filter(role__in=[User.Role.ADMIN, User.Role.SUPER_ADMIN]).count()
         active_users = User.objects.filter(is_active=True).count()
         
         total_products = Product.objects.count()
@@ -145,6 +148,9 @@ class DashboardAnalyticsView(APIView):
                 'pending_verifications': pending_verifications,
                 'total_users': total_users,
                 'total_customers': total_customers,
+                'total_store_managers': total_store_managers,
+                'total_order_managers': total_order_managers,
+                'total_admins': total_admins,
                 'active_users': active_users,
                 'total_products': total_products,
                 'active_products': active_products,
@@ -242,6 +248,10 @@ class OrderManagerStatsView(APIView):
         shipped_orders = Order.objects.filter(fulfillment_status=Order.FulfillmentStatus.SHIPPED).count()
         delivered_orders = Order.objects.filter(fulfillment_status=Order.FulfillmentStatus.DELIVERED).count()
         cancelled_orders = Order.objects.filter(fulfillment_status=Order.FulfillmentStatus.CANCELLED).count()
+        rejected_orders = Order.objects.filter(
+            Q(fulfillment_status=Order.FulfillmentStatus.REJECTED) |
+            Q(status=Order.Status.REJECTED)
+        ).count()
 
         # Recent 8 orders with related data
         recent = Order.objects.all().select_related('customer').prefetch_related('items__product', 'status_history').order_by('-created_at')[:8]
@@ -259,6 +269,7 @@ class OrderManagerStatsView(APIView):
                 'shipped_orders': shipped_orders,
                 'delivered_orders': delivered_orders,
                 'cancelled_orders': cancelled_orders,
+                'rejected_orders': rejected_orders,
                 'total_revenue': total_revenue,
             },
             'recent_orders': OrderSerializer(recent, many=True).data

@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, re_path
 from .views import (
     CartView, CheckoutView, OrderListView, OrderDetailView,
     PaymentEvidenceUploadView, StoreManagerPaymentVerificationView,
@@ -13,8 +13,8 @@ from .dashboard_views import (
 )
 
 urlpatterns = [
-    path('cart/', CartView.as_view(), name='cart'),
-    path('checkout/', CheckoutView.as_view(), name='checkout'),
+    re_path(r'^cart/?$', CartView.as_view(), name='cart'),
+    re_path(r'^checkout/?$', CheckoutView.as_view(), name='checkout'),
     path('customer-summary/', CustomerDashboardSummaryView.as_view(), name='customer-summary'),
     path('chapa/initialize/', ChapaInitializePaymentView.as_view(), name='chapa-initialize'),
     path('<int:order_id>/chapa/initialize/', ChapaInitializePaymentView.as_view(), name='chapa-order-initialize'),
