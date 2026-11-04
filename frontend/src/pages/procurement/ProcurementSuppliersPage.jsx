@@ -162,12 +162,14 @@ const ProcurementSuppliersPage = () => {
       alert('Supplier name is required.');
       return;
     }
+    const payload = { ...formData };
     if (formData.email && formData.email.trim()) {
       const emailRes = validateEmail(formData.email, false);
       if (!emailRes.isValid) {
         alert(emailRes.error);
         return;
       }
+      payload.email = emailRes.value;
     }
     if (formData.phone && formData.phone.trim()) {
       const phoneRes = validatePhone(formData.phone, false);
@@ -175,14 +177,15 @@ const ProcurementSuppliersPage = () => {
         alert(phoneRes.error);
         return;
       }
+      payload.phone = phoneRes.formatted || phoneRes.value;
     }
     try {
       setSubmitting(true);
       if (modalMode === 'create') {
-        const res = await api.post('products/suppliers/', formData);
+        const res = await api.post('products/suppliers/', payload);
         setFeedback({ type: 'success', text: `Supplier "${res.data.name}" registered successfully!` });
       } else {
-        const res = await api.put(`products/suppliers/${currentSupplierId}/`, formData);
+        const res = await api.put(`products/suppliers/${currentSupplierId}/`, payload);
         setFeedback({ type: 'success', text: `Supplier "${res.data.name}" updated successfully!` });
       }
       setShowModal(false);
