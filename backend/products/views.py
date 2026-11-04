@@ -162,18 +162,23 @@ class ProductDetailView(generics.RetrieveUpdateDestroyAPIView):
         return Response(serializer.data)
 
     def perform_update(self, serializer):
-        old_stock = self.get_object().stock
-        product = serializer.save()
-        new_stock = product.stock
-        if new_stock != old_stock:
-            diff = new_stock - old_stock
-            StockMovement.objects.create(
-                product=product,
-                quantity=diff,
-                movement_type=StockMovement.MovementType.RESTOCK if diff > 0 else StockMovement.MovementType.ADJUSTMENT,
-                reference=f"Manual update ({diff:+d})",
-                created_by=self.request.user
-            )
+        instance = self.get_object()
+        old_stock = instance.stock
+        # Prevent catalog metadata editing from accidentally altering inventory stock
+        if 'stock' not in self.request.data:
+            product = serializer.save(stock=old_stock)
+        else:
+            product = serializer.save()
+            new_stock = product.stock
+            if new_stock != old_stock:
+                diff = new_stock - old_stock
+                StockMovement.objects.create(
+                    product=product,
+                    quantity=diff,
+                    movement_type=StockMovement.MovementType.RESTOCK if diff > 0 else StockMovement.MovementType.ADJUSTMENT,
+                    reference=f"Manual update ({diff:+d})",
+                    created_by=self.request.user
+                )
             # Monitor stock change for automatic low stock or out of stock alerts
             try:
                 LowStockAlertService.evaluate_and_notify_product(
@@ -264,17 +269,21 @@ class InventoryManagementView(APIView):
         low_stock = products.filter(stock__lte=F('low_stock_threshold'), is_active=True)
         out_of_stock = products.filter(stock=0, is_active=True)
 
-        movements = StockMovement.objects.all().select_related('product', 'created_by')[:25]
+        movements = StockMovement.objects.all().select_related('product', 'created_by')[:50]
         inventory_value = sum((Decimal(str(p.stock)) * Decimal(str(p.price)) for p in products), Decimal('0.00'))
+        cost_value = sum((Decimal(str(p.stock)) * Decimal(str(p.cost_price or 0)) for p in products), Decimal('0.00'))
+        total_units = sum(p.stock for p in products)
 
         return Response({
             'total_products': products.count(),
+            'total_units': total_units,
             'available_products': available.count(),
             'low_stock_count': low_stock.count(),
             'out_of_stock_count': out_of_stock.count(),
             'total_categories': Category.objects.count(),
             'total_suppliers': Supplier.objects.count(),
             'inventory_value': float(inventory_value),
+            'cost_value': float(cost_value),
             'low_stock_products': LowStockProductSerializer(low_stock, many=True).data,
             'out_of_stock_products': ProductSerializer(out_of_stock, many=True).data,
             'recent_movements': StockMovementSerializer(movements, many=True).data

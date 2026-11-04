@@ -1,19 +1,37 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import api from '../../api';
 import { formatETB } from '../../utils/currency';
+import { useAuth } from '../../context/AuthContext';
 
 const ManagerInventoryPage = () => {
-  const [searchParams] = useSearchParams();
-  const [inventoryData, setInventoryData] = useState(null);
+  const { isAdmin, isSuperAdmin, isStoreManager, hasPermission } = useAuth();
+
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [inventoryStats, setInventoryStats] = useState(null);
+  const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [stockMovements, setStockMovements] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Active View Tab: 'stock_levels' | 'movements' | 'incoming_pos' | 'forecasting'
+  const [activeTab, setActiveTab] = useState('stock_levels');
+
+  // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
+  const [filterStockStatus, setFilterStockStatus] = useState('ALL'); // 'ALL' | 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK' | 'RESERVED'
 
-  // Active View Tab: 'catalog' | 'forecasting' | 'movements'
-  const [activeTab, setActiveTab] = useState('catalog');
+  // Stock Adjustment Modal
+  const [adjustProduct, setAdjustProduct] = useState(null);
+  const [adjustQuantity, setAdjustQuantity] = useState(10);
+  const [movementType, setMovementType] = useState('RESTOCK');
+  const [adjustmentReference, setAdjustmentReference] = useState('');
+
+  // Thresholds & Reorder Settings Modal
+  const [thresholdProduct, setThresholdProduct] = useState(null);
+  const [minStockLevel, setMinStockLevel] = useState(5);
+  const [reorderQuantity, setReorderQuantity] = useState(20);
 
   // AI Demand Forecasting State
   const [forecastingData, setForecastingData] = useState(null);
@@ -21,54 +39,35 @@ const ManagerInventoryPage = () => {
   const [forecastingDays, setForecastingDays] = useState(60);
   const [riskFilter, setRiskFilter] = useState('ALL');
 
-  // Stock Adjust Modal state
-  const [adjustProduct, setAdjustProduct] = useState(null);
-  const [adjustQuantity, setAdjustQuantity] = useState(10);
-  const [movementType, setMovementType] = useState('RESTOCK');
-  const [reference, setReference] = useState('');
-
-  // Add / Edit Product Modal state
-  const [showProductModal, setShowProductModal] = useState(false);
-  const [editingProduct, setEditingProduct] = useState(null); // null => Create, object => Edit
-  const [suppliers, setSuppliers] = useState([]);
-  const [productForm, setProductForm] = useState({
-    name: '',
-    category: '',
-    supplier: '',
-    description: '',
-    price: '',
-    compare_at_price: '',
-    cost_price: '',
-    stock: 10,
-    low_stock_threshold: 5,
-    reorder_quantity: 20,
-    is_featured: false,
-    is_active: true,
-  });
-
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
-  const fetchData = async () => {
+  const canManageInventory = isSuperAdmin || isAdmin || isStoreManager || hasPermission('inventory.manage');
+
+  const fetchInventoryData = useCallback(async () => {
     try {
       setLoading(true);
-      const [invRes, prodRes, catRes, supRes] = await Promise.all([
+      const [invRes, prodRes, catRes, poRes] = await Promise.all([
         api.get('products/inventory/'),
         api.get('products/items/'),
         api.get('products/categories/'),
-        api.get('products/suppliers/')
+        api.get('products/purchase-requests/').catch(() => ({ data: [] })),
       ]);
-      setInventoryData(invRes.data);
+
+      setInventoryStats(invRes.data);
       const prodList = prodRes.data.results || prodRes.data || [];
       setProducts(prodList);
       setCategories(catRes.data.results || catRes.data || []);
-      setSuppliers(supRes.data.results || supRes.data || []);
+      const poList = poRes.data.results || poRes.data || [];
+      setPurchaseOrders(poList);
+      setStockMovements(invRes.data?.recent_movements || []);
     } catch (err) {
-      console.error("Inventory error", err);
+      console.error('Failed to load inventory data', err);
+      setMessage({ type: 'danger', text: 'Failed to retrieve warehouse stock records.' });
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const fetchForecasting = useCallback(async (days = forecastingDays) => {
     try {
@@ -76,12 +75,106 @@ const ManagerInventoryPage = () => {
       const res = await api.get(`recommendations/forecasting/?days=${days}`);
       setForecastingData(res.data);
     } catch (err) {
-      console.warn("Inventory forecasting fetch error", err);
+      console.warn('Inventory forecasting fetch error', err);
     } finally {
       setForecastingLoading(false);
     }
   }, [forecastingDays]);
 
+  useEffect(() => {
+    fetchInventoryData();
+  }, [fetchInventoryData]);
+
+  // Open Adjust Modal
+  const handleOpenAdjustModal = (product, defaultType = 'RESTOCK', defaultQty = 10) => {
+    setAdjustProduct(product);
+    setMovementType(defaultType);
+    setAdjustQuantity(defaultQty);
+    setAdjustmentReference(
+      defaultType === 'RESTOCK'
+        ? 'Warehouse restock replenishment'
+        : defaultType === 'DAMAGE'
+        ? 'Defective or damaged unit written off'
+        : 'Stock count audit correction'
+    );
+  };
+
+  // Open Thresholds Modal
+  const handleOpenThresholdModal = (product) => {
+    setThresholdProduct(product);
+    setMinStockLevel(product.low_stock_threshold || product.min_stock_level || 5);
+    setReorderQuantity(product.reorder_quantity || product.suggested_reorder_quantity || 20);
+  };
+
+  // Submit Stock Adjustment
+  const handleAdjustSubmit = async (e) => {
+    e.preventDefault();
+    if (!adjustProduct) return;
+
+    const qty = parseInt(adjustQuantity, 10);
+    if (!qty || qty <= 0) {
+      alert('Please enter a valid positive quantity.');
+      return;
+    }
+    if (!adjustmentReference.trim()) {
+      alert('Please specify an audit reason or reference for this adjustment.');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      // If movement is negative adjustment, make quantity negative
+      const isDeduction = movementType === 'DAMAGE' || movementType === 'SALE' || movementType === 'RETURN_TO_SUPPLIER';
+      const finalQuantity = isDeduction ? -Math.abs(qty) : Math.abs(qty);
+
+      const res = await api.post('products/inventory/', {
+        product_id: adjustProduct.id,
+        quantity: finalQuantity,
+        movement_type: movementType,
+        reference: adjustmentReference.trim(),
+      });
+
+      setMessage({ type: 'success', text: res.data.message || 'Stock quantity updated successfully.' });
+      setAdjustProduct(null);
+      setAdjustmentReference('');
+      await fetchInventoryData();
+    } catch (err) {
+      console.error('Failed to adjust stock', err);
+      const errMsg = err.response?.data?.error || err.response?.data?.detail || 'Failed to adjust stock quantity.';
+      alert(`Error: ${errMsg}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Submit Thresholds Update
+  const handleThresholdSubmit = async (e) => {
+    e.preventDefault();
+    if (!thresholdProduct) return;
+
+    try {
+      setSubmitting(true);
+      await api.patch(`products/items/${thresholdProduct.id}/reorder-settings/`, {
+        low_stock_threshold: parseInt(minStockLevel, 10),
+        reorder_quantity: parseInt(reorderQuantity, 10),
+      });
+
+      setMessage({
+        type: 'success',
+        text: `Reorder thresholds for "${thresholdProduct.name}" updated successfully.`,
+      });
+      setThresholdProduct(null);
+      await fetchInventoryData();
+    } catch (err) {
+      console.error('Failed to update thresholds', err);
+      const errMsg = err.response?.data?.error || 'Failed to save reorder thresholds.';
+      alert(`Error: ${errMsg}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Quick Restock from AI Forecasting
   const handleQuickRestockFromForecast = (forecastItem) => {
     const matched = products.find((p) => p.id === forecastItem.product_id) || {
       id: forecastItem.product_id,
@@ -89,12 +182,36 @@ const ManagerInventoryPage = () => {
       sku: forecastItem.sku,
       stock: forecastItem.current_stock,
     };
-    setAdjustProduct(matched);
-    setAdjustQuantity(forecastItem.suggested_reorder_qty || 10);
-    setMovementType('RESTOCK');
-    setReference(`AI Demand Run-Rate: Recommended restock (+${forecastItem.suggested_reorder_qty || 10})`);
+    handleOpenAdjustModal(matched, 'RESTOCK', forecastItem.suggested_reorder_qty || 10);
+    setAdjustmentReference(`AI Demand Forecast recommendation (+${forecastItem.suggested_reorder_qty || 10})`);
   };
 
+  // Filtered Products
+  const filteredProducts = useMemo(() => {
+    return products.filter((p) => {
+      const term = searchTerm.toLowerCase();
+      const matchSearch =
+        (p.name || '').toLowerCase().includes(term) ||
+        (p.sku || '').toLowerCase().includes(term) ||
+        (p.category_name || '').toLowerCase().includes(term);
+
+      if (!matchSearch) return false;
+
+      if (filterCategory && String(p.category) !== String(filterCategory)) {
+        return false;
+      }
+
+      const threshold = p.low_stock_threshold || 5;
+      if (filterStockStatus === 'OUT_OF_STOCK' && p.stock > 0) return false;
+      if (filterStockStatus === 'LOW_STOCK' && (p.stock === 0 || p.stock > threshold)) return false;
+      if (filterStockStatus === 'IN_STOCK' && p.stock <= threshold) return false;
+      if (filterStockStatus === 'RESERVED' && (!p.reserved_quantity || p.reserved_quantity === 0)) return false;
+
+      return true;
+    });
+  }, [products, searchTerm, filterCategory, filterStockStatus]);
+
+  // Filtered Forecasts
   const filteredForecasts = useMemo(() => {
     if (!forecastingData?.forecasts) return [];
     if (riskFilter === 'ALL') return forecastingData.forecasts;
@@ -106,826 +223,799 @@ const ManagerInventoryPage = () => {
     return forecastingData.forecasts.filter((f) => f.risk_level === riskFilter);
   }, [forecastingData, riskFilter]);
 
-  // Open Create Modal
-  const handleOpenCreateModal = () => {
-    setEditingProduct(null);
-    setProductForm({
-      name: '',
-      category: categories.length > 0 ? categories[0].id : '',
-      supplier: suppliers.length > 0 ? suppliers[0].id : '',
-      description: '',
-      price: '',
-      compare_at_price: '',
-      cost_price: '',
-      stock: 10,
-      low_stock_threshold: 5,
-      reorder_quantity: 20,
-      is_featured: false,
-      is_active: true,
+  // Aggregate Metrics
+  const totalTracked = products.length;
+  const totalPhysicalUnits = products.reduce((acc, p) => acc + (p.stock || 0), 0);
+  const totalReservedUnits = products.reduce((acc, p) => acc + (p.reserved_quantity || 0), 0);
+  const totalAvailableUnits = products.reduce((acc, p) => acc + (p.available_quantity !== undefined ? p.available_quantity : Math.max(0, p.stock - (p.reserved_quantity || 0))), 0);
+  const lowStockCount = products.filter((p) => p.stock > 0 && p.stock <= (p.low_stock_threshold || 5)).length;
+  const outOfStockCount = products.filter((p) => p.stock === 0).length;
+
+  const totalRetailValuation = products.reduce((acc, p) => acc + ((p.stock || 0) * parseFloat(p.price || 0)), 0);
+  const totalCostValuation = products.reduce((acc, p) => acc + ((p.stock || 0) * parseFloat(p.cost_price || 0)), 0);
+
+  // Incoming Purchase Requests (approved or in transit)
+  const incomingPOs = useMemo(() => {
+    return purchaseOrders.filter((po) => {
+      const s = (po.status || '').toUpperCase();
+      return (
+        s === 'APPROVED' ||
+        s === 'SENT_TO_SUPPLIER' ||
+        s === 'AWAITING_SUPPLIER' ||
+        s === 'ACCEPTED' ||
+        s === 'PARTIALLY_ACCEPTED' ||
+        s === 'PREPARING_ORDER' ||
+        s === 'READY_FOR_DELIVERY' ||
+        s === 'SHIPPED' ||
+        s === 'PARTIALLY_RECEIVED'
+      );
     });
-    setShowProductModal(true);
-  };
-
-  useEffect(() => {
-    fetchData();
-    fetchForecasting(forecastingDays);
-  }, []);
-
-  useEffect(() => {
-    if (searchParams.get('action') === 'add' && categories.length > 0) {
-      handleOpenCreateModal();
-    }
-  }, [searchParams, categories]);
-
-  // Handle Delete Product with Explicit Confirmation Dialog
-  const handleDeleteProduct = async (product) => {
-    const confirmed = window.confirm(
-      `Are you sure you want to permanently delete "${product.name}" (SKU: ${product.sku})?\n\nThis destructive action cannot be undone.`
-    );
-    if (!confirmed) return;
-
-    try {
-      setSubmitting(true);
-      await api.delete(`products/items/${product.id}/`);
-      setMessage({
-        type: 'success',
-        text: `Product "${product.name}" was permanently removed from the catalog.`,
-      });
-      fetchData();
-    } catch (err) {
-      console.error('Delete product error', err);
-      const errMsg =
-        err.response?.data?.error ||
-        err.response?.data?.detail ||
-        'Failed to delete product. It may be linked to existing order items.';
-      alert(errMsg);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Open Edit Modal
-  const handleOpenEditModal = (product) => {
-    setEditingProduct(product);
-    setProductForm({
-      name: product.name,
-      category: product.category,
-      supplier: product.supplier || '',
-      description: product.description || '',
-      price: product.price,
-      compare_at_price: product.compare_at_price || '',
-      cost_price: product.cost_price || 0,
-      stock: product.stock,
-      low_stock_threshold: product.low_stock_threshold || product.min_stock_level || 5,
-      reorder_quantity: product.reorder_quantity || 20,
-      is_featured: !!product.is_featured,
-      is_active: product.is_active !== undefined ? product.is_active : true,
-    });
-    setShowProductModal(true);
-  };
-
-  // Submit Product Form (Create or Edit)
-  const handleProductSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      setSubmitting(true);
-      const payload = {
-        name: productForm.name,
-        category: Number(productForm.category),
-        supplier: productForm.supplier ? Number(productForm.supplier) : null,
-        description: productForm.description,
-        price: parseFloat(productForm.price),
-        compare_at_price: productForm.compare_at_price ? parseFloat(productForm.compare_at_price) : null,
-        cost_price: productForm.cost_price ? parseFloat(productForm.cost_price) : 0,
-        stock: parseInt(productForm.stock, 10),
-        low_stock_threshold: parseInt(productForm.low_stock_threshold, 10),
-        reorder_quantity: parseInt(productForm.reorder_quantity, 10) || 20,
-        is_featured: productForm.is_featured,
-        is_active: productForm.is_active,
-      };
-
-      if (editingProduct) {
-        await api.patch(`products/items/${editingProduct.id}/`, payload);
-        setMessage({ type: 'success', text: `Product "${payload.name}" updated successfully.` });
-      } else {
-        await api.post('products/items/', payload);
-        setMessage({ type: 'success', text: `New product "${payload.name}" created and added to catalog.` });
-      }
-
-      setShowProductModal(false);
-      setEditingProduct(null);
-      fetchData();
-    } catch (err) {
-      console.error(err);
-      const errDetail = err.response?.data
-        ? Object.entries(err.response.data).map(([k, v]) => `${k}: ${v}`).join(' ')
-        : "Failed to save product.";
-      alert(errDetail);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Handle Stock Movement Adjustment
-  const handleAdjustSubmit = async (e) => {
-    e.preventDefault();
-    if (!adjustProduct) return;
-
-    try {
-      setSubmitting(true);
-      const res = await api.post('products/inventory/', {
-        product_id: adjustProduct.id,
-        quantity: movementType === 'RESTOCK' ? Math.abs(adjustQuantity) : -Math.abs(adjustQuantity),
-        movement_type: movementType,
-        reference: reference || 'Manual store inventory adjustment'
-      });
-      setMessage({ type: 'success', text: res.data.message });
-      setAdjustProduct(null);
-      setReference('');
-      fetchData();
-    } catch (err) {
-      alert(err.response?.data?.error || "Failed to adjust stock.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const filteredProducts = products.filter((p) => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          p.sku.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = filterCategory ? String(p.category) === String(filterCategory) : true;
-    return matchesSearch && matchesCategory;
-  });
+  }, [purchaseOrders]);
 
   if (loading) {
     return (
       <div className="text-center py-5">
         <div className="spinner-border text-primary" role="status"></div>
-        <p className="text-muted small mt-2">Loading stock levels and catalog items...</p>
+        <p className="text-muted small mt-2">Loading warehouse inventory &amp; stock levels...</p>
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="container-fluid px-0">
+      {/* Top Header */}
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
         <div>
-          <h2 className="fw-bolder mb-1 text-dark">Inventory & Catalog Management</h2>
-          <p className="text-muted small mb-0">Create products, update retail pricing, monitor stock thresholds, and track inventory movements</p>
+          <h4 className="fw-bolder mb-1 text-slate-900">
+            <i className="bi bi-boxes me-2 text-primary"></i>
+            Inventory &amp; Stock Quantity Management
+          </h4>
+          <p className="text-slate-500 text-xs mb-0">
+            Real-time warehouse stock ledger: track physical stock, customer order reservations, available units, incoming purchase orders, and audit history.
+          </p>
         </div>
-        <div className="d-flex gap-2">
-          <button
-            className="btn btn-primary-gradient rounded-pill px-4 fw-bold shadow-sm d-flex align-items-center gap-2"
-            onClick={handleOpenCreateModal}
+        <div className="d-flex align-items-center gap-2">
+          <Link
+            to={isAdmin ? '/admin/products' : '/manager/products'}
+            className="btn btn-sm btn-outline-secondary rounded-pill px-3 text-xs fw-semibold"
           >
-            <i className="bi bi-plus-circle-fill"></i> Add New Product
+            <i className="bi bi-laptop me-1 text-primary"></i> Go to Product Catalog
+          </Link>
+          {canManageInventory && (
+            <button
+              type="button"
+              className="btn btn-sm btn-primary rounded-pill px-3.5 py-1.5 text-xs fw-bold shadow-sm d-flex align-items-center gap-1.5"
+              onClick={() => handleOpenAdjustModal(products[0] || null, 'RESTOCK', 10)}
+            >
+              <i className="bi bi-plus-slash-minus"></i> Record Stock Adjustment
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Alert Messages */}
+      {message.text && (
+        <div className={`alert alert-${message.type} alert-dismissible fade show rounded-4 text-xs py-2.5 px-3 mb-4`} role="alert">
+          {message.text}
+          <button type="button" className="btn-close p-2.5" onClick={() => setMessage({ type: '', text: '' })}></button>
+        </div>
+      )}
+
+      {/* Inventory Summary Statistics Cards */}
+      <div className="row g-3 mb-4">
+        {/* Physical Stock Units */}
+        <div className="col-6 col-lg-3">
+          <div className="card ethio-card border-0 shadow-sm rounded-4 p-3 bg-white h-100">
+            <div className="d-flex align-items-center justify-content-between mb-2">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Physical Stock</span>
+              <div className="rounded-3 p-2 bg-blue-50 text-blue-600">
+                <i className="bi bi-box-seam fs-5"></i>
+              </div>
+            </div>
+            <div className="fs-3 fw-bolder text-slate-900 mb-1">{totalPhysicalUnits} <small className="fs-6 fw-normal text-slate-400">units</small></div>
+            <div className="text-[11px] text-slate-500">Across {totalTracked} catalog items</div>
+          </div>
+        </div>
+
+        {/* Available Units */}
+        <div className="col-6 col-lg-3">
+          <div className="card ethio-card border-0 shadow-sm rounded-4 p-3 bg-white h-100 border-top border-3 border-emerald-500">
+            <div className="d-flex align-items-center justify-content-between mb-2">
+              <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wider">Available for Sale</span>
+              <div className="rounded-3 p-2 bg-emerald-50 text-emerald-700">
+                <i className="bi bi-check2-circle fs-5"></i>
+              </div>
+            </div>
+            <div className="fs-3 fw-bolder text-emerald-600 mb-1">{totalAvailableUnits} <small className="fs-6 fw-normal text-slate-400">units</small></div>
+            <div className="text-[11px] text-slate-500">Unreserved &amp; ready to ship</div>
+          </div>
+        </div>
+
+        {/* Reserved Units */}
+        <div className="col-6 col-lg-3">
+          <div className="card ethio-card border-0 shadow-sm rounded-4 p-3 bg-white h-100 border-top border-3 border-cyan-500">
+            <div className="d-flex align-items-center justify-content-between mb-2">
+              <span className="text-xs font-semibold text-cyan-700 uppercase tracking-wider">Reserved in Orders</span>
+              <div className="rounded-3 p-2 bg-cyan-50 text-cyan-700">
+                <i className="bi bi-cart-check fs-5"></i>
+              </div>
+            </div>
+            <div className="fs-3 fw-bolder text-cyan-700 mb-1">{totalReservedUnits} <small className="fs-6 fw-normal text-slate-400">units</small></div>
+            <div className="text-[11px] text-slate-500">Held in pending / processing orders</div>
+          </div>
+        </div>
+
+        {/* Stock Alerts (Low & Out of Stock) */}
+        <div className="col-6 col-lg-3">
+          <div className="card ethio-card border-0 shadow-sm rounded-4 p-3 bg-white h-100 border-top border-3 border-rose-500">
+            <div className="d-flex align-items-center justify-content-between mb-2">
+              <span className="text-xs font-semibold text-rose-700 uppercase tracking-wider">Stock Alerts</span>
+              <div className="rounded-3 p-2 bg-rose-50 text-rose-700">
+                <i className="bi bi-exclamation-triangle fs-5"></i>
+              </div>
+            </div>
+            <div className="fs-3 fw-bolder text-rose-600 mb-1">{lowStockCount + outOfStockCount}</div>
+            <div className="text-[11px] text-slate-500">
+              <span className="text-danger fw-semibold">{outOfStockCount} out of stock</span> &bull; <span className="text-warning fw-semibold">{lowStockCount} low stock</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Valuation Summary Banner */}
+      <div className="card ethio-card border-0 shadow-sm rounded-4 p-3 mb-4 bg-white">
+        <div className="row g-3 align-items-center">
+          <div className="col-12 col-md-6 border-end-md border-slate-200">
+            <div className="d-flex align-items-center gap-3">
+              <div className="rounded-3 p-2.5 bg-indigo-50 text-indigo-600">
+                <i className="bi bi-cash-stack fs-4"></i>
+              </div>
+              <div>
+                <span className="text-xs text-slate-500 uppercase fw-semibold">Total Inventory Retail Value</span>
+                <div className="fs-5 fw-bold text-slate-900">{formatETB(totalRetailValuation)}</div>
+                <small className="text-slate-400 text-[11px]">Potential revenue at current retail selling prices</small>
+              </div>
+            </div>
+          </div>
+
+          <div className="col-12 col-md-6">
+            <div className="d-flex align-items-center gap-3">
+              <div className="rounded-3 p-2.5 bg-emerald-50 text-emerald-600">
+                <i className="bi bi-wallet2 fs-4"></i>
+              </div>
+              <div>
+                <span className="text-xs text-slate-500 uppercase fw-semibold">Total Warehouse Cost Asset Value</span>
+                <div className="fs-5 fw-bold text-emerald-700">{formatETB(totalCostValuation)}</div>
+                <small className="text-slate-400 text-[11px]">Asset value calculated from supplier cost prices</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* View Tabs */}
+      <div className="card ethio-card border-0 shadow-sm rounded-4 p-2 mb-3 bg-white">
+        <div className="d-flex flex-wrap gap-1">
+          <button
+            type="button"
+            className={`btn btn-sm rounded-pill px-3 py-1.5 text-xs font-medium transition-all ${
+              activeTab === 'stock_levels' ? 'bg-primary text-white shadow-sm' : 'btn-light text-slate-600'
+            }`}
+            onClick={() => setActiveTab('stock_levels')}
+          >
+            <i className="bi bi-boxes me-1.5"></i>
+            Stock Levels &amp; Availability
+            <span className="badge rounded-pill bg-white text-primary ms-1.5">{filteredProducts.length}</span>
+          </button>
+
+          <button
+            type="button"
+            className={`btn btn-sm rounded-pill px-3 py-1.5 text-xs font-medium transition-all ${
+              activeTab === 'incoming_pos' ? 'bg-primary text-white shadow-sm' : 'btn-light text-slate-600'
+            }`}
+            onClick={() => setActiveTab('incoming_pos')}
+          >
+            <i className="bi bi-truck me-1.5"></i>
+            Incoming Purchase Orders
+            {incomingPOs.length > 0 && (
+              <span className="badge rounded-pill bg-teal-500 text-white ms-1.5">{incomingPOs.length}</span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            className={`btn btn-sm rounded-pill px-3 py-1.5 text-xs font-medium transition-all ${
+              activeTab === 'movements' ? 'bg-primary text-white shadow-sm' : 'btn-light text-slate-600'
+            }`}
+            onClick={() => setActiveTab('movements')}
+          >
+            <i className="bi bi-clock-history me-1.5"></i>
+            Stock Movement Audit Logs
+            <span className="badge rounded-pill bg-slate-200 text-slate-700 ms-1.5">{stockMovements.length}</span>
+          </button>
+
+          <button
+            type="button"
+            className={`btn btn-sm rounded-pill px-3 py-1.5 text-xs font-medium transition-all ${
+              activeTab === 'forecasting' ? 'bg-primary text-white shadow-sm' : 'btn-light text-slate-600'
+            }`}
+            onClick={() => {
+              setActiveTab('forecasting');
+              if (!forecastingData) fetchForecasting(forecastingDays);
+            }}
+          >
+            <i className="bi bi-lightning-charge-fill me-1.5 text-warning"></i>
+            AI Demand Forecasting
           </button>
         </div>
       </div>
 
-      {message.text && (
-        <div className={`alert alert-${message.type} alert-dismissible fade show rounded-3 mb-4`} role="alert">
-          <i className="bi bi-check-circle-fill me-2"></i>
-          {message.text}
-          <button type="button" className="btn-close" onClick={() => setMessage({ type: '', text: '' })}></button>
-        </div>
-      )}
-
-      {/* Stock Summary Cards */}
-      <div className="row g-3 mb-4">
-        <div className="col-md-4">
-          <div className="card border-0 shadow-sm rounded-4 p-3 bg-white">
-            <span className="text-muted small fw-bold text-uppercase">Total Catalog Items</span>
-            <h3 className="fw-bolder text-dark mb-0">{inventoryData?.total_products || products.length}</h3>
-          </div>
-        </div>
-        <div className="col-md-4">
-          <div className="card border-0 shadow-sm rounded-4 p-3 bg-white border-start border-4 border-warning">
-            <span className="text-muted small fw-bold text-uppercase">Low Stock Alert (&le; 5 units)</span>
-            <h3 className="fw-bolder text-warning mb-0">{inventoryData?.low_stock_count || 0}</h3>
-          </div>
-        </div>
-        <div className="col-md-4">
-          <div className="card border-0 shadow-sm rounded-4 p-3 bg-white border-start border-4 border-danger">
-            <span className="text-muted small fw-bold text-uppercase">Out of Stock</span>
-            <h3 className="fw-bolder text-danger mb-0">{inventoryData?.out_of_stock_count || 0}</h3>
-          </div>
-        </div>
-      </div>
-
-      {/* Navigation Tabs */}
-      <div className="d-flex flex-wrap gap-2 mb-4">
-        <button
-          type="button"
-          className={`btn btn-sm rounded-pill px-3.5 py-2 fw-bold d-inline-flex align-items-center gap-2 shadow-sm transition ${
-            activeTab === 'catalog' ? 'btn-primary' : 'btn-white bg-white text-slate-700 border border-slate-200'
-          }`}
-          onClick={() => setActiveTab('catalog')}
-        >
-          <i className="bi bi-boxes"></i>
-          <span>Live Catalog & Stock</span>
-          <span className={`badge rounded-pill px-2 ${activeTab === 'catalog' ? 'bg-white text-primary' : 'bg-slate-100 text-slate-700'}`}>
-            {filteredProducts.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          className={`btn btn-sm rounded-pill px-3.5 py-2 fw-bold d-inline-flex align-items-center gap-2 shadow-sm transition ${
-            activeTab === 'forecasting' ? 'btn-primary' : 'btn-white bg-white text-slate-700 border border-slate-200'
-          }`}
-          onClick={() => {
-            setActiveTab('forecasting');
-            if (!forecastingData) fetchForecasting(forecastingDays);
-          }}
-        >
-          <i className="bi bi-lightning-charge-fill text-warning"></i>
-          <span>AI Demand Forecasting</span>
-          {forecastingData?.stockout_warnings_count > 0 && (
-            <span className="badge bg-danger text-white rounded-pill px-2">
-              {forecastingData.stockout_warnings_count} Alert{forecastingData.stockout_warnings_count === 1 ? '' : 's'}
-            </span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          className={`btn btn-sm rounded-pill px-3.5 py-2 fw-bold d-inline-flex align-items-center gap-2 shadow-sm transition ${
-            activeTab === 'movements' ? 'btn-primary' : 'btn-white bg-white text-slate-700 border border-slate-200'
-          }`}
-          onClick={() => setActiveTab('movements')}
-        >
-          <i className="bi bi-clock-history"></i>
-          <span>Stock Movement Logs</span>
-          <span className={`badge rounded-pill px-2 ${activeTab === 'movements' ? 'bg-white text-primary' : 'bg-slate-100 text-slate-700'}`}>
-            {inventoryData?.recent_movements?.length || 0}
-          </span>
-        </button>
-      </div>
-
-      {/* =========================================================================
-          TAB 1: LIVE CATALOG & STOCK
-          ========================================================================= */}
-      {activeTab === 'catalog' && (
-        <div className="card border-0 shadow-sm rounded-4 p-4 mb-5">
-          <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-            <h5 className="fw-bold mb-0">Live Catalog & Stock Levels ({filteredProducts.length})</h5>
-            <div className="d-flex gap-2">
-              <input
-                type="text"
-                className="form-control form-control-sm rounded-pill px-3"
-                placeholder="Search product or SKU..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                style={{ width: '220px' }}
-              />
-              <select
-                className="form-select form-select-sm rounded-pill px-3"
-                value={filterCategory}
-                onChange={(e) => setFilterCategory(e.target.value)}
-                style={{ width: '180px' }}
-              >
-                <option value="">All Categories</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="table-responsive">
-            <table className="table align-middle mb-0">
-              <thead className="table-light text-uppercase small text-muted" style={{ fontSize: '0.72rem' }}>
-                <tr>
-                  <th>SKU</th>
-                  <th>Product Name</th>
-                  <th>Category</th>
-                  <th>Cost Price</th>
-                  <th>Retail Price</th>
-                  <th>Stock Level</th>
-                  <th>Status</th>
-                  <th className="text-end">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="small">
-                {filteredProducts.map((p) => (
-                  <tr key={p.id}>
-                    <td><code>{p.sku}</code></td>
-                    <td>
-                      <div className="fw-semibold text-dark">{p.name}</div>
-                      {p.is_featured && <span className="badge bg-warning text-dark text-[10px]">Featured</span>}
-                      {!p.is_active && <span className="badge bg-secondary text-[10px] ms-1">Inactive</span>}
-                    </td>
-                    <td className="text-muted">{p.category_name}</td>
-                    <td>{formatETB(p.cost_price)}</td>
-                    <td className="fw-bold text-dark">
-                      {formatETB(p.price)}
-                      {p.has_promotion && p.current_price && Number(p.current_price) < Number(p.price) && (
-                        <div className="text-success text-[11px] fw-bold">
-                          Promo: {formatETB(p.current_price)} ({p.discount_label})
-                        </div>
-                      )}
-                    </td>
-                    <td>
-                      <span className="fw-bolder fs-6 text-dark">{p.stock}</span> units
-                    </td>
-                    <td>
-                      {p.stock === 0 ? (
-                        <span className="badge bg-danger">Out of Stock</span>
-                      ) : p.stock <= p.low_stock_threshold ? (
-                        <span className="badge bg-warning text-dark">Low Stock ({p.stock})</span>
-                      ) : (
-                        <span className="badge bg-success">In Stock</span>
-                      )}
-                    </td>
-                    <td className="text-end">
-                      <div className="d-flex justify-content-end gap-1">
-                        <button
-                          className="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1"
-                          onClick={() => handleOpenEditModal(p)}
-                          title="Edit Product Details & Pricing"
-                        >
-                          <i className="bi bi-pencil me-1"></i> Edit
-                        </button>
-                        <button
-                          className="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-1"
-                          onClick={() => setAdjustProduct(p)}
-                          title="Adjust Stock Level"
-                        >
-                          <i className="bi bi-box-arrow-in-down me-1"></i> Adjust
-                        </button>
-                        <button
-                          className="btn btn-sm btn-outline-danger rounded-pill px-2.5 py-1"
-                          onClick={() => handleDeleteProduct(p)}
-                          title="Permanently Delete Product"
-                        >
-                          <i className="bi bi-trash me-1"></i> Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* =========================================================================
-          TAB 2: AI DEMAND FORECASTING & RESTOCK INTELLIGENCE
-          ========================================================================= */}
-      {activeTab === 'forecasting' && (
-        <div className="card border-0 shadow-sm rounded-4 p-4 mb-5 bg-white">
-          {/* Header & Controls */}
-          <div className="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
-            <div>
-              <div className="d-flex align-items-center gap-2">
-                <span className="p-1.5 rounded-3 bg-amber-500 bg-opacity-10 text-amber-600">
-                  <i className="bi bi-cpu-fill fs-5"></i>
-                </span>
-                <h5 className="fw-bold mb-0 text-slate-900">AI Stock Intelligence & Demand Forecasting</h5>
+      {/* TAB 1: STOCK LEVELS & AVAILABILITY */}
+      {activeTab === 'stock_levels' && (
+        <>
+          {/* Filters Bar */}
+          <div className="card ethio-card border-0 shadow-sm rounded-4 p-3 mb-4 bg-white">
+            <div className="row g-2 align-items-center">
+              <div className="col-12 col-md-5">
+                <div className="input-group">
+                  <span className="input-group-text bg-slate-50 border-slate-200 text-slate-400">
+                    <i className="bi bi-search"></i>
+                  </span>
+                  <input
+                    type="text"
+                    className="form-control text-xs"
+                    placeholder="Search stock by product name or SKU..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
               </div>
-              <p className="text-muted small mb-0 mt-1">
-                Grounded moving sales velocity algorithm analyzes verified order histories to predict 30-day demand and prevent warehouse stockouts.
-              </p>
-            </div>
 
-            <div className="d-flex flex-wrap align-items-center gap-2">
-              <div className="d-flex align-items-center gap-1.5 bg-slate-50 border rounded-pill px-3 py-1 text-xs">
-                <span className="text-slate-500">History:</span>
+              <div className="col-6 col-md-3">
                 <select
-                  className="form-select form-select-sm border-0 bg-transparent text-xs fw-bold p-0 pe-4 shadow-none"
-                  value={forecastingDays}
-                  onChange={(e) => {
-                    const days = Number(e.target.value);
-                    setForecastingDays(days);
-                    fetchForecasting(days);
-                  }}
-                  style={{ width: 'auto' }}
+                  className="form-select text-xs"
+                  value={filterCategory}
+                  onChange={(e) => setFilterCategory(e.target.value)}
                 >
-                  <option value={30}>Past 30 Days</option>
-                  <option value={60}>Past 60 Days</option>
-                  <option value={90}>Past 90 Days</option>
+                  <option value="">All Categories</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
                 </select>
               </div>
 
-              <button
-                type="button"
-                className="btn btn-sm btn-outline-secondary rounded-pill px-3 d-inline-flex align-items-center gap-1"
-                onClick={() => fetchForecasting(forecastingDays)}
-                disabled={forecastingLoading}
-              >
-                <i className={`bi bi-arrow-repeat ${forecastingLoading ? 'spin' : ''}`}></i>
-                <span>Refresh AI Model</span>
-              </button>
-            </div>
-          </div>
+              <div className="col-6 col-md-3">
+                <select
+                  className="form-select text-xs"
+                  value={filterStockStatus}
+                  onChange={(e) => setFilterStockStatus(e.target.value)}
+                >
+                  <option value="ALL">All Stock Statuses</option>
+                  <option value="IN_STOCK">Normal In-Stock (&gt; threshold)</option>
+                  <option value="LOW_STOCK">Low Stock Alert (&le; threshold)</option>
+                  <option value="OUT_OF_STOCK">Out of Stock (0 units)</option>
+                  <option value="RESERVED">Has Reserved Orders</option>
+                </select>
+              </div>
 
-          {/* Alert if critical stockouts exist */}
-          {forecastingData?.stockout_warnings_count > 0 && (
-            <div className="alert alert-warning border-warning border-opacity-25 rounded-3 d-flex align-items-center gap-3 mb-4">
-              <i className="bi bi-exclamation-triangle-fill text-warning fs-4 shrink-0"></i>
-              <div className="text-xs">
-                <strong className="d-block text-slate-900 font-semibold mb-0.5">
-                  Restocking Action Required ({forecastingData.stockout_warnings_count} hardware items at high risk)
-                </strong>
-                Estimated days of stock are below 14 days or products are out of stock. Suggested reorder units have been computed automatically based on current sales velocity.
-              </div>
-            </div>
-          )}
-
-          {/* Forecasting KPI Summary Cards */}
-          <div className="row g-3 mb-4">
-            <div className="col-6 col-md-3">
-              <div className="p-3 rounded-3 bg-slate-50 border border-slate-200">
-                <span className="text-slate-500 text-[11px] text-uppercase fw-bold">Monitored Items</span>
-                <h4 className="fw-bolder text-slate-900 mb-0 mt-1">
-                  {forecastingData?.total_products_monitored || 0}
-                </h4>
-              </div>
-            </div>
-            <div className="col-6 col-md-3">
-              <div className="p-3 rounded-3 bg-red-50 border border-red-200">
-                <span className="text-red-700 text-[11px] text-uppercase fw-bold">Stockout Alerts</span>
-                <h4 className="fw-bolder text-red-600 mb-0 mt-1">
-                  {forecastingData?.stockout_warnings_count || 0}
-                </h4>
-              </div>
-            </div>
-            <div className="col-6 col-md-3">
-              <div className="p-3 rounded-3 bg-slate-50 border border-slate-200">
-                <span className="text-slate-500 text-[11px] text-uppercase fw-bold">Forecast Horizon</span>
-                <h4 className="fw-bolder text-primary mb-0 mt-1">
-                  30 Days
-                </h4>
-              </div>
-            </div>
-            <div className="col-6 col-md-3">
-              <div className="p-3 rounded-3 bg-slate-50 border border-slate-200">
-                <span className="text-slate-500 text-[11px] text-uppercase fw-bold">Analysis Window</span>
-                <h4 className="fw-bolder text-slate-900 mb-0 mt-1">
-                  {forecastingData?.analysis_window_days || forecastingDays} Days
-                </h4>
+              <div className="col-auto ms-auto text-xs text-slate-500">
+                Filtered: <strong className="text-slate-900">{filteredProducts.length}</strong> items
               </div>
             </div>
           </div>
 
-          {/* Risk Level Filter Chips */}
-          <div className="d-flex flex-wrap gap-1.5 mb-3 align-items-center">
-            <span className="text-xs text-slate-500 me-1">Risk Filter:</span>
-            {[
-              { id: 'ALL', label: 'All Items' },
-              { id: 'WARNINGS', label: 'Urgent Alerts' },
-              { id: 'CRITICAL_OUT_OF_STOCK', label: 'Out of Stock' },
-              { id: 'HIGH_STOCKOUT_RISK', label: 'High Risk (<14d)' },
-              { id: 'MODERATE_REORDER_SOON', label: 'Reorder Soon' },
-              { id: 'ADEQUATE_STOCK', label: 'Stock Healthy' },
-            ].map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                className={`btn btn-xs rounded-pill px-2.5 py-1 ${
-                  riskFilter === f.id ? 'btn-primary' : 'btn-outline-secondary'
-                }`}
-                onClick={() => setRiskFilter(f.id)}
-              >
-                {f.label}
-              </button>
-            ))}
+          {/* Stock Table */}
+          <div className="card ethio-card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
+            {filteredProducts.length === 0 ? (
+              <div className="text-center py-5 text-muted">
+                <i className="bi bi-box-seam fs-1 text-slate-300 mb-2 d-block"></i>
+                <h6 className="fw-bold text-slate-700">No Inventory Records Found</h6>
+                <p className="text-slate-500 text-xs mb-0">No items match the active filters.</p>
+              </div>
+            ) : (
+              <div className="table-responsive">
+                <table className="table table-hover align-middle mb-0 text-xs">
+                  <thead className="table-light text-slate-500 uppercase font-semibold text-[11px] border-bottom">
+                    <tr>
+                      <th className="ps-4">Product Name</th>
+                      <th>SKU</th>
+                      <th>Category</th>
+                      <th className="text-center">Physical Stock</th>
+                      <th className="text-center">Reserved</th>
+                      <th className="text-center">Available</th>
+                      <th className="text-center">Incoming (POs)</th>
+                      <th className="text-center">Min Threshold</th>
+                      <th>Stock Health</th>
+                      <th className="text-end pe-4">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredProducts.map((p) => {
+                      const threshold = p.low_stock_threshold || 5;
+                      const physical = p.stock || 0;
+                      const reserved = p.reserved_quantity || 0;
+                      const available = p.available_quantity !== undefined ? p.available_quantity : Math.max(0, physical - reserved);
+                      const incoming = p.incoming_quantity || 0;
+
+                      return (
+                        <tr key={p.id}>
+                          <td className="ps-4">
+                            <div className="fw-bold text-slate-900 text-truncate" style={{ maxWidth: '240px' }} title={p.name}>
+                              {p.name}
+                            </div>
+                            <small className="text-slate-400 text-[11px]">
+                              Retail: {formatETB(p.price)} &bull; Cost: {formatETB(p.cost_price || 0)}
+                            </small>
+                          </td>
+
+                          <td className="font-monospace text-slate-600">
+                            {p.sku || '—'}
+                          </td>
+
+                          <td>
+                            <span className="badge bg-slate-100 text-slate-700 border text-[10px]">
+                              {p.category_name || 'Unassigned'}
+                            </span>
+                          </td>
+
+                          <td className="text-center">
+                            <span className="fs-6 fw-bold text-slate-900">{physical}</span>
+                          </td>
+
+                          <td className="text-center">
+                            {reserved > 0 ? (
+                              <span className="badge bg-cyan-50 text-cyan-700 border border-cyan-200">
+                                <i className="bi bi-lock me-1"></i>{reserved}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">0</span>
+                            )}
+                          </td>
+
+                          <td className="text-center">
+                            <span className={`fw-bolder ${available === 0 ? 'text-danger' : available <= threshold ? 'text-warning' : 'text-emerald-600'}`}>
+                              {available}
+                            </span>
+                          </td>
+
+                          <td className="text-center">
+                            {incoming > 0 ? (
+                              <span className="badge bg-teal-50 text-teal-700 border border-teal-200">
+                                <i className="bi bi-truck me-1"></i>+{incoming}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
+
+                          <td className="text-center font-monospace text-slate-600">
+                            &le; {threshold}
+                          </td>
+
+                          <td>
+                            {physical === 0 ? (
+                              <span className="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 px-2 py-1">
+                                <i className="bi bi-x-circle me-1"></i>Out of Stock
+                              </span>
+                            ) : physical <= threshold ? (
+                              <span className="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 px-2 py-1">
+                                <i className="bi bi-exclamation-triangle me-1"></i>Low Stock
+                              </span>
+                            ) : (
+                              <span className="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1">
+                                <i className="bi bi-check-circle me-1"></i>Healthy
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="text-end pe-4">
+                            <div className="btn-group btn-group-sm">
+                              {canManageInventory && (
+                                <button
+                                  type="button"
+                                  className="btn btn-outline-primary btn-sm p-1 px-2"
+                                  title="Record Stock Adjustment"
+                                  onClick={() => handleOpenAdjustModal(p)}
+                                >
+                                  <i className="bi bi-plus-slash-minus me-1"></i>
+                                  <span>Adjust</span>
+                                </button>
+                              )}
+                              {canManageInventory && (
+                                <button
+                                  type="button"
+                                  className="btn btn-outline-secondary btn-sm p-1 px-2"
+                                  title="Configure Min & Reorder Thresholds"
+                                  onClick={() => handleOpenThresholdModal(p)}
+                                >
+                                  <i className="bi bi-sliders"></i>
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* TAB 2: INCOMING PURCHASE ORDERS & QUICK RECEIVING */}
+      {activeTab === 'incoming_pos' && (
+        <div className="card ethio-card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
+          <div className="card-header bg-white py-3 px-4 border-bottom border-slate-100 d-flex align-items-center justify-content-between">
+            <div>
+              <h6 className="fw-bold text-slate-900 mb-0">Incoming Stock from Approved Purchase Orders</h6>
+              <small className="text-slate-500 text-xs">
+                POs approved by Admin and accepted/dispatched by suppliers waiting for physical dock check-in.
+              </small>
+            </div>
+            <Link
+              to={isAdmin ? '/admin/procurement/approvals' : '/manager/procurement/receive'}
+              className="btn btn-sm btn-outline-primary rounded-pill px-3 text-xs fw-semibold"
+            >
+              <i className="bi bi-box-arrow-up-right me-1"></i>
+              {isAdmin ? 'View All PO Approvals' : 'Go to Physical Receiving Dock'}
+            </Link>
+          </div>
+
+          <div className="card-body p-0">
+            {incomingPOs.length === 0 ? (
+              <div className="text-center py-5 text-muted text-xs">
+                <i className="bi bi-truck fs-1 text-slate-300 d-block mb-2"></i>
+                <h6 className="fw-bold text-slate-700">No Incoming Shipments Pending</h6>
+                <p className="text-slate-500 mb-0">All approved purchase orders have been received or completed.</p>
+              </div>
+            ) : (
+              <div className="table-responsive">
+                <table className="table table-hover align-middle mb-0 text-xs">
+                  <thead className="table-light text-slate-500 uppercase font-semibold text-[11px]">
+                    <tr>
+                      <th className="ps-4">PO Reference</th>
+                      <th>Supplier</th>
+                      <th>Expected Date</th>
+                      <th>Delivery Location</th>
+                      <th>Carrier &amp; Tracking</th>
+                      <th>Status</th>
+                      <th className="text-end pe-4">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {incomingPOs.map((po) => (
+                      <tr key={po.id}>
+                        <td className="ps-4 font-monospace fw-bold text-slate-900">
+                          {po.request_number || `PO-${po.id}`}
+                        </td>
+                        <td className="fw-semibold text-slate-800">{po.supplier_name || '—'}</td>
+                        <td className="text-slate-600">
+                          {po.expected_delivery_date ? new Date(po.expected_delivery_date).toLocaleDateString() : 'Immediate'}
+                        </td>
+                        <td className="text-slate-600 text-truncate" style={{ maxWidth: '180px' }}>
+                          {po.delivery_location || 'Main EthioTech Depot'}
+                        </td>
+                        <td>
+                          {po.supplier_shipping_carrier ? (
+                            <span className="text-slate-800 font-monospace">
+                              {po.supplier_shipping_carrier} ({po.supplier_tracking_number || 'No tracking #'})
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">Carrier unassigned</span>
+                          )}
+                        </td>
+                        <td>
+                          <span className="badge bg-teal-50 text-teal-700 border border-teal-200">
+                            {po.status}
+                          </span>
+                        </td>
+                        <td className="text-end pe-4">
+                          <Link
+                            to={isAdmin ? '/admin/procurement/approvals' : '/manager/procurement/receive'}
+                            className="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-1 text-xs"
+                          >
+                            Receive Dock &rarr;
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: STOCK MOVEMENT AUDIT LOGS */}
+      {activeTab === 'movements' && (
+        <div className="card ethio-card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
+          <div className="card-header bg-white py-3 px-4 border-bottom border-slate-100 d-flex align-items-center justify-content-between">
+            <div>
+              <h6 className="fw-bold text-slate-900 mb-0">Stock Movement Audit History</h6>
+              <small className="text-slate-500 text-xs">
+                Immutable ledger recording all additions, customer sales deductions, PO receptions, and manual adjustments.
+              </small>
+            </div>
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-secondary rounded-pill px-3 text-xs"
+              onClick={fetchInventoryData}
+            >
+              <i className="bi bi-arrow-clockwise me-1"></i> Refresh Logs
+            </button>
+          </div>
+
+          <div className="card-body p-0">
+            {stockMovements.length === 0 ? (
+              <div className="text-center py-5 text-muted text-xs">
+                <i className="bi bi-clock-history fs-1 text-slate-300 d-block mb-2"></i>
+                No stock movement logs recorded yet.
+              </div>
+            ) : (
+              <div className="table-responsive">
+                <table className="table table-hover align-middle mb-0 text-xs">
+                  <thead className="table-light text-slate-500 uppercase font-semibold text-[11px]">
+                    <tr>
+                      <th className="ps-4">Timestamp</th>
+                      <th>Product</th>
+                      <th>SKU</th>
+                      <th>Movement Type</th>
+                      <th className="text-center">Quantity Delta</th>
+                      <th>Reference Reason</th>
+                      <th className="text-end pe-4">Authorized User</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stockMovements.map((m) => (
+                      <tr key={m.id}>
+                        <td className="ps-4 text-slate-600">
+                          {m.created_at ? new Date(m.created_at).toLocaleString() : '—'}
+                        </td>
+                        <td className="fw-bold text-slate-900">{m.product_name}</td>
+                        <td className="font-monospace text-slate-500">{m.product_sku || '—'}</td>
+                        <td>
+                          <span className={`badge rounded-pill ${
+                            m.movement_type === 'RESTOCK' || m.movement_type === 'PURCHASE_ORDER'
+                              ? 'bg-success bg-opacity-10 text-success border border-success'
+                              : m.movement_type === 'DAMAGE'
+                              ? 'bg-danger bg-opacity-10 text-danger border border-danger'
+                              : 'bg-primary bg-opacity-10 text-primary border border-primary'
+                          }`}>
+                            {m.movement_type_display || m.movement_type}
+                          </span>
+                        </td>
+                        <td className="text-center font-monospace fw-bold">
+                          <span className={m.quantity > 0 ? 'text-success' : 'text-danger'}>
+                            {m.quantity > 0 ? `+${m.quantity}` : m.quantity}
+                          </span>
+                        </td>
+                        <td className="text-slate-600 text-truncate" style={{ maxWidth: '240px' }} title={m.reference}>
+                          {m.reference || 'Stock adjustment'}
+                        </td>
+                        <td className="text-end pe-4 font-semibold text-slate-700">
+                          {m.created_by_username || 'System Admin'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: AI DEMAND FORECASTING */}
+      {activeTab === 'forecasting' && (
+        <div>
+          {/* Controls Bar */}
+          <div className="card ethio-card border-0 shadow-sm rounded-4 p-3 mb-4 bg-white">
+            <div className="row g-2 align-items-center">
+              <div className="col-12 col-md-4">
+                <div className="d-flex align-items-center gap-2">
+                  <span className="text-xs fw-semibold text-slate-700">Forecast Horizon:</span>
+                  <div className="btn-group btn-group-sm">
+                    {[30, 60, 90].map((days) => (
+                      <button
+                        key={days}
+                        type="button"
+                        className={`btn btn-xs ${forecastingDays === days ? 'btn-primary' : 'btn-outline-secondary'}`}
+                        onClick={() => {
+                          setForecastingDays(days);
+                          fetchForecasting(days);
+                        }}
+                      >
+                        {days} Days
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="col-12 col-md-4">
+                <select
+                  className="form-select text-xs"
+                  value={riskFilter}
+                  onChange={(e) => setRiskFilter(e.target.value)}
+                >
+                  <option value="ALL">All Risk Levels</option>
+                  <option value="WARNINGS">Warnings Only (Critical &amp; High Risk)</option>
+                  <option value="CRITICAL_OUT_OF_STOCK">Critical Out of Stock</option>
+                  <option value="HIGH_STOCKOUT_RISK">High Stockout Risk</option>
+                  <option value="HEALTHY">Healthy Run-Rate</option>
+                </select>
+              </div>
+
+              <div className="col-auto ms-auto text-xs text-slate-500">
+                {forecastingLoading ? (
+                  <span>Computing demand projections...</span>
+                ) : (
+                  <span>Projected items: <strong className="text-slate-900">{filteredForecasts.length}</strong></span>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Forecasting Table */}
-          {forecastingLoading ? (
-            <div className="text-center py-5">
-              <div className="spinner-border text-primary spinner-border-sm" role="status"></div>
-              <p className="text-muted small mt-2">Computing 30-day demand forecast...</p>
-            </div>
-          ) : filteredForecasts.length === 0 ? (
-            <div className="text-center py-5 text-slate-400 text-xs">
-              <i className="bi bi-check-circle-fill text-success fs-3 d-block mb-1"></i>
-              No products match the selected risk filter.
-            </div>
-          ) : (
-            <div className="table-responsive">
-              <table className="table align-middle text-xs mb-0">
-                <thead className="table-light text-slate-500 text-uppercase" style={{ fontSize: '0.7rem' }}>
-                  <tr>
-                    <th>Product & SKU</th>
-                    <th>Category</th>
-                    <th className="text-center">Current Stock</th>
-                    <th className="text-center">Sales Velocity</th>
-                    <th className="text-center">30-Day Demand</th>
-                    <th className="text-center">Days of Stock</th>
-                    <th className="text-center">Urgency</th>
-                    <th className="text-center">Suggested Reorder</th>
-                    <th className="text-end">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredForecasts.map((f) => (
-                    <tr key={f.product_id}>
-                      <td>
-                        <div className="fw-bold text-slate-900">{f.name}</div>
-                        <code className="text-[10px] text-slate-400">{f.sku}</code>
-                      </td>
-                      <td className="text-slate-500">{f.category}</td>
-                      <td className="text-center">
-                        <span className={`fw-bold ${f.current_stock === 0 ? 'text-danger' : f.current_stock <= f.low_stock_threshold ? 'text-warning font-semibold' : 'text-slate-900'}`}>
-                          {f.current_stock}
-                        </span>
-                        <span className="text-[10px] text-slate-400 d-block">Threshold: {f.low_stock_threshold}</span>
-                      </td>
-                      <td className="text-center">
-                        <span className="fw-semibold text-slate-700">{f.daily_sales_velocity}</span>
-                        <span className="text-[10px] text-slate-400 d-block">units/day</span>
-                      </td>
-                      <td className="text-center">
-                        <span className="fw-bold text-primary">{f.predicted_30d_demand}</span>
-                        <span className="text-[10px] text-slate-400 d-block">predicted</span>
-                      </td>
-                      <td className="text-center">
-                        {f.estimated_days_of_stock >= 999 ? (
-                          <span className="text-slate-400">&infin;</span>
-                        ) : (
-                          <span className={`fw-bold ${f.estimated_days_of_stock < 14 ? 'text-danger' : f.estimated_days_of_stock < 30 ? 'text-warning' : 'text-success'}`}>
-                            ~{Math.round(f.estimated_days_of_stock)} days
-                          </span>
-                        )}
-                      </td>
-                      <td className="text-center">
-                        {f.risk_level === 'CRITICAL_OUT_OF_STOCK' && (
-                          <span className="badge bg-danger text-white text-[10px] px-2 py-0.5">
-                            Out of Stock
-                          </span>
-                        )}
-                        {f.risk_level === 'HIGH_STOCKOUT_RISK' && (
-                          <span className="badge bg-danger bg-opacity-10 text-danger text-[10px] px-2 py-0.5">
-                            High Risk
-                          </span>
-                        )}
-                        {f.risk_level === 'MODERATE_REORDER_SOON' && (
-                          <span className="badge bg-warning bg-opacity-15 text-warning text-[10px] px-2 py-0.5">
-                            Reorder Soon
-                          </span>
-                        )}
-                        {f.risk_level === 'ADEQUATE_STOCK' && (
-                          <span className="badge bg-success bg-opacity-10 text-success text-[10px] px-2 py-0.5">
-                            Healthy
-                          </span>
-                        )}
-                      </td>
-                      <td className="text-center">
-                        {f.suggested_reorder_qty > 0 ? (
-                          <span className="badge bg-primary bg-opacity-10 text-primary fw-bold text-[11px] px-2 py-0.5">
-                            +{f.suggested_reorder_qty} units
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">&mdash;</span>
-                        )}
-                      </td>
-                      <td className="text-end">
-                        <button
-                          type="button"
-                          className="btn btn-xs btn-primary-gradient rounded-pill px-2.5 py-1 fw-bold shadow-sm"
-                          onClick={() => handleQuickRestockFromForecast(f)}
-                          title="Restock this item"
-                        >
-                          <i className="bi bi-box-arrow-in-down me-1"></i> Restock
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* =========================================================================
-          TAB 3: STOCK MOVEMENTS AUDIT TRAIL
-          ========================================================================= */}
-      {activeTab === 'movements' && (
-        <div className="card border-0 shadow-sm rounded-4 p-4">
-          <h5 className="fw-bold mb-3">Recent Stock Movements Audit Log</h5>
-          {inventoryData?.recent_movements?.length === 0 ? (
-            <div className="text-center py-4 text-muted small">No recent movements recorded.</div>
-          ) : (
-            <div className="table-responsive">
-              <table className="table align-middle mb-0">
-                <thead className="table-light text-uppercase small text-muted" style={{ fontSize: '0.72rem' }}>
-                  <tr>
-                    <th>Timestamp</th>
-                    <th>Product</th>
-                    <th>Type</th>
-                    <th>Quantity Change</th>
-                    <th>Reference / Note</th>
-                    <th>Recorded By</th>
-                  </tr>
-                </thead>
-                <tbody className="small">
-                  {inventoryData?.recent_movements?.map((m) => (
-                    <tr key={m.id}>
-                      <td className="text-muted">{new Date(m.created_at).toLocaleString()}</td>
-                      <td className="fw-bold text-dark">{m.product_name}</td>
-                      <td>
-                        <span className={`badge ${
-                          m.movement_type === 'RESTOCK' ? 'bg-success' : m.movement_type === 'SALE' ? 'bg-primary' : 'bg-warning text-dark'
-                        }`}>
-                          {m.movement_type}
-                        </span>
-                      </td>
-                      <td className={`fw-bold ${m.quantity > 0 ? 'text-success' : 'text-danger'}`}>
-                        {m.quantity > 0 ? `+${m.quantity}` : m.quantity}
-                      </td>
-                      <td className="text-muted">{m.reference || 'N/A'}</td>
-                      <td>{m.created_by_username || 'System'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Modal: Create / Edit Product */}
-      {showProductModal && (
-        <div className="modal fade show d-block" tabIndex="-1" style={{ background: 'rgba(0, 0, 0, 0.65)' }}>
-          <div className="modal-dialog modal-dialog-centered modal-lg">
-            <div className="modal-content rounded-4 border-0 shadow-2xl p-3">
-              <div className="modal-header border-0 pb-0">
-                <h5 className="modal-title fw-bold">
-                  {editingProduct ? `Edit Product: ${editingProduct.name}` : 'Create New Catalog Product'}
-                </h5>
-                <button type="button" className="btn-close" onClick={() => setShowProductModal(false)}></button>
+          <div className="card ethio-card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
+            {forecastingLoading ? (
+              <div className="text-center py-5">
+                <div className="spinner-border text-primary" role="status"></div>
+                <p className="text-muted small mt-2">Computing sales velocities and stockout probability...</p>
               </div>
-              <form onSubmit={handleProductSubmit}>
-                <div className="modal-body">
-                  <div className="row g-3">
-                    <div className="col-md-5">
-                      <label className="form-label small fw-bold">Product Name *</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="e.g. Samsung Galaxy S24 Ultra 256GB"
-                        value={productForm.name}
-                        onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="col-md-3">
-                      <label className="form-label small fw-bold">Category *</label>
-                      <select
-                        className="form-select"
-                        value={productForm.category}
-                        onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
-                        required
-                      >
-                        <option value="">Select Category</option>
-                        {categories.map((c) => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="col-md-4">
-                      <label className="form-label small fw-bold">Hardware Supplier</label>
-                      <select
-                        className="form-select"
-                        value={productForm.supplier}
-                        onChange={(e) => setProductForm({ ...productForm, supplier: e.target.value })}
-                      >
-                        <option value="">-- No Supplier Assigned --</option>
-                        {suppliers.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name} ({s.email || 'No email'})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+            ) : filteredForecasts.length === 0 ? (
+              <div className="text-center py-5 text-muted text-xs">
+                <i className="bi bi-shield-check fs-1 text-success d-block mb-2"></i>
+                <h6 className="fw-bold text-slate-700">No Stockout Risks Detected</h6>
+                <p className="text-slate-500 mb-0">All items have sufficient run-rate for the selected timeframe.</p>
+              </div>
+            ) : (
+              <div className="table-responsive">
+                <table className="table table-hover align-middle mb-0 text-xs">
+                  <thead className="table-light text-slate-500 uppercase font-semibold text-[11px]">
+                    <tr>
+                      <th className="ps-4">Product Name</th>
+                      <th>SKU</th>
+                      <th className="text-center">Current Stock</th>
+                      <th className="text-center">Days Remaining</th>
+                      <th className="text-center">Suggested Reorder</th>
+                      <th>Risk Level</th>
+                      <th className="text-end pe-4">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredForecasts.map((f) => (
+                      <tr key={f.product_id}>
+                        <td className="ps-4 fw-bold text-slate-900">{f.name}</td>
+                        <td className="font-monospace text-slate-500">{f.sku}</td>
+                        <td className="text-center fw-semibold text-slate-800">{f.current_stock}</td>
+                        <td className="text-center">
+                          <span className={`fw-bold ${f.days_until_stockout <= 7 ? 'text-danger' : f.days_until_stockout <= 20 ? 'text-warning' : 'text-slate-700'}`}>
+                            {f.days_until_stockout === 0 ? 'Depleted' : `${f.days_until_stockout} days`}
+                          </span>
+                        </td>
+                        <td className="text-center font-monospace fw-bold text-teal-700">
+                          +{f.suggested_reorder_qty}
+                        </td>
+                        <td>
+                          <span className={`badge rounded-pill ${
+                            f.risk_level === 'CRITICAL_OUT_OF_STOCK'
+                              ? 'bg-danger text-white'
+                              : f.risk_level === 'HIGH_STOCKOUT_RISK'
+                              ? 'bg-warning text-dark'
+                              : 'bg-success bg-opacity-10 text-success'
+                          }`}>
+                            {f.risk_level_display || f.risk_level}
+                          </span>
+                        </td>
+                        <td className="text-end pe-4">
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-1 text-xs"
+                            onClick={() => handleQuickRestockFromForecast(f)}
+                          >
+                            <i className="bi bi-lightning-charge me-1"></i> Quick Restock
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
-                    <div className="col-12">
-                      <label className="form-label small fw-bold">Product Description *</label>
-                      <textarea
-                        className="form-control"
-                        rows="3"
-                        placeholder="Describe technical specs, warranty, features..."
-                        value={productForm.description}
-                        onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
-                        required
-                      ></textarea>
-                    </div>
+      {/* MODAL 1: Stock Adjustment Modal */}
+      {adjustProduct && (
+        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}>
+          <div className="modal-dialog modal-md modal-dialog-centered">
+            <div className="modal-content border-0 shadow-2xl rounded-4 overflow-hidden">
+              <div className="modal-header bg-slate-900 text-white py-3 px-4">
+                <div className="d-flex align-items-center gap-2">
+                  <div className="rounded-3 p-1.5 bg-primary text-white">
+                    <i className="bi bi-plus-slash-minus fs-5"></i>
+                  </div>
+                  <div>
+                    <h5 className="modal-title fw-bold text-white mb-0">Record Stock Adjustment</h5>
+                    <small className="text-slate-400 text-xs">Product: {adjustProduct.name}</small>
+                  </div>
+                </div>
+                <button type="button" className="btn-close btn-close-white" onClick={() => setAdjustProduct(null)}></button>
+              </div>
 
-                    <div className="col-md-4">
-                      <label className="form-label small fw-bold">Retail Price (ETB) *</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        className="form-control"
-                        placeholder="0.00"
-                        value={productForm.price}
-                        onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="col-md-4">
-                      <label className="form-label small fw-bold">Compare-at Price (ETB)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        className="form-control"
-                        placeholder="Optional original price"
-                        value={productForm.compare_at_price}
-                        onChange={(e) => setProductForm({ ...productForm, compare_at_price: e.target.value })}
-                      />
-                    </div>
-                    <div className="col-md-4">
-                      <label className="form-label small fw-bold">Cost Price (ETB)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        className="form-control"
-                        placeholder="Wholesale cost"
-                        value={productForm.cost_price}
-                        onChange={(e) => setProductForm({ ...productForm, cost_price: e.target.value })}
-                      />
-                    </div>
-
-                    <div className="col-md-4">
-                      <label className="form-label small fw-bold">Current Stock Quantity</label>
-                      <input
-                        type="number"
-                        min="0"
-                        className="form-control"
-                        value={productForm.stock}
-                        onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="col-md-4">
-                      <label className="form-label small fw-bold">Minimum Stock Level</label>
-                      <input
-                        type="number"
-                        min="1"
-                        className="form-control"
-                        title="Alert triggers when stock reaches or drops below this number"
-                        value={productForm.low_stock_threshold}
-                        onChange={(e) => setProductForm({ ...productForm, low_stock_threshold: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="col-md-4">
-                      <label className="form-label small fw-bold">Reorder Quantity (Units)</label>
-                      <input
-                        type="number"
-                        min="1"
-                        className="form-control"
-                        title="Recommended replenishment quantity requested from supplier"
-                        value={productForm.reorder_quantity}
-                        onChange={(e) => setProductForm({ ...productForm, reorder_quantity: e.target.value })}
-                        required
-                      />
-                    </div>
-
-                    <div className="col-12 d-flex gap-4 pt-2">
-                      <div className="form-check form-switch">
-                        <input
-                          className="form-check-input"
-                          type="checkbox"
-                          id="isFeaturedSwitch"
-                          checked={productForm.is_featured}
-                          onChange={(e) => setProductForm({ ...productForm, is_featured: e.target.checked })}
-                        />
-                        <label className="form-check-label small fw-semibold" htmlFor="isFeaturedSwitch">
-                          Featured on Homepage & Deals
-                        </label>
+              <form onSubmit={handleAdjustSubmit}>
+                <div className="modal-body p-4 bg-slate-50 text-xs">
+                  <div className="p-3 bg-white rounded-3 border mb-3">
+                    <div className="d-flex justify-content-between align-items-center">
+                      <div>
+                        <span className="text-slate-400 text-[10px] uppercase block">Current Physical Stock</span>
+                        <div className="fs-5 fw-bold text-slate-900">{adjustProduct.stock} units</div>
                       </div>
-
-                      <div className="form-check form-switch">
-                        <input
-                          className="form-check-input"
-                          type="checkbox"
-                          id="isActiveSwitch"
-                          checked={productForm.is_active}
-                          onChange={(e) => setProductForm({ ...productForm, is_active: e.target.checked })}
-                        />
-                        <label className="form-check-label small fw-semibold" htmlFor="isActiveSwitch">
-                          Active (Visible in Storefront)
-                        </label>
+                      <div className="text-end">
+                        <span className="text-slate-400 text-[10px] uppercase block">Product SKU</span>
+                        <div className="font-monospace fw-semibold text-slate-700">{adjustProduct.sku}</div>
                       </div>
                     </div>
                   </div>
+
+                  <div className="mb-3">
+                    <label className="form-label text-xs fw-semibold text-slate-700">Movement Type / Reason *</label>
+                    <select
+                      className="form-select text-xs"
+                      value={movementType}
+                      onChange={(e) => setMovementType(e.target.value)}
+                      required
+                    >
+                      <option value="RESTOCK">Restock / Warehouse Replenishment (+)</option>
+                      <option value="PURCHASE_ORDER">Purchase Order Delivery Check-In (+)</option>
+                      <option value="RETURN">Customer Return to Stock (+)</option>
+                      <option value="DAMAGE">Damaged / Defective Stock Write-off (-)</option>
+                      <option value="AUDIT_CORRECTION">Physical Inventory Audit Adjustment</option>
+                      <option value="SALE">Direct Manual Store Sale (-)</option>
+                    </select>
+                  </div>
+
+                  <div className="mb-3">
+                    <label className="form-label text-xs fw-semibold text-slate-700">Quantity (Units) *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      className="form-control text-xs fw-bold"
+                      value={adjustQuantity}
+                      onChange={(e) => setAdjustQuantity(e.target.value)}
+                      required
+                    />
+                    <small className="text-slate-400 text-[11px]">
+                      {movementType === 'DAMAGE' || movementType === 'SALE'
+                        ? 'Units will be subtracted from current stock.'
+                        : 'Units will be added to warehouse stock.'}
+                    </small>
+                  </div>
+
+                  <div className="mb-3">
+                    <label className="form-label text-xs fw-semibold text-slate-700">Audit Reference / Reason Note *</label>
+                    <input
+                      type="text"
+                      className="form-control text-xs"
+                      placeholder="e.g. PO-2026-0045, Monthly physical count discrepancy, Broken carton..."
+                      value={adjustmentReference}
+                      onChange={(e) => setAdjustmentReference(e.target.value)}
+                      required
+                    />
+                  </div>
                 </div>
 
-                <div className="modal-footer border-0 pt-0">
-                  <button type="button" className="btn btn-light rounded-pill px-3" onClick={() => setShowProductModal(false)}>
+                <div className="modal-footer bg-white py-2.5 px-4 d-flex justify-content-end gap-2 border-top">
+                  <button type="button" className="btn btn-sm btn-outline-secondary rounded-pill px-3 text-xs" onClick={() => setAdjustProduct(null)}>
                     Cancel
                   </button>
-                  <button type="submit" className="btn btn-primary-gradient rounded-pill px-4 fw-bold" disabled={submitting}>
-                    {submitting ? 'Saving...' : editingProduct ? 'Save Product Changes' : 'Create Product'}
+                  <button type="submit" className="btn btn-sm btn-primary rounded-pill px-4 text-xs fw-bold" disabled={submitting}>
+                    {submitting ? 'Updating Stock...' : 'Save Stock Adjustment'}
                   </button>
                 </div>
               </form>
@@ -934,66 +1024,63 @@ const ManagerInventoryPage = () => {
         </div>
       )}
 
-      {/* Adjust Stock Modal */}
-      {adjustProduct && (
-        <div className="modal fade show d-block" tabIndex="-1" style={{ background: 'rgba(0, 0, 0, 0.65)' }}>
-          <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content rounded-4 border-0 shadow-2xl p-3">
-              <div className="modal-header border-0 pb-0">
-                <h5 className="modal-title fw-bold">Stock Adjustment</h5>
-                <button type="button" className="btn-close" onClick={() => setAdjustProduct(null)}></button>
+      {/* MODAL 2: Thresholds & Reorder Settings Modal */}
+      {thresholdProduct && (
+        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}>
+          <div className="modal-dialog modal-md modal-dialog-centered">
+            <div className="modal-content border-0 shadow-2xl rounded-4 overflow-hidden">
+              <div className="modal-header bg-slate-900 text-white py-3 px-4">
+                <div className="d-flex align-items-center gap-2">
+                  <div className="rounded-3 p-1.5 bg-warning text-slate-900">
+                    <i className="bi bi-sliders fs-5"></i>
+                  </div>
+                  <div>
+                    <h5 className="modal-title fw-bold text-white mb-0">Set Reorder Thresholds</h5>
+                    <small className="text-slate-400 text-xs">Product: {thresholdProduct.name}</small>
+                  </div>
+                </div>
+                <button type="button" className="btn-close btn-close-white" onClick={() => setThresholdProduct(null)}></button>
               </div>
-              <form onSubmit={handleAdjustSubmit}>
-                <div className="modal-body">
-                  <div className="p-3 rounded-3 bg-light border mb-3">
-                    <div className="fw-bold text-dark">{adjustProduct.name}</div>
-                    <div className="small text-muted">SKU: <code>{adjustProduct.sku}</code></div>
-                    <div className="small mt-1">Current Stock: <strong className="text-primary fs-6">{adjustProduct.stock} units</strong></div>
-                  </div>
 
+              <form onSubmit={handleThresholdSubmit}>
+                <div className="modal-body p-4 bg-slate-50 text-xs">
                   <div className="mb-3">
-                    <label className="form-label small fw-bold">Adjustment Action</label>
-                    <select
-                      className="form-select"
-                      value={movementType}
-                      onChange={(e) => setMovementType(e.target.value)}
-                    >
-                      <option value="RESTOCK">Restock (Add to inventory)</option>
-                      <option value="ADJUSTMENT">Adjustment (Correction / Count)</option>
-                      <option value="RETURN">Customer Return (Add back)</option>
-                    </select>
-                  </div>
-
-                  <div className="mb-3">
-                    <label className="form-label small fw-bold">Quantity</label>
+                    <label className="form-label text-xs fw-semibold text-slate-700">Low Stock Alert Threshold *</label>
                     <input
                       type="number"
-                      className="form-control"
-                      value={adjustQuantity}
-                      min="1"
-                      onChange={(e) => setAdjustQuantity(Number(e.target.value))}
+                      min="0"
+                      className="form-control text-xs"
+                      value={minStockLevel}
+                      onChange={(e) => setMinStockLevel(e.target.value)}
                       required
                     />
+                    <small className="text-slate-400 text-[11px]">
+                      When warehouse stock drops to or below this level, low-stock warnings are triggered.
+                    </small>
                   </div>
 
                   <div className="mb-3">
-                    <label className="form-label small fw-bold">Reason / Reference Document</label>
+                    <label className="form-label text-xs fw-semibold text-slate-700">Recommended Reorder Quantity *</label>
                     <input
-                      type="text"
-                      className="form-control"
-                      placeholder="e.g. Supplier PO #4928 from Warehouse"
-                      value={reference}
-                      onChange={(e) => setReference(e.target.value)}
+                      type="number"
+                      min="1"
+                      className="form-control text-xs"
+                      value={reorderQuantity}
+                      onChange={(e) => setReorderQuantity(e.target.value)}
+                      required
                     />
+                    <small className="text-slate-400 text-[11px]">
+                      Standard quantity pre-filled when drafting purchase orders with hardware suppliers.
+                    </small>
                   </div>
                 </div>
 
-                <div className="modal-footer border-0 pt-0">
-                  <button type="button" className="btn btn-light rounded-pill px-3" onClick={() => setAdjustProduct(null)}>
+                <div className="modal-footer bg-white py-2.5 px-4 d-flex justify-content-end gap-2 border-top">
+                  <button type="button" className="btn btn-sm btn-outline-secondary rounded-pill px-3 text-xs" onClick={() => setThresholdProduct(null)}>
                     Cancel
                   </button>
-                  <button type="submit" className="btn btn-primary-gradient rounded-pill px-4 fw-bold" disabled={submitting}>
-                    {submitting ? 'Updating...' : 'Save Stock Adjustment'}
+                  <button type="submit" className="btn btn-sm btn-primary rounded-pill px-4 text-xs fw-bold" disabled={submitting}>
+                    {submitting ? 'Saving...' : 'Save Reorder Settings'}
                   </button>
                 </div>
               </form>

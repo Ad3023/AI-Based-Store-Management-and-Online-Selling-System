@@ -96,7 +96,14 @@ class DeliveryFeeService:
 class ShipmentWorkflowService:
     # State transition validation graph
     ALLOWED_TRANSITIONS = {
+        ShipmentStatus.PREPARED: [
+            ShipmentStatus.ASSIGNED,
+            ShipmentStatus.COURIER_ASSIGNED,
+            ShipmentStatus.PICKED_UP,
+            ShipmentStatus.CANCELLED
+        ],
         ShipmentStatus.PENDING: [
+            ShipmentStatus.PREPARED,
             ShipmentStatus.CONFIRMED,
             ShipmentStatus.PROCESSING,
             ShipmentStatus.CANCELLED
@@ -148,6 +155,7 @@ class ShipmentWorkflowService:
         ],
         ShipmentStatus.PICKED_UP: [
             ShipmentStatus.IN_TRANSIT,
+            ShipmentStatus.FAILED,
             ShipmentStatus.ARRIVED_AT_SORTING_CENTER,
             ShipmentStatus.ARRIVED_AT_DESTINATION,
             ShipmentStatus.OUT_FOR_DELIVERY,
@@ -155,6 +163,8 @@ class ShipmentWorkflowService:
             ShipmentStatus.RETURNED_TO_SELLER
         ],
         ShipmentStatus.IN_TRANSIT: [
+            ShipmentStatus.DELIVERED,
+            ShipmentStatus.FAILED,
             ShipmentStatus.ARRIVED_AT_SORTING_CENTER,
             ShipmentStatus.ARRIVED_AT_DESTINATION,
             ShipmentStatus.OUT_FOR_DELIVERY,
@@ -209,7 +219,18 @@ class ShipmentWorkflowService:
             ShipmentStatus.PICKED_UP,
             ShipmentStatus.IN_TRANSIT,
             ShipmentStatus.OUT_FOR_DELIVERY,
+            ShipmentStatus.FAILED,
+            ShipmentStatus.FAILED_DELIVERY,
             ShipmentStatus.DELAYED,
+            ShipmentStatus.CANCELLED
+        ],
+        ShipmentStatus.FAILED: [
+            ShipmentStatus.IN_TRANSIT,
+            ShipmentStatus.OUT_FOR_DELIVERY,
+            ShipmentStatus.ASSIGNED,
+            ShipmentStatus.DELAYED,
+            ShipmentStatus.RETURNED_TO_SELLER,
+            ShipmentStatus.RETURNED,
             ShipmentStatus.CANCELLED
         ],
         ShipmentStatus.DELIVERED: [
@@ -234,7 +255,7 @@ class ShipmentWorkflowService:
 
     @classmethod
     @transaction.atomic
-    def advance_status(cls, shipment: Shipment, new_status: str, location: str = '', description: str = '', updated_by=None, force=False):
+    def advance_status(cls, shipment: Shipment, new_status: str, location: str = '', description: str = '', delivery_note: str = '', updated_by=None, force=False):
         """
         Advances the shipment status, generates an event log, and synchronizes the parent order.
         """
@@ -246,6 +267,10 @@ class ShipmentWorkflowService:
         old_status = shipment.status
         shipment.status = new_status
 
+        if not shipment.delivery_confirmation_code:
+            import secrets
+            shipment.delivery_confirmation_code = f"{secrets.randbelow(900000) + 100000}"
+
         if new_status == ShipmentStatus.DELIVERED:
             shipment.actual_delivery_date = timezone.now()
 
@@ -254,9 +279,11 @@ class ShipmentWorkflowService:
         # Create tracking event record
         ShipmentTrackingEvent.objects.create(
             shipment=shipment,
+            previous_status=old_status,
             status=new_status,
             location=location or shipment.origin_city or 'Fulfillment Hub',
-            description=description or f"Shipment status updated to {shipment.get_status_display()}.",
+            description=description or delivery_note or f"Shipment status updated to {shipment.get_status_display()}.",
+            delivery_note=delivery_note or description or '',
             updated_by=updated_by
         )
 
@@ -284,9 +311,10 @@ class ShipmentWorkflowService:
                 order.fulfillment_status = Order.FulfillmentStatus.SHIPPED
                 if order.status != Order.Status.DELIVERED:
                     order.status = Order.Status.SHIPPED
-            elif new_status in [ShipmentStatus.CONFIRMED]:
+            elif new_status in [ShipmentStatus.CONFIRMED, ShipmentStatus.ASSIGNED]:
                 order.fulfillment_status = Order.FulfillmentStatus.CONFIRMED
             elif new_status in [
+                ShipmentStatus.PREPARED,
                 ShipmentStatus.PROCESSING,
                 ShipmentStatus.READY_FOR_DISPATCH,
                 ShipmentStatus.BOOKING_REQUESTED,

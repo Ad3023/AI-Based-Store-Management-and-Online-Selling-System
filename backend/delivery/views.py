@@ -28,6 +28,7 @@ from .serializers import (
     ShipmentListSerializer,
     ShipmentDetailSerializer,
     ShipmentAssignSerializer,
+    DriverShipmentUpdateStatusSerializer,
     ShipmentStatusUpdateSerializer,
     DeliveryAttemptCreateSerializer,
     DeliveryAttemptSerializer,
@@ -46,6 +47,7 @@ from .permissions import (
     CanManageShipments,
     CanPrepareAndDispatch,
     CanVerifyHandover,
+    IsDriverUser,
 )
 from .services import (
     DeliveryFeeService,
@@ -327,15 +329,97 @@ class ShipmentDetailView(generics.RetrieveAPIView):
     permission_classes = [CanManageShipments]
 
 
+class EligibleOrdersForDeliveryView(views.APIView):
+    """
+    Returns existing orders eligible for delivery assignment.
+    Accessible by Store Manager and Admin.
+    """
+    permission_classes = [CanManageShipments]
+
+    def get(self, request):
+        q = request.query_params.get('search', '').strip()
+        qs = Order.objects.exclude(
+            status__in=[Order.Status.CANCELLED, Order.Status.REJECTED]
+        ).exclude(
+            fulfillment_status__in=[Order.FulfillmentStatus.CANCELLED, Order.FulfillmentStatus.REJECTED]
+        ).select_related('customer', 'shipment', 'shipment__delivery_personnel', 'shipment__courier_company').order_by('-created_at')
+
+        if q:
+            qs = qs.filter(
+                Q(order_number__icontains=q) |
+                Q(shipping_name__icontains=q) |
+                Q(shipping_phone__icontains=q) |
+                Q(shipping_city__icontains=q) |
+                Q(customer__username__icontains=q) |
+                Q(customer__email__icontains=q)
+            )
+
+        unassigned_only = request.query_params.get('unassigned_only')
+        if unassigned_only and unassigned_only.lower() in ['true', '1']:
+            qs = qs.filter(
+                Q(shipment__isnull=True) |
+                Q(shipment__status__in=[ShipmentStatus.PENDING, ShipmentStatus.PENDING_ASSIGNMENT, ShipmentStatus.PREPARED, ShipmentStatus.CONFIRMED, ShipmentStatus.PROCESSING])
+            )
+
+        results = []
+        for o in qs[:50]:
+            shipment = getattr(o, 'shipment', None)
+            assigned_to = None
+            if shipment:
+                if shipment.delivery_personnel:
+                    assigned_to = f"Driver: {shipment.delivery_personnel.full_name}"
+                elif shipment.courier_company:
+                    assigned_to = f"Courier: {shipment.courier_company.name}"
+
+            results.append({
+                'id': o.id,
+                'order_number': o.order_number,
+                'customer_name': o.shipping_name or (o.customer.get_full_name() or o.customer.username),
+                'customer_phone': o.shipping_phone or getattr(o.customer, 'phone_number', ''),
+                'customer_email': o.customer.email,
+                'shipping_address': o.shipping_address or '',
+                'shipping_city': o.shipping_city or 'Addis Ababa',
+                'total_amount': float(o.total_amount),
+                'payment_status': o.payment_status,
+                'fulfillment_status': o.fulfillment_status,
+                'status': o.status,
+                'created_at': o.created_at.isoformat(),
+                'has_shipment': bool(shipment),
+                'shipment_id': shipment.id if shipment else None,
+                'tracking_number': shipment.tracking_number if shipment else None,
+                'shipment_status': shipment.status if shipment else None,
+                'shipment_status_display': shipment.get_status_display() if shipment else 'Unassigned',
+                'assigned_to': assigned_to,
+                'estimated_delivery_date': shipment.estimated_delivery_date.isoformat() if shipment and shipment.estimated_delivery_date else None,
+            })
+
+        return Response(results, status=status.HTTP_200_OK)
+
+
 class ShipmentAssignOrInitView(views.APIView):
     """
-    Initializes a shipment for an Order, or updates Courier / Own Fleet assignment.
+    Assigns a delivery person or courier company to an order.
+    Validates order eligibility (prevents assigning CANCELLED, REJECTED, or already DELIVERED orders).
+    Updates delivery address and expected delivery date.
     """
     permission_classes = [CanManageShipments]
 
     @transaction.atomic
     def post(self, request, order_id):
         order = get_object_or_404(Order, pk=order_id)
+
+        # Validate order eligibility
+        if order.status in [Order.Status.CANCELLED, Order.Status.REJECTED]:
+            return Response(
+                {'error': f"Order {order.order_number} is {order.get_status_display()} and cannot be assigned for delivery."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if order.fulfillment_status in [Order.FulfillmentStatus.DELIVERED]:
+            return Response(
+                {'error': f"Order {order.order_number} is already marked as DELIVERED and cannot be reassigned."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         serializer = ShipmentAssignSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -345,24 +429,35 @@ class ShipmentAssignOrInitView(views.APIView):
         ext_tracking = data.get('external_tracking_number')
         vehicle_id = data.get('vehicle_id')
         personnel_id = data.get('delivery_personnel_id')
+        delivery_address = data.get('delivery_address') or order.shipping_address or ''
+        expected_date = data.get('expected_delivery_date')
         notes = data.get('notes', '')
 
-        # Get or create shipment for order
         shipment, created = Shipment.objects.get_or_create(
             order=order,
             defaults={
                 'delivery_method': method,
                 'origin_city': 'Addis Ababa',
                 'destination_city': order.shipping_city or 'Addis Ababa',
-                'recipient_name': order.shipping_name or order.customer.get_full_name(),
+                'recipient_name': order.shipping_name or order.customer.get_full_name() or order.customer.username,
                 'recipient_phone': order.shipping_phone or '',
-                'delivery_address': order.shipping_address or '',
+                'delivery_address': delivery_address,
                 'shipping_fee': order.shipping_fee or 0.00,
-                'status': ShipmentStatus.CONFIRMED,
+                'status': ShipmentStatus.ASSIGNED,
+                'estimated_delivery_date': expected_date,
             }
         )
 
         shipment.delivery_method = method
+        if delivery_address:
+            shipment.delivery_address = delivery_address
+        if expected_date:
+            shipment.estimated_delivery_date = expected_date
+
+        if not shipment.delivery_confirmation_code:
+            import secrets
+            shipment.delivery_confirmation_code = f"{secrets.randbelow(900000) + 100000}"
+
         if method == DeliveryMethod.THIRD_PARTY_COURIER:
             if courier_id:
                 courier = get_object_or_404(CourierCompany, pk=courier_id)
@@ -372,9 +467,8 @@ class ShipmentAssignOrInitView(views.APIView):
             shipment.vehicle = None
             if personnel_id:
                 shipment.delivery_personnel = get_object_or_404(DeliveryPersonnel, pk=personnel_id)
-            new_status = ShipmentStatus.COURIER_ASSIGNED
+            new_status = ShipmentStatus.ASSIGNED
         else:
-            # Own delivery service
             if vehicle_id:
                 vehicle = get_object_or_404(DeliveryVehicle, pk=vehicle_id)
                 shipment.vehicle = vehicle
@@ -384,32 +478,32 @@ class ShipmentAssignOrInitView(views.APIView):
                 personnel = get_object_or_404(DeliveryPersonnel, pk=personnel_id)
                 shipment.delivery_personnel = personnel
             shipment.courier_company = None
-            new_status = ShipmentStatus.READY_FOR_DISPATCH
+            new_status = ShipmentStatus.ASSIGNED
 
         shipment.save()
 
-        # Log transition event
-        log_desc = notes or f"Assigned to {shipment.get_delivery_method_display()}."
-        if shipment.courier_company:
-            log_desc += f" Carrier: {shipment.courier_company.name}."
+        log_desc = notes or f"Assigned for delivery."
         if shipment.delivery_personnel:
-            log_desc += f" Personnel: {shipment.delivery_personnel.full_name}."
-        if shipment.vehicle:
-            log_desc += f" Vehicle: {shipment.vehicle.registration_number}."
+            log_desc += f" Delivery Person: {shipment.delivery_personnel.full_name} ({shipment.delivery_personnel.phone_number})."
+        if shipment.courier_company:
+            log_desc += f" Courier: {shipment.courier_company.name}."
+        if shipment.estimated_delivery_date:
+            log_desc += f" Expected Delivery: {shipment.estimated_delivery_date}."
 
         ShipmentWorkflowService.advance_status(
             shipment=shipment,
             new_status=new_status,
             location=shipment.origin_city,
             description=log_desc,
+            delivery_note=notes,
             updated_by=request.user,
             force=True
         )
 
         return Response({
             'success': True,
-            'message': f"Shipment configured successfully. Tracking: {shipment.tracking_number}",
-            'shipment': ShipmentDetailSerializer(shipment).data
+            'message': f"Order {order.order_number} assigned for delivery. Tracking: {shipment.tracking_number}",
+            'shipment': ShipmentDetailSerializer(shipment, context={'request': request}).data
         })
 
 
@@ -770,7 +864,29 @@ class PublicTrackShipmentView(views.APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        data = ShipmentDetailSerializer(shipment).data
+        # Security: Authenticated customers can only view their own shipments
+        if request.user.is_authenticated:
+            is_staff = bool(
+                getattr(request.user, 'is_super_admin', False) or
+                getattr(request.user, 'is_admin', lambda: False)() or
+                getattr(request.user, 'is_store_manager', lambda: False)() or
+                getattr(request.user, 'is_order_manager', lambda: False)() or
+                hasattr(request.user, 'delivery_profile')
+            )
+            if not is_staff and shipment.order.customer_id != request.user.id:
+                return Response(
+                    {'error': "Access denied. You can only track your own orders."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+        data = ShipmentDetailSerializer(shipment, context={'request': request}).data
+
+        # If unauthenticated, mask sensitive customer phone
+        if not request.user.is_authenticated and data.get('recipient_phone'):
+            phone = data['recipient_phone']
+            if len(phone) > 6:
+                data['recipient_phone'] = phone[:4] + '***' + phone[-2:]
+
         return Response(data, status=status.HTTP_200_OK)
 
 
@@ -824,3 +940,277 @@ class CourierSettlementDetailView(generics.RetrieveUpdateDestroyAPIView):
             update_kwargs['settled_by'] = self.request.user
         serializer.save(**update_kwargs)
 
+
+
+class LiveShipmentsStatsView(views.APIView):
+    """
+    Aggregate statistics for the Live Shipments Dashboard.
+    Accessible by Admin and Store Manager.
+    """
+    permission_classes = [CanManageShipments]
+
+    def get(self, request):
+        total_active = Shipment.objects.filter(
+            status__in=[
+                ShipmentStatus.PREPARED,
+                ShipmentStatus.READY_FOR_DISPATCH,
+                ShipmentStatus.ASSIGNED,
+                ShipmentStatus.COURIER_ASSIGNED,
+                ShipmentStatus.PICKUP_SCHEDULED,
+                ShipmentStatus.PICKED_UP,
+                ShipmentStatus.IN_TRANSIT,
+                ShipmentStatus.ARRIVED_AT_SORTING_CENTER,
+                ShipmentStatus.ARRIVED_AT_DESTINATION,
+                ShipmentStatus.OUT_FOR_DELIVERY,
+                ShipmentStatus.FAILED,
+                ShipmentStatus.FAILED_DELIVERY,
+                ShipmentStatus.DELIVERY_ATTEMPT_FAILED,
+                ShipmentStatus.DELAYED,
+            ]
+        ).count()
+
+        prepared = Shipment.objects.filter(
+            status__in=[ShipmentStatus.PREPARED, ShipmentStatus.READY_FOR_DISPATCH, ShipmentStatus.PROCESSING]
+        ).count()
+
+        assigned = Shipment.objects.filter(
+            status__in=[ShipmentStatus.ASSIGNED, ShipmentStatus.COURIER_ASSIGNED]
+        ).count()
+
+        picked_up = Shipment.objects.filter(
+            status__in=[ShipmentStatus.PICKED_UP, ShipmentStatus.PICKUP_SCHEDULED]
+        ).count()
+
+        in_transit = Shipment.objects.filter(
+            status__in=[
+                ShipmentStatus.IN_TRANSIT,
+                ShipmentStatus.ARRIVED_AT_SORTING_CENTER,
+                ShipmentStatus.ARRIVED_AT_DESTINATION,
+                ShipmentStatus.OUT_FOR_DELIVERY
+            ]
+        ).count()
+
+        delivered = Shipment.objects.filter(status=ShipmentStatus.DELIVERED).count()
+
+        failed = Shipment.objects.filter(
+            status__in=[
+                ShipmentStatus.FAILED,
+                ShipmentStatus.FAILED_DELIVERY,
+                ShipmentStatus.DELIVERY_ATTEMPT_FAILED,
+                ShipmentStatus.DELAYED
+            ]
+        ).count()
+
+        return Response({
+            'total_active': total_active,
+            'prepared': prepared,
+            'assigned': assigned,
+            'picked_up': picked_up,
+            'in_transit': in_transit,
+            'delivered': delivered,
+            'failed': failed,
+            'timestamp': timezone.now().isoformat(),
+        })
+
+
+class DriverShipmentListView(generics.ListAPIView):
+    """
+    Returns only shipments assigned to the currently authenticated driver.
+    """
+    permission_classes = [IsDriverUser]
+    serializer_class = ShipmentDetailSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        personnel = getattr(user, 'delivery_profile', None)
+        if not personnel:
+            personnel = DeliveryPersonnel.objects.filter(Q(user=user) | Q(email=user.email)).first()
+
+        if not personnel:
+            return Shipment.objects.none()
+
+        qs = Shipment.objects.filter(delivery_personnel=personnel).select_related(
+            'order', 'order__customer', 'vehicle', 'courier_company'
+        ).prefetch_related('events', 'attempts').order_by('-created_at')
+
+        status_filter = self.request.query_params.get('status')
+        if status_filter == 'active':
+            qs = qs.exclude(status__in=[ShipmentStatus.DELIVERED, ShipmentStatus.CANCELLED])
+        elif status_filter == 'in_transit':
+            qs = qs.filter(status__in=[ShipmentStatus.PICKED_UP, ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY])
+        elif status_filter == 'delivered':
+            qs = qs.filter(status=ShipmentStatus.DELIVERED)
+        elif status_filter and status_filter != 'all':
+            qs = qs.filter(status=status_filter)
+
+        return qs
+
+
+class DriverShipmentDetailView(generics.RetrieveAPIView):
+    """
+    Retrieves detail for a single shipment assigned to the driver.
+    """
+    permission_classes = [IsDriverUser]
+    serializer_class = ShipmentDetailSerializer
+    lookup_url_kwarg = 'shipment_id'
+
+    def get_object(self):
+        user = self.request.user
+        personnel = getattr(user, 'delivery_profile', None)
+        if not personnel:
+            personnel = DeliveryPersonnel.objects.filter(Q(user=user) | Q(email=user.email)).first()
+
+        shipment = get_object_or_404(Shipment, pk=self.kwargs['shipment_id'])
+        if not personnel or shipment.delivery_personnel_id != personnel.id:
+            raise permissions.PermissionDenied("Access denied. You can only view deliveries assigned to you.")
+        return shipment
+
+
+class DriverShipmentStatusUpdateView(views.APIView):
+    """
+    Allows the assigned driver to advance delivery status:
+    - PICKED_UP
+    - IN_TRANSIT
+    - DELIVERED (requires confirmation code from customer)
+    - FAILED (requires failure reason/note)
+    """
+    permission_classes = [IsDriverUser]
+
+    @transaction.atomic
+    def post(self, request, shipment_id):
+        user = request.user
+        personnel = getattr(user, 'delivery_profile', None)
+        if not personnel:
+            personnel = DeliveryPersonnel.objects.filter(Q(user=user) | Q(email=user.email)).first()
+
+        shipment = get_object_or_404(Shipment, pk=shipment_id)
+        if not personnel or shipment.delivery_personnel_id != personnel.id:
+            return Response(
+                {'error': "Access denied. You can only update deliveries assigned to you."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = DriverShipmentUpdateStatusSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        target_status = serializer.validated_data['status']
+        delivery_note = serializer.validated_data.get('delivery_note', '').strip()
+        confirmation_code = serializer.validated_data.get('confirmation_code', '').strip()
+        location = serializer.validated_data.get('location', '').strip() or shipment.destination_city
+
+        # Validate DELIVERED requires confirmation code
+        if target_status == ShipmentStatus.DELIVERED:
+            if not confirmation_code:
+                return Response(
+                    {'error': "Delivery confirmation code is required to mark an order as DELIVERED. Please ask the customer for their 6-digit confirmation code."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            valid_code = (
+                shipment.delivery_confirmation_code and
+                str(shipment.delivery_confirmation_code).strip() == confirmation_code
+            )
+
+            if not valid_code:
+                active_otp = shipment.otps.filter(is_used=False).order_by('-created_at').first()
+                if active_otp and not active_otp.is_expired and active_otp.check_otp(confirmation_code):
+                    valid_code = True
+                    active_otp.is_used = True
+                    active_otp.used_at = timezone.now()
+                    active_otp.save(update_fields=['is_used', 'used_at'])
+
+            if not valid_code:
+                return Response(
+                    {'error': "Invalid delivery confirmation code. The code provided does not match the customer's order confirmation code."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        if target_status == ShipmentStatus.FAILED and not delivery_note:
+            return Response(
+                {'error': "Please provide a reason or note explaining why the delivery could not be completed."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            ShipmentWorkflowService.advance_status(
+                shipment=shipment,
+                new_status=target_status,
+                location=location,
+                description=delivery_note or f"Driver updated status to {target_status}.",
+                delivery_note=delivery_note,
+                updated_by=user
+            )
+
+            if target_status == ShipmentStatus.FAILED:
+                DeliveryAttempt.objects.create(
+                    shipment=shipment,
+                    delivery_personnel=personnel,
+                    attempt_number=shipment.attempts.count() + 1,
+                    reason=DeliveryAttempt.Reason.OTHER,
+                    notes=delivery_note
+                )
+
+            return Response({
+                'success': True,
+                'message': f"Shipment status successfully updated to {target_status}.",
+                'shipment': ShipmentDetailSerializer(shipment, context={'request': request}).data
+            }, status=status.HTTP_200_OK)
+
+        except ValueError as err:
+            return Response({'error': str(err)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class DriverProfileView(views.APIView):
+    """
+    Driver profile inspection and availability toggle.
+    """
+    permission_classes = [IsDriverUser]
+
+    def get(self, request):
+        user = request.user
+        personnel = getattr(user, 'delivery_profile', None)
+        if not personnel:
+            personnel = DeliveryPersonnel.objects.filter(Q(user=user) | Q(email=user.email)).first()
+        if not personnel:
+            return Response({'error': 'No delivery profile linked to this account.'}, status=status.HTTP_404_NOT_FOUND)
+
+        active_deliveries = Shipment.objects.filter(
+            delivery_personnel=personnel,
+            status__in=[ShipmentStatus.ASSIGNED, ShipmentStatus.PICKED_UP, ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY]
+        ).count()
+
+        completed_deliveries = Shipment.objects.filter(
+            delivery_personnel=personnel,
+            status=ShipmentStatus.DELIVERED
+        ).count()
+
+        return Response({
+            'id': personnel.id,
+            'full_name': personnel.full_name,
+            'phone_number': personnel.phone_number,
+            'vehicle_type': personnel.vehicle_type,
+            'vehicle_registration_number': personnel.vehicle_registration_number,
+            'delivery_area': personnel.delivery_area,
+            'current_city': personnel.current_city,
+            'is_available': personnel.is_available,
+            'is_active': personnel.is_active,
+            'status': personnel.status,
+            'active_deliveries_count': active_deliveries,
+            'completed_deliveries_count': completed_deliveries,
+        })
+
+    def patch(self, request):
+        user = request.user
+        personnel = getattr(user, 'delivery_profile', None)
+        if not personnel:
+            personnel = DeliveryPersonnel.objects.filter(Q(user=user) | Q(email=user.email)).first()
+        if not personnel:
+            return Response({'error': 'No delivery profile found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if 'is_available' in request.data:
+            personnel.is_available = bool(request.data['is_available'])
+            personnel.save(update_fields=['is_available'])
+
+        return Response({
+            'success': True,
+            'is_available': personnel.is_available
+        })

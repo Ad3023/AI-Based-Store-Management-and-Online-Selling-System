@@ -16,6 +16,12 @@ from .views import (
     ShipmentListView,
     ShipmentDetailView,
     ShipmentAssignOrInitView,
+    EligibleOrdersForDeliveryView,
+    LiveShipmentsStatsView,
+    DriverShipmentListView,
+    DriverShipmentDetailView,
+    DriverShipmentStatusUpdateView,
+    DriverProfileView,
     ShipmentStatusUpdateView,
     ShipmentAssignLocalDeliveryView,
     ShipmentBookCourierView,
@@ -87,6 +93,14 @@ urlpatterns = [
     path('track/<str:tracking_number>/', PublicTrackShipmentView.as_view(), name='public-track-shipment'),
     path('track/', PublicTrackShipmentView.as_view(), name='public-track-shipment-query'),
     path('customer/my-shipments/', CustomerMyShipmentsView.as_view(), name='customer-my-shipments'),
+
+    # Normal Delivery Tracking System (Manager, Driver, Live Dashboard)
+    path('eligible-orders/', EligibleOrdersForDeliveryView.as_view(), name='eligible-orders'),
+    path('live-stats/', LiveShipmentsStatsView.as_view(), name='live-stats'),
+    path('driver/shipments/', DriverShipmentListView.as_view(), name='driver-shipment-list'),
+    path('driver/shipments/<int:shipment_id>/', DriverShipmentDetailView.as_view(), name='driver-shipment-detail'),
+    path('driver/shipments/<int:shipment_id>/update-status/', DriverShipmentStatusUpdateView.as_view(), name='driver-update-status'),
+    path('driver/profile/', DriverProfileView.as_view(), name='driver-profile'),
 
     # Courier Settlements (Admin & Order Manager)
     path('settlements/', CourierSettlementListCreateView.as_view(), name='courier-settlement-list-create'),

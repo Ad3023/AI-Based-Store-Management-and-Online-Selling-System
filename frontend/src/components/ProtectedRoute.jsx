@@ -332,3 +332,54 @@ export const SupplierRoute = ({ children }) => {
 
   return children;
 };
+
+
+/**
+ * DriverRoute: Strictly requires authenticated Delivery Personnel role or platform Admin.
+ * Customers, suppliers, and unauthorized staff are prohibited.
+ */
+export const DriverRoute = ({ children }) => {
+  const { user, loading, isAdmin, isSuperAdmin } = useAuth();
+  const location = useLocation();
+
+  if (loading) {
+    return (
+      <div className="container py-5 text-center">
+        <div className="spinner-border text-primary" role="status"></div>
+        <p className="text-muted small mt-2">Checking driver credentials...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to={`/driver/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
+  }
+
+  const isDriverAuthorized =
+    isAdmin ||
+    isSuperAdmin ||
+    user?.role === 'delivery' ||
+    Boolean(user?.is_delivery_personnel) ||
+    Boolean(user?.is_delivery_driver) ||
+    Boolean(user?.delivery_profile);
+
+  if (!isDriverAuthorized) {
+    return (
+      <div className="container py-5 text-center">
+        <div className="card border-0 shadow-lg rounded-4 p-5 mx-auto max-w-lg bg-white">
+          <i className="bi bi-truck fs-1 text-danger mb-3"></i>
+          <h4 className="fw-bolder text-slate-900">403 - Driver Access Required</h4>
+          <p className="text-slate-500 small mb-4">
+            Your account ({user.username}, Role: <strong className="text-uppercase">{user.role}</strong>) does not have access to the Driver Portal.
+          </p>
+          <div className="d-flex justify-content-center gap-2">
+            <Link to="/" className="btn btn-primary rounded-pill px-4">Return to Storefront</Link>
+            <Link to="/driver/login" className="btn btn-outline-primary rounded-pill px-4">Driver Sign In</Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return children;
+};

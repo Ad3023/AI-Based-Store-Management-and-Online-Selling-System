@@ -66,6 +66,8 @@ const AdminDeliveryHubPage = () => {
     current_city: 'Addis Ababa',
     is_available: true,
     is_active: true,
+    user_account_username: '',
+    user_account_password: '',
   });
 
   // 4. Fee Rules State
@@ -694,6 +696,8 @@ const AdminDeliveryHubPage = () => {
                   current_city: 'Addis Ababa',
                   is_available: true,
                   is_active: true,
+                  user_account_username: '',
+                  user_account_password: '',
                 });
                 setPersonnelModalOpen(true);
               }}
@@ -790,6 +794,8 @@ const AdminDeliveryHubPage = () => {
                               current_city: p.current_city,
                               is_available: p.is_available,
                               is_active: p.is_active,
+                              user_account_username: p.user_account_username || '',
+                              user_account_password: '',
                             });
                             setPersonnelModalOpen(true);
                           }}
@@ -1574,6 +1580,41 @@ const AdminDeliveryHubPage = () => {
                         </label>
                       </div>
                     </div>
+
+                    {!editingPersonnel && (
+                      <div className="col-12 mt-2">
+                        <div className="p-3 rounded-3 bg-light border text-xs">
+                          <span className="fw-bold text-slate-800 d-block mb-1">
+                            <i className="bi bi-person-badge me-1 text-primary"></i> Driver Portal Login Account (Optional)
+                          </span>
+                          <p className="text-muted text-xs mb-2">
+                            Optionally provision login credentials for this driver to access the mobile Driver Dashboard.
+                          </p>
+                          <div className="row g-2">
+                            <div className="col-12 col-md-6">
+                              <label className="form-label text-xs fw-semibold">Login Username / Email</label>
+                              <input
+                                type="text"
+                                className="form-control form-control-sm"
+                                placeholder="driver_username"
+                                value={personnelFormData.user_account_username}
+                                onChange={(e) => setPersonnelFormData({ ...personnelFormData, user_account_username: e.target.value })}
+                              />
+                            </div>
+                            <div className="col-12 col-md-6">
+                              <label className="form-label text-xs fw-semibold">Temporary Password</label>
+                              <input
+                                type="password"
+                                className="form-control form-control-sm"
+                                placeholder="Min 8 characters"
+                                value={personnelFormData.user_account_password}
+                                onChange={(e) => setPersonnelFormData({ ...personnelFormData, user_account_password: e.target.value })}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="modal-footer border-0 pt-0">

@@ -481,7 +481,7 @@ const AdminDashboardPage = () => {
               >
                 Open Replenishment Oversight &rarr;
               </button>
-              <Link to="/manager/inventory" className="text-slate-500 text-xs text-decoration-none">
+              <Link to="/admin/inventory" className="text-slate-500 text-xs text-decoration-none">
                 Inventory Catalog
               </Link>
             </div>
@@ -633,7 +633,7 @@ const AdminDashboardPage = () => {
               Dispatch discounts and product launch emails to verified active subscribers
             </small>
           </div>
-          <Link to="/manager/promotions" className="btn btn-sm btn-outline-primary rounded-pill px-3 text-xs">
+          <Link to="/admin/promotions" className="btn btn-sm btn-outline-primary rounded-pill px-3 text-xs">
             Manage Discounts & Promos &rarr;
           </Link>
         </div>

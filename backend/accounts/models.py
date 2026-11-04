@@ -42,6 +42,7 @@ class User(AbstractUser):
         STORE_MANAGER = 'store_manager', 'Store Manager'
         ORDER_MANAGER = 'order_manager', 'Order Manager'
         SUPPLIER = 'supplier', 'Supplier'
+        DELIVERY = 'delivery', 'Delivery Personnel'
         CUSTOM = 'custom', 'Custom Role'
 
     # Alias for backward-compatibility with code accessing User.Role
@@ -109,6 +110,15 @@ class User(AbstractUser):
     def is_supplier(self):
         return bool(self.role == self.RoleChoices.SUPPLIER)
 
+    def is_delivery_driver(self):
+        return bool(
+            self.role == self.RoleChoices.DELIVERY or
+            hasattr(self, 'delivery_profile')
+        )
+
+    def is_delivery_personnel(self):
+        return self.is_delivery_driver()
+
     def is_customer(self):
         return bool(
             self.role == self.RoleChoices.CUSTOMER and
@@ -116,7 +126,8 @@ class User(AbstractUser):
             self.role != self.RoleChoices.ADMIN and
             self.role != self.RoleChoices.ORDER_MANAGER and
             self.role != self.RoleChoices.STORE_MANAGER and
-            self.role != self.RoleChoices.SUPPLIER
+            self.role != self.RoleChoices.SUPPLIER and
+            self.role != self.RoleChoices.DELIVERY
         )
 
     def get_all_permissions(self):

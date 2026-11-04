@@ -120,8 +120,10 @@ const TrackOrderPage = () => {
   const STATUS_RANK = {
     'PENDING': 0,
     'CONFIRMED': 1,
+    'PREPARED': 2,
     'PROCESSING': 2,
     'READY_FOR_DISPATCH': 2,
+    'ASSIGNED': 3,
     'BOOKING_REQUESTED': 3,
     'BOOKING_CONFIRMED': 4,
     'PICKUP_SCHEDULED': 5,
@@ -131,6 +133,7 @@ const TrackOrderPage = () => {
     'ARRIVED_AT_DESTINATION': 7,
     'OUT_FOR_DELIVERY': 8,
     'DELIVERY_ATTEMPT_FAILED': 8,
+    'FAILED': 8,
     'DELIVERED': 9,
     'RETURNED_TO_STORE': 9,
   };
@@ -335,24 +338,50 @@ const TrackOrderPage = () => {
                 <div className="text-slate-600 mt-0.5">{shipment.delivery_address}</div>
               </div>
 
-              {/* Driver info if out for delivery */}
-              {shipment.delivery_personnel && ['OUT_FOR_DELIVERY', 'DELIVERED'].includes(shipment.status) && (
-                <div className="p-3 rounded-3 bg-primary-subtle border border-primary-subtle text-xs d-flex align-items-center justify-content-between">
+              {/* Driver info if assigned */}
+              {shipment.delivery_personnel && ['ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'FAILED'].includes(shipment.status) && (
+                <div className="p-3 rounded-3 bg-primary-subtle border border-primary-subtle text-xs d-flex align-items-center justify-content-between mb-3">
                   <div className="d-flex align-items-center gap-2">
-                    <div className="rounded-circle bg-primary text-white p-2 text-center" style={{ width: '32px', height: '32px' }}>
-                      <i className="bi bi-person-fill"></i>
+                    <div className="rounded-circle bg-primary text-white p-2 text-center" style={{ width: '36px', height: '36px' }}>
+                      <i className="bi bi-truck"></i>
                     </div>
                     <div>
-                      <div className="fw-bold text-slate-900">Local Delivery Agent: {shipment.delivery_personnel.full_name}</div>
-                      <span className="text-muted font-mono">{shipment.delivery_personnel.employee_code} &bull; {shipment.delivery_personnel.current_city}</span>
+                      <div className="fw-bold text-slate-900">
+                        Assigned Delivery Driver: {shipment.delivery_personnel.full_name}
+                      </div>
+                      <span className="text-muted font-mono">
+                        {shipment.delivery_personnel.vehicle_type || 'Vehicle'}
+                        {shipment.delivery_personnel.vehicle_plate_number ? ` • Plate: ${shipment.delivery_personnel.vehicle_plate_number}` : ''}
+                      </span>
                     </div>
                   </div>
-                  <a href={`tel:${shipment.delivery_personnel.phone_number}`} className="btn btn-outline-primary btn-sm rounded-pill px-3 py-1 text-xs">
-                    <i className="bi bi-telephone-fill me-1"></i> Call Driver
-                  </a>
+                  {shipment.delivery_personnel.phone_number && (
+                    <a href={`tel:${shipment.delivery_personnel.phone_number}`} className="btn btn-primary btn-sm rounded-pill px-3 py-1 text-xs fw-bold">
+                      <i className="bi bi-telephone-fill me-1"></i> Call Driver
+                    </a>
+                  )}
                 </div>
               )}
             </div>
+
+            {/* Delivery Confirmation Code (For Customer to Share with Driver) */}
+            {shipment.delivery_confirmation_code && shipment.status !== 'DELIVERED' && (
+              <div className="card border-0 shadow-sm rounded-4 p-3.5 mb-4 bg-emerald-50 border border-emerald-200">
+                <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                  <div>
+                    <span className="badge bg-emerald-600 text-white text-xs px-2.5 py-1 rounded-pill mb-1">
+                      <i className="bi bi-shield-lock-fill me-1"></i> Delivery Confirmation Code
+                    </span>
+                    <div className="text-xs text-slate-700">
+                      Give this secure 6-digit code to your delivery driver when your package is handed over:
+                    </div>
+                  </div>
+                  <div className="font-mono fs-3 fw-bolder text-emerald-800 bg-white px-3 py-1 rounded-3 border border-emerald-300 shadow-sm tracking-widest">
+                    {shipment.delivery_confirmation_code}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* 2. Delivery OTP Handover Notice */}
             <div className="card border-0 shadow-sm rounded-4 p-3.5 mb-4 bg-white border border-slate-200">

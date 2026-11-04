@@ -8,7 +8,7 @@ import { CompareProvider } from './context/CompareContext';
 import { LanguageProvider } from './context/LanguageContext';
 
 // Route Guards
-import { ProtectedRoute, ManagerRoute, AdminRoute, PermissionRoute, OrderManagerRoute, StoreManagerRoute, SupplierRoute } from './components/ProtectedRoute';
+import { ProtectedRoute, ManagerRoute, AdminRoute, PermissionRoute, OrderManagerRoute, StoreManagerRoute, SupplierRoute, DriverRoute } from './components/ProtectedRoute';
 
 // Shared Components
 import Navbar from './components/Navbar';
@@ -55,6 +55,7 @@ import AdminDashboardPage from './pages/manager/AdminDashboardPage';
 import StoreManagerDashboardPage from './pages/manager/StoreManagerDashboardPage';
 import ManagerSuppliersPage from './pages/manager/ManagerSuppliersPage';
 import ManagerOrdersPage from './pages/manager/ManagerOrdersPage';
+import ManagerProductsPage from './pages/manager/ManagerProductsPage';
 import ManagerInventoryPage from './pages/manager/ManagerInventoryPage';
 import ManagerSegmentationPage from './pages/manager/ManagerSegmentationPage';
 import ManagerReportsPage from './pages/manager/ManagerReportsPage';
@@ -67,6 +68,7 @@ import ManagerCategoriesPage from './pages/manager/ManagerCategoriesPage';
 import OrderManagerDashboardPage from './pages/manager/OrderManagerDashboardPage';
 import AdminDeliveryHubPage from './pages/manager/AdminDeliveryHubPage';
 import OrderManagerShipmentsPage from './pages/manager/OrderManagerShipmentsPage';
+import LiveShipmentsPage from './pages/manager/LiveShipmentsPage';
 
 // Supplier Procurement & Payments
 import ProcurementSuppliersPage from './pages/procurement/ProcurementSuppliersPage';
@@ -77,6 +79,10 @@ import SupplierInvoicesPage from './pages/procurement/SupplierInvoicesPage';
 import SupplierPaymentsPage from './pages/procurement/SupplierPaymentsPage';
 import ProcurementReportsPage from './pages/procurement/ProcurementReportsPage';
 import ProcurementHistoryPage from './pages/procurement/ProcurementHistoryPage';
+
+// Delivery Driver Portal Pages
+import DriverLoginPage from './pages/driver/DriverLoginPage';
+import DriverDashboardPage from './pages/driver/DriverDashboardPage';
 
 // External Supplier Portal Pages
 import SupplierLoginPage from './pages/supplier/SupplierLoginPage';
@@ -137,6 +143,8 @@ function App() {
                   <Route path="/customer/login" element={<CustomerLoginPage />} />
                   <Route path="/staff/login" element={<StaffLoginPage />} />
                   <Route path="/supplier/login" element={<SupplierLoginPage />} />
+                  <Route path="/driver/login" element={<DriverLoginPage />} />
+                  <Route path="/driver-login" element={<DriverLoginPage />} />
                   <Route path="/staff-login" element={<StaffLoginPage />} />
                   <Route path="/manager/login" element={<Navigate to="/staff/login" replace />} />
                   <Route path="/register" element={<RegisterPage />} />
@@ -232,7 +240,7 @@ function App() {
                 >
                   <Route index element={<StoreManagerDashboardPage />} />
                   <Route path="dashboard" element={<StoreManagerDashboardPage />} />
-                  <Route path="products" element={<PermissionRoute permissions={['products.view', 'products.create', 'products.edit', 'products.delete']}><ManagerInventoryPage /></PermissionRoute>} />
+                  <Route path="products" element={<PermissionRoute permissions={['products.view', 'products.create', 'products.edit', 'products.delete']}><ManagerProductsPage /></PermissionRoute>} />
                   <Route path="categories" element={<PermissionRoute permissions={['categories.manage', 'products.view']}><ManagerCategoriesPage /></PermissionRoute>} />
                   <Route path="inventory" element={<PermissionRoute permissions={['inventory.manage', 'products.view']}><ManagerInventoryPage /></PermissionRoute>} />
                   <Route path="suppliers" element={<ProcurementSuppliersPage />} />
@@ -246,6 +254,7 @@ function App() {
                   <Route path="feedback" element={<PermissionRoute permissions={['products.edit', 'refunds.manage']}><ManagerFeedbackPage /></PermissionRoute>} />
                   <Route path="warranty" element={<PermissionRoute permission="refunds.manage"><ManagerWarrantyPage /></PermissionRoute>} />
                   <Route path="segmentation" element={<PermissionRoute permission="customers.view"><ManagerSegmentationPage /></PermissionRoute>} />
+                  <Route path="shipments" element={<LiveShipmentsPage />} />
                   <Route path="reports" element={<PermissionRoute permission="reports.view"><ManagerReportsPage /></PermissionRoute>} />
                 </Route>
 
@@ -259,7 +268,7 @@ function App() {
                 >
                   <Route index element={<StoreManagerDashboardPage />} />
                   <Route path="dashboard" element={<StoreManagerDashboardPage />} />
-                  <Route path="products" element={<PermissionRoute permissions={['products.view', 'products.create', 'products.edit', 'products.delete']}><ManagerInventoryPage /></PermissionRoute>} />
+                  <Route path="products" element={<PermissionRoute permissions={['products.view', 'products.create', 'products.edit', 'products.delete']}><ManagerProductsPage /></PermissionRoute>} />
                   <Route path="categories" element={<PermissionRoute permissions={['categories.manage', 'products.view']}><ManagerCategoriesPage /></PermissionRoute>} />
                   <Route path="inventory" element={<PermissionRoute permissions={['inventory.manage', 'products.view']}><ManagerInventoryPage /></PermissionRoute>} />
                   <Route path="suppliers" element={<ProcurementSuppliersPage />} />
@@ -275,6 +284,7 @@ function App() {
                   <Route path="feedback" element={<PermissionRoute permissions={['products.edit', 'refunds.manage']}><ManagerFeedbackPage /></PermissionRoute>} />
                   <Route path="warranty" element={<PermissionRoute permission="refunds.manage"><ManagerWarrantyPage /></PermissionRoute>} />
                   <Route path="segmentation" element={<PermissionRoute permission="customers.view"><ManagerSegmentationPage /></PermissionRoute>} />
+                  <Route path="shipments" element={<LiveShipmentsPage />} />
                   <Route path="reports" element={<PermissionRoute permission="reports.view"><ManagerReportsPage /></PermissionRoute>} />
                 </Route>
 
@@ -306,6 +316,7 @@ function App() {
                   <Route index element={<AdminDashboardPage />} />
                   <Route path="dashboard" element={<AdminDashboardPage />} />
                   <Route path="delivery" element={<AdminDeliveryHubPage />} />
+                  <Route path="shipments" element={<LiveShipmentsPage />} />
                   <Route path="users" element={<AdminUsersPage />} />
                   <Route path="suppliers" element={<ProcurementSuppliersPage />} />
                   <Route path="procurement/approvals" element={<PurchaseOrderHistoryPage adminApprovalMode={true} />} />
@@ -313,7 +324,7 @@ function App() {
                   <Route path="procurement/payments" element={<SupplierPaymentsPage defaultTab="disbursements" />} />
                   <Route path="procurement/payment-history" element={<SupplierPaymentsPage defaultTab="history" />} />
                   <Route path="procurement/reports" element={<ProcurementReportsPage />} />
-                  <Route path="products" element={<ManagerInventoryPage />} />
+                  <Route path="products" element={<ManagerProductsPage />} />
                   <Route path="categories" element={<ManagerCategoriesPage />} />
                   <Route path="inventory" element={<ManagerInventoryPage />} />
                   <Route path="orders" element={<ManagerOrdersPage />} />
@@ -324,6 +335,17 @@ function App() {
                   <Route path="segmentation" element={<ManagerSegmentationPage />} />
                   <Route path="reports" element={<ManagerReportsPage />} />
                 </Route>
+
+                                {/* Dedicated Delivery Driver Protected Route */}
+                <Route
+                  path="/driver/dashboard"
+                  element={
+                    <DriverRoute>
+                      <DriverDashboardPage />
+                    </DriverRoute>
+                  }
+                />
+                <Route path="/driver" element={<Navigate to="/driver/dashboard" replace />} />
 
                 {/* Dedicated External Supplier Protected Layout */}
                 <Route

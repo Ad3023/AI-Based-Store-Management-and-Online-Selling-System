@@ -58,7 +58,9 @@ export const AuthProvider = ({ children }) => {
         ? 'auth/login/customer/'
         : portal === 'supplier'
           ? 'auth/login/supplier/'
-          : 'auth/login/';
+          : portal === 'driver'
+            ? 'auth/login/driver/'
+            : 'auth/login/';
 
     const res = await api.post(endpoint, payload);
     const { token: authToken, user: userData, dashboard_url: dashboardUrl } = res.data;
@@ -153,13 +155,19 @@ export const AuthProvider = ({ children }) => {
   );
   const isOrderManager = Boolean(user?.role === 'order_manager');
   const isSupplier = Boolean(user?.role === 'supplier' || user?.is_supplier);
+  const isDriver = Boolean(
+    user?.role === 'delivery' ||
+    user?.is_delivery_personnel ||
+    user?.is_delivery_driver ||
+    Boolean(user?.delivery_profile)
+  );
   // Store Manager has operational access; Admin has complete supervisory access
   const isStoreManager = Boolean(
     isAdmin ||
     user?.role === 'store_manager' ||
-    (user?.is_staff && user?.role !== 'customer' && user?.role !== 'order_manager' && user?.role !== 'sub_admin' && user?.role !== 'supplier')
+    (user?.is_staff && user?.role !== 'customer' && user?.role !== 'order_manager' && user?.role !== 'sub_admin' && user?.role !== 'supplier' && user?.role !== 'delivery')
   );
-  const isCustomer = user?.role === 'customer' || (!isAdmin && !isSubAdmin && !isStoreManager && !isOrderManager && !isSupplier);
+  const isCustomer = user?.role === 'customer' || (!isAdmin && !isSubAdmin && !isStoreManager && !isOrderManager && !isSupplier && !isDriver);
   const isManagerOrAdmin = isAdmin || isSubAdmin || isStoreManager || isOrderManager;
 
   const userPermissions = useMemo(() => {
@@ -191,6 +199,9 @@ export const AuthProvider = ({ children }) => {
     if (u.role === 'supplier') {
       return '/supplier/dashboard';
     }
+    if (u.role === 'delivery' || u.is_delivery_driver || u.is_delivery_personnel || u.delivery_profile) {
+      return '/driver/dashboard';
+    }
     if (u.role === 'store_manager' || u.role === 'sub_admin') {
       return '/store-manager/dashboard';
     }
@@ -215,6 +226,7 @@ export const AuthProvider = ({ children }) => {
         isSubAdmin,
         isCustomer,
         isSupplier,
+        isDriver,
         isStoreManager,
         isOrderManager,
         isManagerOrAdmin,

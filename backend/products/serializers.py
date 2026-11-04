@@ -228,6 +228,9 @@ class ProductSerializer(serializers.ModelSerializer):
     reviews = ProductReviewSerializer(many=True, read_only=True)
     is_in_stock = serializers.BooleanField(read_only=True)
     is_low_stock = serializers.BooleanField(read_only=True)
+    reserved_quantity = serializers.SerializerMethodField()
+    available_quantity = serializers.SerializerMethodField()
+    incoming_quantity = serializers.SerializerMethodField()
     current_price = serializers.SerializerMethodField()
     has_promotion = serializers.SerializerMethodField()
     discount_label = serializers.SerializerMethodField()
@@ -243,7 +246,8 @@ class ProductSerializer(serializers.ModelSerializer):
             'warranty_policy', 'name', 'slug', 'sku',
             'description', 'price', 'current_price', 'has_promotion', 'discount_label',
             'promotion_title', 'compare_at_price', 'cost_price',
-            'stock', 'low_stock_threshold', 'min_stock_level', 'reorder_quantity', 'suggested_reorder_quantity',
+            'stock', 'reserved_quantity', 'available_quantity', 'incoming_quantity',
+            'low_stock_threshold', 'min_stock_level', 'reorder_quantity', 'suggested_reorder_quantity',
             'low_stock_notified', 'out_of_stock_notified', 'last_low_stock_notification', 'latest_notification',
             'is_in_stock', 'is_low_stock', 'is_out_of_stock', 'low_stock_alert_active', 'supplier_email_status',
             'image', 'rating_average', 'rating_count', 'is_featured',
@@ -253,8 +257,55 @@ class ProductSerializer(serializers.ModelSerializer):
             'id', 'slug', 'sku', 'rating_average', 'rating_count',
             'low_stock_notified', 'out_of_stock_notified', 'last_low_stock_notification',
             'is_in_stock', 'is_low_stock', 'is_out_of_stock', 'low_stock_alert_active', 'supplier_email_status',
+            'reserved_quantity', 'available_quantity', 'incoming_quantity',
             'created_at', 'updated_at'
         ]
+
+    def get_reserved_quantity(self, obj):
+        try:
+            from orders.models import Order, OrderItem
+            from django.db.models import Sum
+            val = OrderItem.objects.filter(
+                product=obj,
+                order__status__in=[
+                    Order.Status.PENDING_PAYMENT,
+                    Order.Status.PAYMENT_SUBMITTED,
+                    Order.Status.PROCESSING
+                ]
+            ).aggregate(total=Sum('quantity'))['total']
+            return int(val or 0)
+        except Exception:
+            return 0
+
+    def get_available_quantity(self, obj):
+        reserved = self.get_reserved_quantity(obj)
+        return max(0, obj.stock - reserved)
+
+    def get_incoming_quantity(self, obj):
+        try:
+            from products.models import PurchaseOrderItem, PurchaseRequest
+            active_statuses = [
+                PurchaseRequest.Status.APPROVED,
+                PurchaseRequest.Status.SENT_TO_SUPPLIER,
+                PurchaseRequest.Status.AWAITING_SUPPLIER,
+                PurchaseRequest.Status.ACCEPTED,
+                PurchaseRequest.Status.PARTIALLY_ACCEPTED,
+                PurchaseRequest.Status.PREPARING_ORDER,
+                PurchaseRequest.Status.READY_FOR_DELIVERY,
+                PurchaseRequest.Status.SHIPPED,
+            ]
+            items = PurchaseOrderItem.objects.filter(
+                product=obj,
+                purchase_request__status__in=active_statuses
+            )
+            incoming = 0
+            for item in items:
+                target_qty = item.confirmed_quantity if item.confirmed_quantity is not None else item.requested_quantity
+                remaining = max(0, target_qty - (item.received_quantity or 0))
+                incoming += remaining
+            return incoming
+        except Exception:
+            return 0
 
     def get_latest_notification(self, obj):
         log = obj.supplier_notifications.first()
@@ -332,13 +383,15 @@ class CustomerFeedbackSerializer(serializers.ModelSerializer):
 
 class StockMovementSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
+    product_sku = serializers.CharField(source='product.sku', read_only=True)
+    movement_type_display = serializers.CharField(source='get_movement_type_display', read_only=True)
     created_by_username = serializers.CharField(source='created_by.username', read_only=True)
 
     class Meta:
         model = StockMovement
         fields = [
-            'id', 'product', 'product_name', 'quantity',
-            'movement_type', 'reference', 'created_by', 'created_by_username',
+            'id', 'product', 'product_name', 'product_sku', 'quantity',
+            'movement_type', 'movement_type_display', 'reference', 'created_by', 'created_by_username',
             'created_at'
         ]
         read_only_fields = ['id', 'created_by', 'created_at']

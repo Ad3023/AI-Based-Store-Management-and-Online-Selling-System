@@ -83,6 +83,9 @@ class DeliveryVehicleSerializer(serializers.ModelSerializer):
 class DeliveryPersonnelSerializer(serializers.ModelSerializer):
     delivery_method_display = serializers.CharField(source='get_delivery_method_display', read_only=True)
     courier_company_name = serializers.CharField(source='courier_company.name', read_only=True, allow_null=True)
+    user_account_username = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    user_account_password = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    user_username = serializers.CharField(source='user.username', read_only=True, allow_null=True)
 
     class Meta:
         model = DeliveryPersonnel
@@ -104,6 +107,9 @@ class DeliveryPersonnelSerializer(serializers.ModelSerializer):
             'is_available',
             'is_active',
             'user',
+            'user_account_username',
+            'user_account_password',
+            'user_username',
             'created_at',
             'updated_at',
         ]
@@ -122,10 +128,58 @@ class DeliveryPersonnelSerializer(serializers.ModelSerializer):
         return validate_phone_number_format(value, required=True)
 
     def create(self, validated_data):
+        username = validated_data.pop('user_account_username', '').strip()
+        password = validated_data.pop('user_account_password', '').strip()
+
         if not validated_data.get('employee_code'):
             import uuid
             validated_data['employee_code'] = f"CR-{uuid.uuid4().hex[:6].upper()}"
+
+        user = validated_data.get('user')
+        if not user and username:
+            from accounts.models import User
+            email = validated_data.get('email') or f"{username.lower()}@ethiotech.com"
+            existing_user = User.objects.filter(username__iexact=username).first()
+            if not existing_user and email:
+                existing_user = User.objects.filter(email__iexact=email).first()
+            if existing_user:
+                existing_user.role = User.RoleChoices.DELIVERY
+                existing_user.is_active = validated_data.get('is_active', True)
+                if password:
+                    existing_user.set_password(password)
+                existing_user.save()
+                if hasattr(existing_user, 'delivery_profile') and existing_user.delivery_profile:
+                    return self.update(existing_user.delivery_profile, validated_data)
+                user = existing_user
+            else:
+                user = User.objects.create_user(
+                    username=username,
+                    email=email,
+                    password=password or 'DriverPass123!',
+                    role=User.RoleChoices.DELIVERY,
+                    first_name=validated_data.get('full_name', '').split(' ')[0],
+                    last_name=' '.join(validated_data.get('full_name', '').split(' ')[1:]) if ' ' in validated_data.get('full_name', '') else '',
+                    phone_number=validated_data.get('phone_number', ''),
+                    is_active=validated_data.get('is_active', True)
+                )
+            validated_data['user'] = user
+
         return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        username = validated_data.pop('user_account_username', None)
+        password = validated_data.pop('user_account_password', None)
+
+        is_active = validated_data.get('is_active')
+        if is_active is not None and instance.user:
+            instance.user.is_active = is_active
+            instance.user.save(update_fields=['is_active'])
+
+        if password and instance.user:
+            instance.user.set_password(password)
+            instance.user.save()
+
+        return super().update(instance, validated_data)
 
 
 class CourierSettlementSerializer(serializers.ModelSerializer):
@@ -175,10 +229,12 @@ class ShipmentTrackingEventSerializer(serializers.ModelSerializer):
         model = ShipmentTrackingEvent
         fields = [
             'id',
+            'previous_status',
             'status',
             'status_display',
             'location',
             'description',
+            'delivery_note',
             'updated_by',
             'updated_by_name',
             'timestamp',
@@ -329,7 +385,10 @@ class ShipmentDetailSerializer(serializers.ModelSerializer):
     order_number = serializers.CharField(source='order.order_number', read_only=True)
     order_id = serializers.IntegerField(source='order.id', read_only=True)
     order_total = serializers.DecimalField(source='order.total_amount', max_digits=10, decimal_places=2, read_only=True)
+    order_payment_status = serializers.CharField(source='order.payment_status', read_only=True, allow_null=True)
+    order_payment_method = serializers.CharField(source='order.payment_method', read_only=True, allow_null=True)
     order_items = serializers.SerializerMethodField()
+    delivery_confirmation_code = serializers.SerializerMethodField()
     customer_username = serializers.CharField(source='order.customer.username', read_only=True)
     customer_email = serializers.CharField(source='order.customer.email', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
@@ -371,6 +430,9 @@ class ShipmentDetailSerializer(serializers.ModelSerializer):
             'weight_kg',
             'estimated_delivery_date',
             'actual_delivery_date',
+            'delivery_confirmation_code',
+            'order_payment_status',
+            'order_payment_method',
             'booking_status',
             'booking_requested_at',
             'booking_reference',
@@ -394,6 +456,22 @@ class ShipmentDetailSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
 
+
+    def get_delivery_confirmation_code(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user or not request.user.is_authenticated:
+            return ''
+        user = request.user
+        if (
+            getattr(user, 'is_super_admin', False) or
+            getattr(user, 'is_admin', lambda: False)() or
+            getattr(user, 'is_store_manager', lambda: False)() or
+            getattr(user, 'is_order_manager', lambda: False)() or
+            (obj.order and obj.order.customer_id == user.id) or
+            (obj.delivery_personnel and obj.delivery_personnel.user_id == user.id)
+        ):
+            return obj.delivery_confirmation_code
+        return ''
     def get_order_items(self, obj):
         if not obj.order:
             return []
@@ -421,7 +499,21 @@ class ShipmentAssignSerializer(serializers.Serializer):
     external_tracking_number = serializers.CharField(required=False, allow_blank=True, max_length=100)
     vehicle_id = serializers.IntegerField(required=False, allow_null=True)
     delivery_personnel_id = serializers.IntegerField(required=False, allow_null=True)
+    delivery_address = serializers.CharField(required=False, allow_blank=True)
+    expected_delivery_date = serializers.DateField(required=False, allow_null=True)
     notes = serializers.CharField(required=False, allow_blank=True)
+
+
+class DriverShipmentUpdateStatusSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=[
+        ShipmentStatus.PICKED_UP,
+        ShipmentStatus.IN_TRANSIT,
+        ShipmentStatus.DELIVERED,
+        ShipmentStatus.FAILED,
+    ])
+    confirmation_code = serializers.CharField(required=False, allow_blank=True)
+    delivery_note = serializers.CharField(required=False, allow_blank=True)
+    location = serializers.CharField(max_length=150, required=False, allow_blank=True)
 
 
 class ShipmentStatusUpdateSerializer(serializers.Serializer):

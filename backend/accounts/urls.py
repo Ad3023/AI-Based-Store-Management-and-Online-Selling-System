@@ -1,5 +1,6 @@
 from django.urls import path
 from .views import (
+    DriverLoginView,
     RegisterView, VerifyEmailView, ResendVerificationView,
     LoginView, CustomerLoginView, StaffLoginView, SupplierLoginView, LogoutView, CurrentUserView, UserAvatarView,
     ChangePasswordView,
@@ -20,6 +21,7 @@ urlpatterns = [
     path('login/customer/', CustomerLoginView.as_view(), name='customer-login'),
     path('login/staff/', StaffLoginView.as_view(), name='staff-login'),
     path('login/supplier/', SupplierLoginView.as_view(), name='supplier-login'),
+    path('login/driver/', DriverLoginView.as_view(), name='driver-login'),
     path('logout/', LogoutView.as_view(), name='logout'),
     path('google/', GoogleAuthView.as_view(), name='google-auth'),
     path('profile/', CurrentUserView.as_view(), name='profile'),

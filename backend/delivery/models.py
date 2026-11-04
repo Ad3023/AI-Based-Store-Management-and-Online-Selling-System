@@ -13,6 +13,7 @@ class DeliveryMethod(models.TextChoices):
 
 class ShipmentStatus(models.TextChoices):
     PENDING = 'PENDING', 'Pending'
+    PREPARED = 'PREPARED', 'Prepared'
     PENDING_ASSIGNMENT = 'PENDING_ASSIGNMENT', 'Pending Assignment'
     ASSIGNED = 'ASSIGNED', 'Assigned'
     CONFIRMED = 'CONFIRMED', 'Confirmed'
@@ -29,6 +30,7 @@ class ShipmentStatus(models.TextChoices):
     OUT_FOR_DELIVERY = 'OUT_FOR_DELIVERY', 'Out for Delivery'
     DELIVERY_ATTEMPT_FAILED = 'DELIVERY_ATTEMPT_FAILED', 'Delivery Attempt Failed'
     FAILED_DELIVERY = 'FAILED_DELIVERY', 'Failed Delivery'
+    FAILED = 'FAILED', 'Failed'
     DELAYED = 'DELAYED', 'Delayed'
     DELIVERED = 'DELIVERED', 'Delivered'
     DELIVERY_DISPUTED = 'DELIVERY_DISPUTED', 'Delivery Disputed'
@@ -246,6 +248,12 @@ class Shipment(models.Model):
     weight_kg = models.DecimalField(max_digits=6, decimal_places=2, default=1.0)
     estimated_delivery_date = models.DateField(null=True, blank=True)
     actual_delivery_date = models.DateTimeField(null=True, blank=True)
+    delivery_confirmation_code = models.CharField(
+        max_length=20,
+        blank=True,
+        default='',
+        help_text="Customer 6-digit confirmation code required for driver to mark as DELIVERED."
+    )
     # Courier Booking Lifecycle (Workflow Stages 3 & 4)
     booking_status = models.CharField(
         max_length=30,
@@ -304,7 +312,9 @@ class ShipmentTrackingEvent(models.Model):
         on_delete=models.CASCADE,
         related_name='events'
     )
+    previous_status = models.CharField(max_length=40, blank=True, default='')
     status = models.CharField(max_length=40, choices=ShipmentStatus.choices)
+    delivery_note = models.TextField(blank=True, default='')
     location = models.CharField(max_length=150)
     description = models.TextField()
     updated_by = models.ForeignKey(

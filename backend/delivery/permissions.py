@@ -33,10 +33,12 @@ class CanManageShipments(permissions.BasePermission):
             getattr(request.user, 'is_super_admin', False) or
             getattr(request.user, 'is_admin', lambda: False)() or
             getattr(request.user, 'is_order_manager', lambda: False)() or
+            getattr(request.user, 'is_store_manager', lambda: False)() or
             request.user.role in [
                 User.RoleChoices.ADMIN,
                 User.RoleChoices.SUPER_ADMIN,
-                User.RoleChoices.ORDER_MANAGER
+                User.RoleChoices.ORDER_MANAGER,
+                User.RoleChoices.STORE_MANAGER
             ]
         )
 
@@ -88,3 +90,19 @@ class CanVerifyHandover(permissions.BasePermission):
             return True
         # Check if user has a linked delivery profile
         return hasattr(request.user, 'delivery_profile') and request.user.delivery_profile.is_active
+
+
+class IsDriverUser(permissions.BasePermission):
+    """
+    Grants access to authenticated delivery personnel / drivers.
+    """
+    message = "Access denied. Delivery driver credentials required."
+
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return bool(
+            request.user.role == User.RoleChoices.DELIVERY or
+            hasattr(request.user, 'delivery_profile') or
+            getattr(request.user, 'is_delivery_driver', lambda: False)()
+        )

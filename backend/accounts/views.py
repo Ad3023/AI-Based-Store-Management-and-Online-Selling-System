@@ -290,6 +290,8 @@ def get_dashboard_url_for_user(user):
         return '/store-manager/dashboard'
     if getattr(user, 'is_supplier', lambda: False)() or user.role == User.RoleChoices.SUPPLIER:
         return '/supplier/dashboard'
+    if getattr(user, 'is_delivery_driver', lambda: False)() or user.role == User.RoleChoices.DELIVERY or hasattr(user, 'delivery_profile'):
+        return '/driver/dashboard'
     return '/customer/dashboard'
 
 
@@ -362,6 +364,20 @@ class LoginView(APIView):
                         'redirect_url': '/staff/login',
                         'error': 'This login portal is reserved for customers only. Staff members (Administrator, Store Manager, Order Manager) must sign in via the Staff Login portal.'
                     }, status=status.HTTP_403_FORBIDDEN)
+            elif portal == 'driver':
+                is_driver_user = bool(
+                    user.role == User.RoleChoices.DELIVERY or
+                    hasattr(user, 'delivery_profile') or
+                    getattr(user, 'is_delivery_driver', lambda: False)()
+                )
+                if not is_driver_user:
+                    return Response({
+                        'portal_access_denied': True,
+                        'portal': 'driver',
+                        'role': user.role,
+                        'redirect_url': '/login',
+                        'error': 'This portal is strictly reserved for registered delivery personnel.'
+                    }, status=status.HTTP_403_FORBIDDEN)
             elif portal == 'supplier':
                 is_supplier_user = bool(
                     getattr(user, 'is_supplier', lambda: False)() or
@@ -414,6 +430,13 @@ class SupplierLoginView(LoginView):
     Customers and staff are rejected with HTTP 403.
     """
     portal_type = 'supplier'
+
+
+class DriverLoginView(LoginView):
+    """
+    Dedicated endpoint strictly for Delivery Drivers.
+    """
+    portal_type = 'driver'
 
 
 class LogoutView(APIView):

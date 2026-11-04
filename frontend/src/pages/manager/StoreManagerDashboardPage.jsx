@@ -440,7 +440,7 @@ const StoreManagerDashboardPage = () => {
 
         <div className="d-flex align-items-center gap-2">
           <Link
-            to="/manager/inventory"
+            to="/manager/products"
             className="btn btn-ethio-primary btn-sm rounded-pill px-3 py-2 fw-bold text-xs d-flex align-items-center gap-2 shadow-sm"
             style={{ backgroundColor: '#1b64da', color: '#ffffff' }}
           >

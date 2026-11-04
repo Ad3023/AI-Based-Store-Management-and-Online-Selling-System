@@ -217,7 +217,7 @@ const DashboardLayout = () => {
 
               {canViewCatalog && (
                 <NavLink
-                  to="/manager/products"
+                  to={isAdmin ? "/admin/products" : "/manager/products"}
                   end
                   className={({ isActive }) => `dashboard-nav-item py-1.5 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 text-decoration-none transition ${isActive && !location.search ? 'active bg-primary text-white font-bold' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
                   onClick={() => setMobileDrawerOpen(false)}
@@ -228,8 +228,8 @@ const DashboardLayout = () => {
 
               {hasPermission('products.create') && (
                 <NavLink
-                  to="/manager/products?action=add"
-                  className={() => `dashboard-nav-item py-1.5 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 text-decoration-none transition ${location.pathname === '/manager/products' && location.search.includes('action=add') ? 'active bg-primary text-white font-bold' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
+                  to={isAdmin ? "/admin/products?action=add" : "/manager/products?action=add"}
+                  className={() => `dashboard-nav-item py-1.5 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 text-decoration-none transition ${(location.pathname.endsWith('/products')) && location.search.includes('action=add') ? 'active bg-primary text-white font-bold' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
                   onClick={() => setMobileDrawerOpen(false)}
                 >
                   <i className="bi bi-plus-circle text-info"></i> Add Product
@@ -238,7 +238,7 @@ const DashboardLayout = () => {
 
               {canManageCategories && (
                 <NavLink
-                  to="/manager/categories"
+                  to={isAdmin ? "/admin/categories" : "/manager/categories"}
                   className={({ isActive }) => `dashboard-nav-item py-1.5 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 text-decoration-none transition ${isActive ? 'active bg-primary text-white font-bold' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
                   onClick={() => setMobileDrawerOpen(false)}
                 >
@@ -248,7 +248,7 @@ const DashboardLayout = () => {
 
               {canManageInventory && (
                 <NavLink
-                  to="/manager/inventory"
+                  to={isAdmin ? "/admin/inventory" : "/manager/inventory"}
                   className={({ isActive }) => `dashboard-nav-item py-1.5 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 text-decoration-none transition ${isActive ? 'active bg-primary text-white font-bold' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
                   onClick={() => setMobileDrawerOpen(false)}
                 >
@@ -377,7 +377,7 @@ const DashboardLayout = () => {
 
               {canManagePromotions && (
                 <NavLink
-                  to="/manager/promotions"
+                  to={isAdmin ? "/admin/promotions" : "/manager/promotions"}
                   className={({ isActive }) => `dashboard-nav-item py-1.5 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 text-decoration-none transition ${isActive ? 'active bg-primary text-white font-bold' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
                   onClick={() => setMobileDrawerOpen(false)}
                 >
@@ -396,7 +396,7 @@ const DashboardLayout = () => {
 
               {canViewOrders && (
                 <NavLink
-                  to="/manager/orders"
+                  to={isAdmin ? "/admin/orders" : "/manager/orders"}
                   end
                   className={({ isActive }) => `dashboard-nav-item py-1.5 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 text-decoration-none transition ${isActive && !location.search ? 'active bg-primary text-white font-bold' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
                   onClick={() => setMobileDrawerOpen(false)}
@@ -405,9 +405,19 @@ const DashboardLayout = () => {
                 </NavLink>
               )}
 
+              {(canViewOrders || isStoreManager || isAdmin || isSuperAdmin) && (
+                <NavLink
+                  to={isAdmin ? "/admin/shipments" : "/manager/shipments"}
+                  className={({ isActive }) => `dashboard-nav-item py-1.5 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 text-decoration-none transition ${isActive ? 'active bg-primary text-white font-bold' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
+                  onClick={() => setMobileDrawerOpen(false)}
+                >
+                  <i className="bi bi-truck text-warning"></i> Live Shipments &amp; Tracking
+                </NavLink>
+              )}
+
               {canViewPayments && (
                 <NavLink
-                  to="/manager/payments"
+                  to={isAdmin ? "/admin/payments" : "/manager/payments"}
                   className={({ isActive }) => `dashboard-nav-item py-1.5 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 text-decoration-none transition ${isActive ? 'active bg-primary text-white font-bold' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
                   onClick={() => setMobileDrawerOpen(false)}
                 >
@@ -417,7 +427,7 @@ const DashboardLayout = () => {
 
               {canManageWarranty && (
                 <NavLink
-                  to="/manager/warranty"
+                  to={isAdmin ? "/admin/warranty" : "/manager/warranty"}
                   className={({ isActive }) => `dashboard-nav-item py-1.5 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 text-decoration-none transition ${isActive ? 'active bg-primary text-white font-bold' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
                   onClick={() => setMobileDrawerOpen(false)}
                 >
@@ -427,7 +437,7 @@ const DashboardLayout = () => {
 
               {canManageFeedback && (
                 <NavLink
-                  to="/manager/feedback"
+                  to={isAdmin ? "/admin/feedback" : "/manager/feedback"}
                   className={({ isActive }) => `dashboard-nav-item py-1.5 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 text-decoration-none transition ${isActive ? 'active bg-primary text-white font-bold' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
                   onClick={() => setMobileDrawerOpen(false)}
                 >
@@ -456,7 +466,7 @@ const DashboardLayout = () => {
 
               {canViewReports && (
                 <NavLink
-                  to="/manager/reports"
+                  to={isAdmin ? "/admin/reports" : "/manager/reports"}
                   className={({ isActive }) => `dashboard-nav-item py-1.5 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 text-decoration-none transition ${isActive ? 'active bg-primary text-white font-bold' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
                   onClick={() => setMobileDrawerOpen(false)}
                 >
