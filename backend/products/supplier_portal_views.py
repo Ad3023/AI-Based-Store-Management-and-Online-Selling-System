@@ -162,6 +162,23 @@ class SupplierDashboardStatsView(views.APIView):
                 'total_orders_received': total_orders_received,
                 'new_orders': new_orders,
                 'pending_responses': pending_responses,
+                'awaiting_response': pending_responses,
+                'accepted_orders': accepted_orders,
+                'rejected_orders': rejected_orders,
+                'preparing_orders': preparing_orders,
+                'shipped_orders': shipped_orders,
+                'delivered_orders': delivered_orders,
+                'pending_invoices': pending_invoices,
+                'approved_invoices': approved_invoices,
+                'total_invoiced_amount': str(total_invoiced_amount),
+                'total_paid_amount': str(total_paid_amount),
+                'outstanding_balance': str(outstanding_balance),
+            },
+            'metrics': {
+                'total_orders_received': total_orders_received,
+                'new_orders': new_orders,
+                'pending_responses': pending_responses,
+                'awaiting_response': pending_responses,
                 'accepted_orders': accepted_orders,
                 'rejected_orders': rejected_orders,
                 'preparing_orders': preparing_orders,
@@ -174,6 +191,7 @@ class SupplierDashboardStatsView(views.APIView):
                 'outstanding_balance': str(outstanding_balance),
             },
             'recent_orders': PurchaseRequestSerializer(recent_pos, many=True).data,
+            'recent_purchase_orders': PurchaseRequestSerializer(recent_pos, many=True).data,
             'recent_invoices': SupplierInvoiceSerializer(recent_invoices, many=True).data
         })
 
@@ -704,6 +722,7 @@ class AdminCreateSupplierAccountView(views.APIView):
                 user.phone_number = formatted_phone
             if password:
                 user.set_password(password)
+                user.must_change_password = True
             user.save()
 
             supplier.email = email
@@ -736,6 +755,7 @@ class AdminCreateSupplierAccountView(views.APIView):
                 existing_user.set_password(password)
             existing_user.email_verified = True
             existing_user.is_active = True
+            existing_user.must_change_password = True
             existing_user.save()
 
             supplier.user = existing_user
@@ -770,7 +790,8 @@ class AdminCreateSupplierAccountView(views.APIView):
             role=User.RoleChoices.SUPPLIER,
             phone_number=formatted_phone,
             email_verified=True,
-            is_active=True
+            is_active=True,
+            must_change_password=True
         )
 
         supplier.user = new_user

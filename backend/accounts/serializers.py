@@ -100,9 +100,10 @@ class UserSerializer(serializers.ModelSerializer):
             'id', 'username', 'email', 'first_name', 'last_name',
             'role', 'custom_role', 'is_super_admin', 'is_sub_admin', 'is_staff', 'is_superuser',
             'phone_number', 'address', 'city', 'avatar', 'email_verified', 'is_active',
+            'must_change_password',
             'permissions', 'supplier_id', 'supplier_name', 'created_at', 'profile'
         ]
-        read_only_fields = ['id', 'created_at', 'role', 'custom_role', 'is_staff', 'is_superuser', 'permissions', 'email_verified', 'supplier_id', 'supplier_name']
+        read_only_fields = ['id', 'created_at', 'role', 'custom_role', 'is_staff', 'is_superuser', 'permissions', 'email_verified', 'must_change_password', 'supplier_id', 'supplier_name']
 
     def get_is_sub_admin(self, obj):
         return obj.is_sub_admin()
@@ -505,6 +506,13 @@ class LoginSerializer(serializers.Serializer):
         user_obj = User.objects.filter(
             Q(username__iexact=raw_identifier) | Q(email__iexact=raw_identifier)
         ).first()
+
+        # Support 'admin' alias for primary administrator account
+        if not user_obj and raw_identifier.lower() == 'admin':
+            user_obj = User.objects.filter(
+                role__in=[User.RoleChoices.ADMIN, User.RoleChoices.SUPER_ADMIN],
+                is_active=True
+            ).order_by('id').first()
 
         user_lookup = user_obj.username if user_obj else raw_identifier
 

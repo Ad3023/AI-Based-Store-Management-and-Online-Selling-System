@@ -18,6 +18,10 @@ class SupplierSerializer(serializers.ModelSerializer):
     supplied_products = serializers.SerializerMethodField()
 
     user_username = serializers.CharField(source='user.username', read_only=True, allow_null=True)
+    user_email = serializers.CharField(source='user.email', read_only=True, allow_null=True)
+    user_is_active = serializers.BooleanField(source='user.is_active', read_only=True, allow_null=True)
+    must_change_password = serializers.BooleanField(source='user.must_change_password', read_only=True, allow_null=True)
+    user_last_login = serializers.DateTimeField(source='user.last_login', read_only=True, allow_null=True)
     has_account = serializers.SerializerMethodField()
 
     def get_has_account(self, obj):
@@ -30,7 +34,8 @@ class SupplierSerializer(serializers.ModelSerializer):
             'address', 'business_address', 'notes', 'status', 'supplied_categories',
             'supplied_categories_details', 'is_active', 'product_count',
             'total_purchases_amount', 'total_paid_amount', 'outstanding_balance',
-            'supplied_products', 'user', 'user_username', 'has_account', 'created_at', 'updated_at'
+            'supplied_products', 'user', 'user_username', 'user_email', 'user_is_active',
+            'must_change_password', 'user_last_login', 'has_account', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'total_purchases_amount', 'total_paid_amount', 'outstanding_balance', 'created_at', 'updated_at']
 
@@ -60,6 +65,12 @@ class SupplierSerializer(serializers.ModelSerializer):
             data['phone'] = data['phone_number']
         if 'business_address' in data and not data.get('address'):
             data['address'] = data['business_address']
+        if 'supplied_categories' in data and isinstance(data['supplied_categories'], str):
+            val = data['supplied_categories']
+            from products.models import Category
+            cat_names = [c.strip() for c in val.split(',') if c.strip()]
+            cat_ids = list(Category.objects.filter(name__in=cat_names).values_list('id', flat=True))
+            data['supplied_categories'] = cat_ids
         return super().to_internal_value(data)
 
     def validate_email(self, value):

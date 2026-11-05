@@ -402,6 +402,7 @@ class LoginView(APIView):
                 'user': UserSerializer(user, context={'request': request}).data,
                 'role': user.role,
                 'dashboard_url': dashboard_url,
+                'must_change_password': bool(getattr(user, 'must_change_password', False)),
                 'message': 'Logged in successfully.'
             })
 
@@ -1034,6 +1035,8 @@ class ChangePasswordView(APIView):
             return Response({'new_password_confirm': ['Confirmation password does not match new password.']}, status=status.HTTP_400_BAD_REQUEST)
 
         request.user.set_password(new_password)
+        if hasattr(request.user, 'must_change_password'):
+            request.user.must_change_password = False
         request.user.save()
 
         try:

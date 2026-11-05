@@ -40,6 +40,7 @@ class Supplier(models.Model):
         ACTIVE = 'ACTIVE', 'Active / Approved'
         PENDING_APPROVAL = 'PENDING_APPROVAL', 'Pending Approval'
         SUSPENDED = 'SUSPENDED', 'Suspended'
+        DEACTIVATED = 'DEACTIVATED', 'Deactivated'
 
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,

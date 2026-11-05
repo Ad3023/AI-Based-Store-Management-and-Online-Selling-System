@@ -33,14 +33,14 @@ ChartJS.register(
 );
 
 const ManagerOverviewPage = () => {
-  const { user, isAdmin, isSuperAdmin, isStoreManager, hasPermission, hasAnyPermission } = useAuth();
+  const { user, isAdmin, isSuperAdmin, hasPermission, hasAnyPermission } = useAuth();
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorState, setErrorState] = useState(null);
   const [reportTimeframe, setReportTimeframe] = useState('Monthly');
 
-  const canViewReports = isSuperAdmin || isAdmin || isStoreManager || user?.role === 'store_manager' || hasPermission('reports.view');
+  const canViewReports = isSuperAdmin || isAdmin || hasPermission('reports.view');
   const isOrderManagerRole = user?.role === 'order_manager';
 
   const fetchDashboard = useCallback(async (tf = reportTimeframe) => {
@@ -201,16 +201,7 @@ const ManagerOverviewPage = () => {
     );
   }
 
-  const {
-    kpis,
-    monthly_sales,
-    yearly_sales,
-    sales_chart,
-    category_distribution,
-    pending_verifications_queue = [],
-    recent_orders = [],
-    low_stock_items = []
-  } = data || {};
+  const { kpis, monthly_sales, yearly_sales, sales_chart, category_distribution, pending_verifications_queue, recent_orders, low_stock_items } = data;
 
   // Active sales chart data driven by timeframe filter
   const activeSeries = reportTimeframe === 'Yearly'
@@ -278,7 +269,7 @@ const ManagerOverviewPage = () => {
         padding: 10,
         cornerRadius: 8,
         callbacks: {
-          label: function(context) {
+          label: function (context) {
             if (context.datasetIndex === 1) {
               const actualOrders = context.raw / 1000;
               return `Orders Volume: ${actualOrders} order${actualOrders === 1 ? '' : 's'}`;
@@ -700,7 +691,7 @@ const ManagerOverviewPage = () => {
           ) : (
             <div className="card ethio-card p-4">
               <h6 className="fw-bolder mb-3 text-slate-900">Payment Evidence Queue</h6>
-              {(pending_verifications_queue || []).length === 0 ? (
+              {pending_verifications_queue.length === 0 ? (
                 <div className="text-center py-3 text-slate-400 text-xs">
                   <i className="bi bi-check-circle text-success fs-4 d-block mb-1"></i>
                   All payment slips verified.
