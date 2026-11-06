@@ -112,3 +112,4 @@ const ProcurementInvoiceTable = ({ invoices = [], isAdmin = false, onVerify, onA
 };
 
 export default ProcurementInvoiceTable;
+

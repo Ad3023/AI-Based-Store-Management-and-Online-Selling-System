@@ -142,3 +142,4 @@ class SupplierPortalPaymentListView(generics.ListAPIView):
         return SupplierPayment.objects.filter(supplier=supplier).select_related(
             'supplier', 'purchase_order', 'invoice', 'authorized_by'
         ).order_by('-payment_date')
+

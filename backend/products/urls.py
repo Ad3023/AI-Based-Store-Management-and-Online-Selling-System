@@ -19,6 +19,8 @@ from .views import (
     SupplierPaymentListCreateView, SupplierPaymentDetailView,
     ProcurementReportsView
 )
+from .rfq_views import RFQListCreateView, RFQDetailView, QuotationComparisonView
+from .quotation_selection_views import QuotationSelectView, ConvertQuotationToPOView
 
 urlpatterns = [
     path('categories/', CategoryListCreateView.as_view(), name='category-list'),
@@ -52,6 +54,13 @@ urlpatterns = [
     # Supplier Payments (Admin authorization & recording)
     path('supplier-payments/', SupplierPaymentListCreateView.as_view(), name='supplier-payment-list-create'),
     path('supplier-payments/<int:pk>/', SupplierPaymentDetailView.as_view(), name='supplier-payment-detail'),
+
+    # Request for Quotation (RFQ) & Supplier Quotations
+    path('rfqs/', RFQListCreateView.as_view(), name='rfq-list-create'),
+    path('rfqs/<int:pk>/', RFQDetailView.as_view(), name='rfq-detail'),
+    path('quotations/compare/', QuotationComparisonView.as_view(), name='quotation-compare'),
+    path('quotations/<int:pk>/select/', QuotationSelectView.as_view(), name='quotation-select'),
+    path('quotations/<int:pk>/create-po/', ConvertQuotationToPOView.as_view(), name='quotation-create-po'),
 
     # Procurement & Financial Reports (Admin)
     path('procurement/reports/', ProcurementReportsView.as_view(), name='procurement-reports'),

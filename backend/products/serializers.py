@@ -519,7 +519,6 @@ class SupplierInvoiceSerializer(serializers.ModelSerializer):
             'id', 'invoice_number', 'supplier', 'supplier_name', 'supplier_email',
             'supplier_bank_name', 'supplier_bank_account_name', 'supplier_bank_account_number',
             'purchase_order', 'purchase_order_number', 'product_name',
-            'invoice_date', 'due_date',
             'ordered_quantity', 'delivered_quantity', 'accepted_quantity', 'invoiced_quantity',
             'unit_price', 'subtotal', 'tax_amount', 'total_amount', 'paid_amount', 'outstanding_amount',
             'status', 'status_display', 'notes', 'attachment', 'attachment_url', 'rejection_reason',

@@ -40,3 +40,4 @@ const PaymentKPIs = ({ payments = [], awaitingInvoices = [] }) => {
 };
 
 export default PaymentKPIs;
+

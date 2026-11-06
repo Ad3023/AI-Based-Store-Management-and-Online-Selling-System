@@ -70,6 +70,14 @@ const DashboardNavSupplierManagement = ({ onNavClick }) => {
       </div>
 
       <NavLink
+        to="/admin/procurement/rfqs"
+        className={({ isActive }) => `dashboard-nav-item py-1.5 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 text-decoration-none transition ${isActive ? 'active bg-primary text-white font-bold' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
+        onClick={onNavClick}
+      >
+        <i className="bi bi-chat-left-quote text-teal-400"></i> Price Quotations &amp; RFQs
+      </NavLink>
+
+      <NavLink
         to="/admin/procurement/approvals"
         className={({ isActive }) => `dashboard-nav-item py-1.5 px-3 mb-1 rounded-2 text-xs d-flex align-items-center gap-2.5 text-decoration-none transition ${isActive ? 'active bg-primary text-white font-bold' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
         onClick={onNavClick}

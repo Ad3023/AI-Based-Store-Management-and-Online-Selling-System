@@ -598,6 +598,13 @@ class PurchaseRequest(models.Model):
     supplier_tracking_number = models.CharField(max_length=150, blank=True, default='')
     supplier_dispatched_at = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True, default='')
+    quotation = models.ForeignKey(
+        'SupplierQuotation',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='purchase_orders'
+    )
     notification_log = models.ForeignKey(
         SupplierNotificationLog,
         on_delete=models.SET_NULL,
@@ -635,9 +642,9 @@ class PurchaseRequest(models.Model):
     @property
     def accepted_quantity(self):
         items = list(self.items.all())
-        item_acc = sum(max(0, (it.received_quantity or 0) - (it.damaged_quantity or 0)) for it in items)
-        direct_acc = max(0, (self.received_quantity or 0) - (self.damaged_quantity or 0))
-        return max(item_acc, direct_acc)
+        if items:
+            return sum(max(0, (it.received_quantity or 0) - (it.damaged_quantity or 0)) for it in items)
+        return max(0, (self.received_quantity or 0) - (self.damaged_quantity or 0))
 
     def __str__(self):
         item_label = self.product.name if self.product else f"{self.quantity} units"
@@ -865,3 +872,115 @@ class StockAlertHistory(models.Model):
 
     def __str__(self):
         return f"[{self.alert_type}] {self.product.name} (Stock: {self.current_stock}) at {self.created_at.strftime('%Y-%m-%d %H:%M')}"
+
+
+class RequestForQuotation(models.Model):
+    class Status(models.TextChoices):
+        DRAFT = 'DRAFT', 'Draft'
+        SENT = 'SENT', 'Sent'
+        VIEWED = 'VIEWED', 'Viewed'
+        RESPONDED = 'RESPONDED', 'Responded'
+        DECLINED = 'DECLINED', 'Declined'
+        EXPIRED = 'EXPIRED', 'Expired'
+        CANCELLED = 'CANCELLED', 'Cancelled'
+
+    rfq_number = models.CharField(max_length=60, unique=True, db_index=True)
+    supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE, related_name='rfqs')
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_rfqs')
+    status = models.CharField(max_length=30, choices=Status.choices, default=Status.SENT)
+    required_delivery_date = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True, default='')
+    decline_reason = models.TextField(blank=True, default='')
+    sent_at = models.DateTimeField(default=timezone.now)
+    viewed_at = models.DateTimeField(null=True, blank=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def save(self, *args, **kwargs):
+        if not self.rfq_number:
+            import uuid
+            self.rfq_number = f"RFQ-{uuid.uuid4().hex[:8].upper()}"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.rfq_number} - {self.supplier.name} [{self.status}]"
+
+
+class RFQItem(models.Model):
+    rfq = models.ForeignKey(RequestForQuotation, on_delete=models.CASCADE, related_name='items')
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='rfq_items')
+    requested_quantity = models.PositiveIntegerField(default=1)
+    target_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    notes = models.CharField(max_length=255, blank=True, default='')
+
+    class Meta:
+        ordering = ['id']
+
+    def __str__(self):
+        return f"{self.product.name} ({self.requested_quantity} pcs) for {self.rfq.rfq_number}"
+
+
+class SupplierQuotation(models.Model):
+    class Status(models.TextChoices):
+        DRAFT = 'DRAFT', 'Draft'
+        SUBMITTED = 'SUBMITTED', 'Submitted'
+        SELECTED = 'SELECTED', 'Selected'
+        NOT_SELECTED = 'NOT_SELECTED', 'Not Selected'
+        EXPIRED = 'EXPIRED', 'Expired'
+        WITHDRAWN = 'WITHDRAWN', 'Withdrawn'
+
+    quotation_number = models.CharField(max_length=60, unique=True, db_index=True)
+    rfq = models.ForeignKey(RequestForQuotation, on_delete=models.CASCADE, related_name='quotations')
+    supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE, related_name='quotations')
+    submitted_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='submitted_quotations')
+    status = models.CharField(max_length=30, choices=Status.choices, default=Status.SUBMITTED)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    delivery_lead_time = models.CharField(max_length=120, blank=True, default='')
+    estimated_delivery_date = models.DateField(null=True, blank=True)
+    payment_terms = models.CharField(max_length=200, blank=True, default='Bank transfer after delivery')
+    valid_until = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True, default='')
+    selection_notes = models.TextField(blank=True, default='')
+    selected_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='selected_quotations')
+    selected_at = models.DateTimeField(null=True, blank=True)
+    purchase_order = models.ForeignKey('PurchaseRequest', on_delete=models.SET_NULL, null=True, blank=True, related_name='source_quotations')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def save(self, *args, **kwargs):
+        if not self.quotation_number:
+            import uuid
+            self.quotation_number = f"QUO-{uuid.uuid4().hex[:8].upper()}"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.quotation_number} - {self.supplier.name} (ETB {self.total_amount}) [{self.status}]"
+
+
+class SupplierQuotationItem(models.Model):
+    quotation = models.ForeignKey(SupplierQuotation, on_delete=models.CASCADE, related_name='items')
+    rfq_item = models.ForeignKey(RFQItem, on_delete=models.SET_NULL, null=True, blank=True, related_name='quotation_items')
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='quoted_items')
+    requested_quantity = models.PositiveIntegerField(default=1)
+    offered_unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    available_quantity = models.PositiveIntegerField(default=1)
+    line_total = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    notes = models.CharField(max_length=255, blank=True, default='')
+
+    class Meta:
+        ordering = ['id']
+
+    def save(self, *args, **kwargs):
+        if self.offered_unit_price and self.requested_quantity:
+            self.line_total = self.offered_unit_price * self.requested_quantity
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.product.name} @ ETB {self.offered_unit_price} ({self.quotation.quotation_number})"

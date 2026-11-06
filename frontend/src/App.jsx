@@ -79,6 +79,7 @@ import SupplierInvoicesPage from './pages/procurement/SupplierInvoicesPage';
 import SupplierPaymentsPage from './pages/procurement/SupplierPaymentsPage';
 import ProcurementReportsPage from './pages/procurement/ProcurementReportsPage';
 import ProcurementHistoryPage from './pages/procurement/ProcurementHistoryPage';
+import ManagerRFQPage from './pages/procurement/ManagerRFQPage';
 
 // Delivery Driver Portal Pages
 import DriverLoginPage from './pages/driver/DriverLoginPage';
@@ -91,6 +92,7 @@ import SupplierDashboardPage from './pages/supplier/SupplierDashboardPage';
 import SupplierPurchaseOrdersPage from './pages/supplier/SupplierPurchaseOrdersPage';
 import SupplierPortalInvoicesPage from './pages/supplier/SupplierInvoicesPage';
 import SupplierPortalPaymentsPage from './pages/supplier/SupplierPaymentsPage';
+import SupplierQuotationsPage from './pages/supplier/SupplierQuotationsPage';
 
 // Layout with Navbar and Footer for public & customer pages
 const CustomerStoreLayout = () => {
@@ -245,6 +247,7 @@ function App() {
                   <Route path="inventory" element={<PermissionRoute permissions={['inventory.manage', 'products.view']}><ManagerInventoryPage /></PermissionRoute>} />
                   <Route path="suppliers" element={<ProcurementSuppliersPage />} />
                   <Route path="procurement/suppliers" element={<ProcurementSuppliersPage />} />
+                  <Route path="procurement/rfqs" element={<ManagerRFQPage />} />
                   <Route path="procurement/purchase-orders/create" element={<CreatePurchaseOrderPage />} />
                   <Route path="procurement/purchase-orders" element={<PurchaseOrderHistoryPage />} />
                   <Route path="procurement/receive" element={<ReceiveProductsPage />} />
@@ -273,6 +276,7 @@ function App() {
                   <Route path="inventory" element={<PermissionRoute permissions={['inventory.manage', 'products.view']}><ManagerInventoryPage /></PermissionRoute>} />
                   <Route path="suppliers" element={<ProcurementSuppliersPage />} />
                   <Route path="procurement/suppliers" element={<ProcurementSuppliersPage />} />
+                  <Route path="procurement/rfqs" element={<ManagerRFQPage />} />
                   <Route path="procurement/purchase-orders/create" element={<CreatePurchaseOrderPage />} />
                   <Route path="procurement/purchase-orders" element={<PurchaseOrderHistoryPage />} />
                   <Route path="procurement/receive" element={<ReceiveProductsPage />} />
@@ -319,6 +323,7 @@ function App() {
                   <Route path="shipments" element={<LiveShipmentsPage />} />
                   <Route path="users" element={<AdminUsersPage />} />
                   <Route path="suppliers" element={<ProcurementSuppliersPage />} />
+                  <Route path="procurement/rfqs" element={<ManagerRFQPage />} />
                   <Route path="procurement/approvals" element={<PurchaseOrderHistoryPage adminApprovalMode={true} />} />
                   <Route path="procurement/invoices" element={<SupplierInvoicesPage />} />
                   <Route path="procurement/payments" element={<SupplierPaymentsPage defaultTab="disbursements" />} />
@@ -358,6 +363,7 @@ function App() {
                 >
                   <Route index element={<SupplierDashboardPage />} />
                   <Route path="dashboard" element={<SupplierDashboardPage />} />
+                  <Route path="quotations" element={<SupplierQuotationsPage />} />
                   <Route path="purchase-orders" element={<SupplierPurchaseOrdersPage />} />
                   <Route path="invoices" element={<SupplierPortalInvoicesPage />} />
                   <Route path="payments" element={<SupplierPortalPaymentsPage />} />

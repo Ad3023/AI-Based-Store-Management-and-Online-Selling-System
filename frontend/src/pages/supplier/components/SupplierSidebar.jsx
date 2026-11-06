@@ -101,6 +101,20 @@ const SupplierSidebar = ({ mobileDrawerOpen, setMobileDrawerOpen, supplierName, 
           </NavLink>
 
           <NavLink
+            to="/supplier/quotations"
+            className={({ isActive }) =>
+              `d-flex align-items-center gap-2.5 px-3 py-2 rounded-3 text-decoration-none text-xs fw-medium mb-1 transition-colors ${
+                isActive
+                  ? 'bg-teal-600 text-white shadow-sm'
+                  : 'text-white-50 hover-bg-white-10 hover-text-white'
+              }`
+            }
+          >
+            <i className="bi bi-chat-left-quote-fill fs-6"></i>
+            <span className="flex-grow-1">Quotation Requests</span>
+          </NavLink>
+
+          <NavLink
             to="/supplier/invoices"
             className={({ isActive }) =>
               `d-flex align-items-center gap-2.5 px-3 py-2 rounded-3 text-decoration-none text-xs fw-medium mb-1 transition-colors ${

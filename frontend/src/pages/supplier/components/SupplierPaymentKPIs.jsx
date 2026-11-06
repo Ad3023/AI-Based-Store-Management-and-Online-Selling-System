@@ -34,3 +34,4 @@ const SupplierPaymentKPIs = ({ payments = [], invoices = [] }) => {
 };
 
 export default SupplierPaymentKPIs;
+

@@ -9,10 +9,20 @@ from .supplier_portal_views import (
     SupplierPortalPaymentListView,
     SupplierPortalNotificationListView,
 )
+from .supplier_portal_quotation_views import (
+    SupplierPortalRFQListView,
+    SupplierPortalRFQDetailView,
+    SupplierPortalQuotationListCreateView,
+)
 
 urlpatterns = [
     # Supplier Portal Dashboard & Stats
     path('dashboard/', SupplierDashboardStatsView.as_view(), name='supplier-dashboard-stats'),
+
+    # Request for Quotations (RFQs) & Quotations
+    path('rfqs/', SupplierPortalRFQListView.as_view(), name='supplier-rfq-list'),
+    path('rfqs/<int:pk>/', SupplierPortalRFQDetailView.as_view(), name='supplier-rfq-detail'),
+    path('quotations/', SupplierPortalQuotationListCreateView.as_view(), name='supplier-quotation-list-create'),
 
     # Purchase Orders & Response
     path('purchase-orders/', SupplierPurchaseOrderListView.as_view(), name='supplier-po-list'),

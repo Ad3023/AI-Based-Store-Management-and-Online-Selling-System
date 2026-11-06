@@ -122,3 +122,4 @@ const SupplierInvoiceDetailModal = ({ invoice, onClose }) => {
 };
 
 export default SupplierInvoiceDetailModal;
+

@@ -44,3 +44,4 @@ const InvoiceKPIs = ({ invoices = [] }) => {
 };
 
 export default InvoiceKPIs;
+

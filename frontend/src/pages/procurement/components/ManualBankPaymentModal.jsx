@@ -165,3 +165,4 @@ const ManualBankPaymentModal = ({ show, invoice: preselectedInvoice, eligibleInv
 };
 
 export default ManualBankPaymentModal;
+

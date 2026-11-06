@@ -71,3 +71,4 @@ const SupplierPaymentTable = ({ payments = [] }) => {
 };
 
 export default SupplierPaymentTable;
+

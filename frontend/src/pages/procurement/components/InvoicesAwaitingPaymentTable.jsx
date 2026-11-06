@@ -65,3 +65,4 @@ const InvoicesAwaitingPaymentTable = ({ invoices = [], onRecordPayment }) => {
 };
 
 export default InvoicesAwaitingPaymentTable;
+

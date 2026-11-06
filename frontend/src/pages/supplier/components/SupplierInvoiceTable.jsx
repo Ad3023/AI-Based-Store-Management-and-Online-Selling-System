@@ -87,3 +87,4 @@ const SupplierInvoiceTable = ({ invoices = [], onSelectInvoice }) => {
 };
 
 export default SupplierInvoiceTable;
+
