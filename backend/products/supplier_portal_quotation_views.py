@@ -159,6 +159,8 @@ class SupplierPortalQuotationListCreateView(views.APIView):
         rfq.save(update_fields=['status', 'responded_at', 'updated_at'])
 
         log_supplier_action(request.user, "QUOTATION_SUBMITTED", f"Submitted Quotation #{quotation.quotation_number} (ETB {total_amount}) for RFQ #{rfq.rfq_number}", request)
+        from .supplier_notification_service import notify_store_manager_quotation_submitted
+        notify_store_manager_quotation_submitted(quotation)
         notify_store_and_admin(
             title=f"Quotation Received: #{quotation.quotation_number}",
             message=f"Supplier '{supplier.name}' submitted Quotation #{quotation.quotation_number} (ETB {quotation.total_amount}) for RFQ #{rfq.rfq_number}.",

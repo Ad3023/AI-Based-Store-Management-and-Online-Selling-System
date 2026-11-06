@@ -57,6 +57,8 @@ class PurchaseRequestSendToSupplierView(APIView):
         if notes:
             pr.supplier_confirmation_notes = notes
         pr.save()
+        from .supplier_notification_service import notify_supplier_purchase_order
+        notify_supplier_purchase_order(pr)
         return Response({'message': f'PO {pr.request_number} marked as sent to supplier.', 'purchase_request': PurchaseRequestSerializer(pr).data})
 
 

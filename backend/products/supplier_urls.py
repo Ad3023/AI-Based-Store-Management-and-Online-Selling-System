@@ -14,6 +14,7 @@ from .supplier_portal_quotation_views import (
     SupplierPortalRFQDetailView,
     SupplierPortalQuotationListCreateView,
 )
+from .supplier_communication_views import SupplierSendResponseView
 
 urlpatterns = [
     # Supplier Portal Dashboard & Stats
@@ -38,5 +39,6 @@ urlpatterns = [
 
     # Notifications
     path('notifications/', SupplierPortalNotificationListView.as_view(), name='supplier-notification-list'),
+    path('send-response/', SupplierSendResponseView.as_view(), name='supplier-send-response'),
 ]
 

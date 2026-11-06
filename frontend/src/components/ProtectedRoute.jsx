@@ -307,7 +307,8 @@ export const SupplierRoute = ({ children }) => {
   }
 
   if (!user) {
-    return <Navigate to={`/supplier/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
+    const fullPath = `${location.pathname}${location.search || ''}`;
+    return <Navigate to={`/supplier/login?redirect=${encodeURIComponent(fullPath)}`} replace />;
   }
 
   const isSupplier = user?.role === 'supplier' || Boolean(user?.is_supplier);

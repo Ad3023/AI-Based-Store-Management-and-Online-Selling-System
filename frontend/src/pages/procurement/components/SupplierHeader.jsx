@@ -25,15 +25,17 @@ const SupplierHeader = ({ activeTab, onTabChange, isAdmin, onOpenCreate }) => {
               <span>Create Purchase Order</span>
             </Link>
           )}
-          <button
-            type="button"
-            className="btn btn-ethio-primary rounded-pill px-4 py-2 font-bold text-xs d-flex align-items-center gap-2 shadow-sm"
-            style={{ backgroundColor: '#1b64da', color: '#ffffff' }}
-            onClick={onOpenCreate}
-          >
-            <i className="bi bi-plus-lg"></i>
-            <span>Register New Supplier</span>
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              className="btn btn-ethio-primary rounded-pill px-4 py-2 font-bold text-xs d-flex align-items-center gap-2 shadow-sm"
+              style={{ backgroundColor: '#1b64da', color: '#ffffff' }}
+              onClick={onOpenCreate}
+            >
+              <i className="bi bi-plus-lg"></i>
+              <span>Register New Supplier</span>
+            </button>
+          )}
         </div>
       </div>
 

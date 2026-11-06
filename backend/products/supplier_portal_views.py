@@ -554,6 +554,10 @@ class SupplierPortalNotificationListView(views.APIView):
         return Response(data)
 
     def post(self, request):
+        notif_id = request.data.get('id') or request.data.get('notification_id')
+        if notif_id:
+            Notification.objects.filter(user=request.user, pk=notif_id).update(is_read=True)
+            return Response({'message': f'Notification #{notif_id} marked as read.'})
         # Mark all as read
         Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
         return Response({'message': 'All supplier notifications marked as read.'})

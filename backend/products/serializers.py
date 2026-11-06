@@ -77,8 +77,8 @@ class SupplierSerializer(serializers.ModelSerializer):
     def validate_email(self, value):
         if not value or not str(value).strip():
             return ''
-        from accounts.validators import validate_email_address
-        return validate_email_address(value, required=False)
+        from accounts.validators import validate_business_email_address
+        return validate_business_email_address(value, required=False)
 
     def validate_phone(self, value):
         if not value or not str(value).strip():

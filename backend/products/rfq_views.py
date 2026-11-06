@@ -69,7 +69,8 @@ class RFQListCreateView(generics.ListCreateAPIView):
             tgt = Decimal(str(it.get('target_price'))) if it.get('target_price') else None
             RFQItem.objects.create(rfq=rfq, product=prod, requested_quantity=qty, target_price=tgt, notes=it.get('notes', ''))
 
-        notify_supplier_user(supplier, f"New RFQ: #{rfq.rfq_number}", f"Store Manager requested price quotation for {rfq.items.count()} products.")
+        from .supplier_notification_service import notify_supplier_rfq
+        notify_supplier_rfq(rfq)
         AuditLog.objects.create(user=request.user, action="RFQ_CREATED", details=f"Sent RFQ #{rfq.rfq_number} to {supplier.name}")
         return Response(RequestForQuotationSerializer(rfq).data, status=status.HTTP_201_CREATED)
 

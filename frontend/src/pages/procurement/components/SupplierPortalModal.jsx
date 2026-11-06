@@ -41,7 +41,7 @@ const SupplierPortalModal = ({
             <div className="modal-body p-4 bg-slate-50">
               <div className="alert alert-info py-2 px-3 rounded-3 text-xs mb-3">
                 <i className="bi bi-info-circle me-1.5"></i>
-                Provisions credentials for the <strong>EthioTech Supplier Portal</strong>. Role is strictly locked to <strong>SUPPLIER</strong> with mandatory first-login password change.
+                Sends an official invitation with a six-digit verification code to the supplier's verified company email address.
               </div>
 
               <div className="mb-3">
@@ -56,16 +56,16 @@ const SupplierPortalModal = ({
               </div>
 
               <div className="mb-3">
-                <label className="form-label text-xs fw-semibold text-slate-700">Supplier Gmail Address *</label>
+                <label className="form-label text-xs fw-semibold text-slate-700">Supplier Business Email *</label>
                 <input
                   type="email"
                   className="form-control text-xs"
-                  placeholder="vendor@gmail.com"
+                  placeholder="vendor@company.com or vendor@gmail.com"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   required
                 />
-                <small className="text-slate-400 text-[11px]">Must end with @gmail.com per system rules.</small>
+                <small className="text-slate-400 text-[11px]">A six-digit verification code will be dispatched to this address.</small>
               </div>
 
               <div className="mb-3">
@@ -116,7 +116,7 @@ const SupplierPortalModal = ({
                 style={{ backgroundColor: '#0d9488' }}
                 disabled={submitting}
               >
-                {submitting ? 'Saving Account...' : 'Save Portal Account'}
+                {submitting ? 'Sending Invitation...' : 'Send Verification Invitation'}
               </button>
             </div>
           </form>

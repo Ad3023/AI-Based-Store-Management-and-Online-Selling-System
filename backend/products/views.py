@@ -328,69 +328,11 @@ class InventoryManagementView(APIView):
         })
 
 
-class SupplierListCreateView(generics.ListCreateAPIView):
-    queryset = Supplier.objects.all().order_by('name')
-    serializer_class = SupplierSerializer
-
-    def get_permissions(self):
-        if self.request.method == 'POST':
-            return [require_permission('inventory.manage')()]
-        return [require_permission('products.view')()]
-
-
-class SupplierDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Supplier.objects.all()
-    serializer_class = SupplierSerializer
-
-    def get_permissions(self):
-        if self.request.method in ['PUT', 'PATCH', 'DELETE']:
-            return [require_permission('inventory.manage')()]
-        return [require_permission('products.view')()]
-
-    def perform_update(self, serializer):
-        instance = serializer.save()
-        if instance.status == 'ACTIVE':
-            instance.is_active = True
-        elif instance.status in ['SUSPENDED', 'DEACTIVATED']:
-            instance.is_active = False
-        instance.save(update_fields=['is_active'])
-        if instance.user:
-            instance.user.is_active = instance.is_active
-            instance.user.save(update_fields=['is_active'])
-
-
-class SupplierHistoryView(APIView):
-    """
-    Returns full procurement, invoice, payment, and product history for a given supplier.
-    Available to Store Manager and Admin.
-    """
-    def get_permissions(self):
-        return [require_permission('products.view')()]
-
-    def get(self, request, pk):
-        try:
-            supplier = Supplier.objects.get(pk=pk)
-        except Supplier.DoesNotExist:
-            return Response({'error': 'Supplier not found.'}, status=status.HTTP_404_NOT_FOUND)
-
-        pos = PurchaseRequest.objects.filter(supplier=supplier).select_related('requested_by', 'approved_by').prefetch_related('items').order_by('-created_at')
-        invoices = SupplierInvoice.objects.filter(supplier=supplier).select_related('purchase_order', 'submitted_by', 'reviewed_by').order_by('-created_at')
-        payments = SupplierPayment.objects.filter(supplier=supplier).select_related('purchase_order', 'invoice', 'authorized_by').order_by('-payment_date')
-        products = supplier.products.all()
-
-        return Response({
-            'supplier': SupplierSerializer(supplier).data,
-            'purchase_orders': PurchaseRequestSerializer(pos, many=True).data,
-            'invoices': SupplierInvoiceSerializer(invoices, many=True).data,
-            'payments': SupplierPaymentSerializer(payments, many=True).data,
-            'products': ProductSerializer(products, many=True).data,
-            'metrics': {
-                'total_purchase_orders': pos.count(),
-                'total_purchased_amount': supplier.total_purchases_amount,
-                'total_paid_amount': supplier.total_paid_amount,
-                'outstanding_balance': supplier.outstanding_balance,
-            }
-        })
+from .supplier_management_views import (
+    SupplierListCreateView,
+    SupplierDetailView,
+    SupplierHistoryView,
+)
 
 
 

@@ -34,13 +34,15 @@ const SupplierTable = ({
             ? 'No suppliers match the active search filters.'
             : 'No suppliers registered yet.'}
         </p>
-        <button
-          type="button"
-          className="btn btn-sm btn-outline-primary rounded-pill px-3 text-xs"
-          onClick={onOpenCreate}
-        >
-          <i className="bi bi-plus-lg me-1"></i> Register Supplier
-        </button>
+        {(isAdmin || isSuperAdmin) && (
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-primary rounded-pill px-3 text-xs"
+            onClick={onOpenCreate}
+          >
+            <i className="bi bi-plus-lg me-1"></i> Register Supplier
+          </button>
+        )}
       </div>
     );
   }
@@ -123,16 +125,16 @@ const SupplierTable = ({
                       >
                         <i className="bi bi-clock-history me-1"></i>History
                       </button>
-                      <button
-                        type="button"
-                        className="btn btn-outline-secondary btn-sm p-1 px-2"
-                        title="Edit Supplier"
-                        onClick={() => onOpenEdit(s)}
-                      >
-                        <i className="bi bi-pencil"></i>
-                      </button>
                       {(isAdmin || isSuperAdmin) && (
                         <>
+                          <button
+                            type="button"
+                            className="btn btn-outline-secondary btn-sm p-1 px-2"
+                            title="Edit Supplier"
+                            onClick={() => onOpenEdit(s)}
+                          >
+                            <i className="bi bi-pencil"></i>
+                          </button>
                           {currentStatus !== 'ACTIVE' ? (
                             <button
                               type="button"
