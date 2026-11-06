@@ -1,5 +1,6 @@
 from django.urls import path
 from .supplier_portal_views import AdminCreateSupplierAccountView
+from .supplier_invitation_views import AdminInviteSupplierAccountView
 from .views import (
     CategoryListCreateView, CategoryDetailView,
     ProductListView, ProductDetailView,
@@ -37,7 +38,8 @@ urlpatterns = [
     path('suppliers/', SupplierListCreateView.as_view(), name='supplier-list-create'),
     path('suppliers/<int:pk>/', SupplierDetailView.as_view(), name='supplier-detail'),
     path('suppliers/<int:pk>/history/', SupplierHistoryView.as_view(), name='supplier-history'),
-    path('suppliers/<int:pk>/create-account/', AdminCreateSupplierAccountView.as_view(), name='supplier-create-account'),
+    path('suppliers/<int:pk>/create-account/', AdminInviteSupplierAccountView.as_view(), name='supplier-create-account'),
+    path('suppliers/<int:pk>/invite/', AdminInviteSupplierAccountView.as_view(), name='supplier-invite'),
 
     # Purchase Orders & Approvals
     path('purchase-requests/', PurchaseRequestListCreateView.as_view(), name='purchase-request-list-create'),

@@ -117,6 +117,26 @@ class User(AbstractUser):
             return True
         return super().has_perm(perm, obj)
 
+    def clean(self):
+        super().clean()
+        if self.email:
+            self.email = self.email.strip().lower()
+            existing = type(self).objects.filter(email__iexact=self.email)
+            if self.pk:
+                existing = existing.exclude(pk=self.pk)
+            if existing.exists():
+                from django.core.exceptions import ValidationError
+                raise ValidationError({'email': 'A user with this email address already exists.'})
+        if self.username:
+            self.username = self.username.strip()
+
+    def save(self, *args, **kwargs):
+        if self.email:
+            self.email = self.email.strip().lower()
+        if self.username:
+            self.username = self.username.strip()
+        super().save(*args, **kwargs)
+
     def __str__(self):
         role_label = self.get_role_display()
         if self.custom_role:

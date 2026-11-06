@@ -185,7 +185,7 @@ class VerifyEmailView(APIView):
                 'error': f'Invalid verification code. You have {remaining} attempt(s) remaining.'
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # Success! Mark token as used and activate customer account
+        # Success! Mark token as used and activate account
         token_record.is_used = True
         token_record.verified_at = timezone.now()
         token_record.save()
@@ -193,17 +193,39 @@ class VerifyEmailView(APIView):
         # Invalidate any remaining tokens for this user
         EmailVerificationToken.objects.filter(user=user, is_used=False).update(is_used=True)
 
-        user.is_active = True
         user.email_verified = True
-        user.save(update_fields=['is_active', 'email_verified', 'updated_at'])
+        has_active_supplier = hasattr(user, 'supplier_profile') and user.supplier_profile and getattr(user.supplier_profile, 'status', '') == 'ACTIVE'
 
-        log_action(user, "EMAIL_VERIFICATION_SUCCESS", f"Customer {user.email} verified email successfully with OTP", request)
-
-        return Response({
-            'status': 'verified',
-            'message': 'Your EthioTech Market account has been activated. You can now sign in and start shopping.',
-            'redirect_url': '/login'
-        }, status=status.HTTP_200_OK)
+        if user.role == User.RoleChoices.SUPPLIER:
+            if has_active_supplier:
+                user.is_active = True
+                user.save(update_fields=['is_active', 'email_verified', 'updated_at'])
+                log_action(user, "EMAIL_VERIFICATION_SUCCESS", f"Supplier {user.email} verified email successfully with OTP", request)
+                return Response({
+                    'status': 'verified',
+                    'role': 'supplier',
+                    'message': 'Your Supplier Portal account email has been verified. You can now sign in to the Supplier Portal.',
+                    'redirect_url': '/supplier/login'
+                }, status=status.HTTP_200_OK)
+            else:
+                user.is_active = False
+                user.save(update_fields=['is_active', 'email_verified', 'updated_at'])
+                log_action(user, "EMAIL_VERIFICATION_PENDING_APPROVAL", f"Supplier {user.email} verified email, awaiting admin approval", request)
+                return Response({
+                    'status': 'verified_pending_approval',
+                    'role': 'supplier',
+                    'message': 'Your email has been verified successfully. Your account will become active upon Administrator approval.',
+                    'redirect_url': '/supplier/login'
+                }, status=status.HTTP_200_OK)
+        else:
+            user.is_active = True
+            user.save(update_fields=['is_active', 'email_verified', 'updated_at'])
+            log_action(user, "EMAIL_VERIFICATION_SUCCESS", f"Customer {user.email} verified email successfully with OTP", request)
+            return Response({
+                'status': 'verified',
+                'message': 'Your EthioTech Market account has been activated. You can now sign in and start shopping.',
+                'redirect_url': '/login'
+            }, status=status.HTTP_200_OK)
 
 
 class ResendVerificationView(APIView):
@@ -392,6 +414,12 @@ class LoginView(APIView):
                         'redirect_url': '/login',
                         'error': 'This portal is strictly reserved for registered hardware suppliers. Store staff and customers cannot log in here.'
                     }, status=status.HTTP_403_FORBIDDEN)
+
+                if hasattr(user, 'supplier_profile') and user.supplier_profile:
+                    if getattr(user.supplier_profile, 'status', '') in ['SUSPENDED', 'DEACTIVATED']:
+                        return Response({
+                            'error': f'Your supplier organization ({user.supplier_profile.name}) is currently {user.supplier_profile.status.lower()}. Please contact platform administration.'
+                        }, status=status.HTTP_403_FORBIDDEN)
 
             token, _ = Token.objects.get_or_create(user=user)
             portal_label = portal or 'general'

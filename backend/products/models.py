@@ -95,6 +95,16 @@ class Supplier(models.Model):
     def outstanding_balance(self):
         return max(Decimal('0.00'), self.total_purchases_amount - self.total_paid_amount)
 
+    def clean(self):
+        super().clean()
+        if self.email:
+            self.email = self.email.strip().lower()
+
+    def save(self, *args, **kwargs):
+        if self.email:
+            self.email = self.email.strip().lower()
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.name} [{self.status}]"
 

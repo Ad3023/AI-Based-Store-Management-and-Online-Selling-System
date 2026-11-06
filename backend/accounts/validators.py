@@ -64,6 +64,30 @@ def validate_email_address(value, required: bool = True) -> str:
     return normalized
 
 
+def validate_business_email_address(value, required: bool = True) -> str:
+    """
+    Validate real business email address (allowing custom business domains and @gmail.com).
+    Normalizes to lowercase and verifies basic RFC compliance.
+    """
+    if not value or not str(value).strip():
+        if required:
+            raise serializers.ValidationError("Business email address is required.")
+        return ''
+
+    normalized = str(value).strip().lower()
+    if len(normalized) > 254:
+        raise serializers.ValidationError("Email address cannot exceed 254 characters.")
+
+    from django.core.validators import validate_email as django_validate_email
+    from django.core.exceptions import ValidationError as DjangoValidationError
+    try:
+        django_validate_email(normalized)
+    except DjangoValidationError:
+        raise serializers.ValidationError("Please provide a valid business email address.")
+
+    return normalized
+
+
 def validate_phone_number_format(value, required: bool = True) -> str:
     """
     Validate that phone number is exactly 10 digits (e.g. 0911223344 or 0711223344).

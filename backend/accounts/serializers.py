@@ -525,15 +525,19 @@ class LoginSerializer(serializers.Serializer):
 
         if not user:
             if user_obj:
-                # Customer unverified email check (must be checked before generic inactive check)
+                # Unverified email check (must be checked before generic inactive check)
                 if user_obj.check_password(password):
-                    if not user_obj.email_verified and user_obj.role == User.RoleChoices.CUSTOMER:
+                    if not user_obj.email_verified and user_obj.role in [User.RoleChoices.CUSTOMER, User.RoleChoices.SUPPLIER]:
+                        role_label = 'supplier' if user_obj.role == User.RoleChoices.SUPPLIER else 'customer'
                         raise serializers.ValidationError({
                             'unverified': True,
+                            'role': user_obj.role,
                             'email': user_obj.email,
-                            'error': 'Your email address is not verified yet. Please check your inbox or request a new verification code.'
+                            'error': f'Your {role_label} email address is not verified yet. Please check your inbox or invitation message for your verification code.'
                         })
                     if not user_obj.is_active:
+                        if user_obj.role == User.RoleChoices.SUPPLIER:
+                            raise serializers.ValidationError("Your supplier account is awaiting Administrator approval or has been deactivated.")
                         raise serializers.ValidationError("This account has been deactivated.")
                 elif not user_obj.has_usable_password():
                     raise serializers.ValidationError("This account does not have a password configured. Please use Google Sign-In or use Forgot Password to set a password.")
