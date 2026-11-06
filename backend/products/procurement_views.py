@@ -27,19 +27,18 @@ class PurchaseRequestDetailView(generics.RetrieveUpdateAPIView):
         return qs
 
     def perform_update(self, serializer):
-        instance = self.get_object()
         new_status = self.request.data.get('status')
         user = self.request.user
-
+        kwargs = {}
         if new_status in [PurchaseRequest.Status.APPROVED, PurchaseRequest.Status.REJECTED]:
             if not is_admin_user(user):
+                from rest_framework.exceptions import PermissionDenied
                 raise PermissionDenied('Only platform administrators can approve or reject purchase orders.')
-            instance.approval_date = timezone.now()
-            instance.approved_by = user
+            kwargs['approved_by'] = user
+            kwargs['approval_date'] = timezone.now()
             if 'admin_feedback' in self.request.data:
-                instance.admin_feedback = self.request.data.get('admin_feedback', '')
-
-        serializer.save()
+                kwargs['admin_feedback'] = self.request.data.get('admin_feedback', '')
+        serializer.save(**kwargs)
 
 
 class PurchaseRequestSendToSupplierView(APIView):
@@ -98,10 +97,9 @@ class PurchaseRequestReceiveStockView(APIView):
                     )
                 total_recv += rec_qty
                 total_dam += dam_qty
-            all_items = pr.items.all()
-            pr.received_quantity = sum(i.received_quantity for i in all_items)
-            pr.damaged_quantity = sum(i.damaged_quantity for i in all_items)
-            total_ordered = sum(i.quantity for i in all_items)
+            pr.received_quantity += total_recv
+            pr.damaged_quantity += total_dam
+            total_ordered = sum(i.quantity for i in pr.items.all())
             pr.status = PurchaseRequest.Status.RECEIVED if pr.received_quantity >= total_ordered else PurchaseRequest.Status.PARTIALLY_RECEIVED
             pr.save()
         else:
@@ -113,6 +111,11 @@ class PurchaseRequestReceiveStockView(APIView):
             pr.damaged_quantity += dam_qty
             pr.status = PurchaseRequest.Status.RECEIVED if pr.received_quantity >= pr.quantity else PurchaseRequest.Status.PARTIALLY_RECEIVED
             pr.save()
+            first_item = pr.items.first()
+            if first_item:
+                first_item.received_quantity += rec_qty
+                first_item.damaged_quantity += dam_qty
+                first_item.save()
             if pr.product and rec_qty > 0:
                 pr.product.stock += rec_qty
                 pr.product.low_stock_notified = False

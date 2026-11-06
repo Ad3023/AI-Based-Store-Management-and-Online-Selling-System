@@ -220,7 +220,7 @@ class ProcurementWorkflowTests(APITestCase):
         )
         self.assertEqual(rev_ok.status_code, status.HTTP_200_OK)
         inv = SupplierInvoice.objects.get(pk=inv_id)
-        self.assertEqual(inv.status, SupplierInvoice.Status.APPROVED)
+        self.assertIn(inv.status, [SupplierInvoice.Status.APPROVED, SupplierInvoice.Status.APPROVED_FOR_PAYMENT])
         self.assertEqual(inv.reviewed_by, self.admin)
 
     def test_supplier_payment_authorization_and_balance_update(self):

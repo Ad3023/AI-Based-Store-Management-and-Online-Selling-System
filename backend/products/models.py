@@ -54,6 +54,9 @@ class Supplier(models.Model):
     email = models.EmailField(blank=True, default='')
     phone = models.CharField(max_length=30, blank=True, default='')
     address = models.TextField(blank=True, default='')
+    bank_name = models.CharField(max_length=120, blank=True, default='')
+    bank_account_name = models.CharField(max_length=150, blank=True, default='')
+    bank_account_number = models.CharField(max_length=50, blank=True, default='')
     notes = models.TextField(blank=True, default='')
     status = models.CharField(
         max_length=30,
@@ -629,6 +632,13 @@ class PurchaseRequest(models.Model):
             self.total_estimated_cost = eff_price * self.quantity
         super().save(*args, **kwargs)
 
+    @property
+    def accepted_quantity(self):
+        items = list(self.items.all())
+        item_acc = sum(max(0, (it.received_quantity or 0) - (it.damaged_quantity or 0)) for it in items)
+        direct_acc = max(0, (self.received_quantity or 0) - (self.damaged_quantity or 0))
+        return max(item_acc, direct_acc)
+
     def __str__(self):
         item_label = self.product.name if self.product else f"{self.quantity} units"
         return f"{self.request_number} - {item_label} [{self.status}]"
@@ -664,12 +674,20 @@ class PurchaseOrderItem(models.Model):
 
 class SupplierInvoice(models.Model):
     class Status(models.TextChoices):
-        PENDING_APPROVAL = 'PENDING_APPROVAL', 'Pending Approval'
-        APPROVED = 'APPROVED', 'Approved for Payment'
-        REJECTED = 'REJECTED', 'Rejected'
+        DRAFT = 'DRAFT', 'Draft'
+        SUBMITTED = 'SUBMITTED', 'Submitted'
+        UNDER_STORE_REVIEW = 'UNDER_STORE_REVIEW', 'Under Store Review'
+        REJECTED_BY_STORE = 'REJECTED_BY_STORE', 'Rejected by Store'
+        PENDING_ADMIN_APPROVAL = 'PENDING_ADMIN_APPROVAL', 'Pending Admin Approval'
+        APPROVED_FOR_PAYMENT = 'APPROVED_FOR_PAYMENT', 'Approved for Payment'
+        REJECTED_BY_ADMIN = 'REJECTED_BY_ADMIN', 'Rejected by Admin'
         PARTIALLY_PAID = 'PARTIALLY_PAID', 'Partially Paid'
         PAID = 'PAID', 'Paid'
         CANCELLED = 'CANCELLED', 'Cancelled'
+        # Backward compatibility choices
+        PENDING_APPROVAL = 'PENDING_APPROVAL', 'Pending Approval'
+        APPROVED = 'APPROVED', 'Approved for Payment'
+        REJECTED = 'REJECTED', 'Rejected'
 
     invoice_number = models.CharField(max_length=100, db_index=True)
     supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE, related_name='invoices')
@@ -682,11 +700,20 @@ class SupplierInvoice(models.Model):
     )
     invoice_date = models.DateField(default=timezone.now)
     due_date = models.DateField(null=True, blank=True)
+    ordered_quantity = models.IntegerField(default=0)
+    delivered_quantity = models.IntegerField(default=0)
+    accepted_quantity = models.IntegerField(default=0)
+    invoiced_quantity = models.IntegerField(default=0)
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
-    status = models.CharField(max_length=30, choices=Status.choices, default=Status.PENDING_APPROVAL)
+    status = models.CharField(max_length=40, choices=Status.choices, default=Status.SUBMITTED)
     notes = models.TextField(blank=True, default='')
     attachment = models.FileField(upload_to='supplier_invoices/', null=True, blank=True)
+    rejection_reason = models.TextField(blank=True, default='')
+
     submitted_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -694,6 +721,16 @@ class SupplierInvoice(models.Model):
         blank=True,
         related_name='submitted_invoices'
     )
+    verified_by_store = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='store_verified_invoices'
+    )
+    store_verified_at = models.DateTimeField(null=True, blank=True)
+    store_verification_notes = models.TextField(blank=True, default='')
+
     reviewed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -703,6 +740,17 @@ class SupplierInvoice(models.Model):
     )
     reviewed_at = models.DateTimeField(null=True, blank=True)
     review_notes = models.TextField(blank=True, default='')
+
+    approved_by_admin = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='admin_approved_invoices'
+    )
+    admin_approved_at = models.DateTimeField(null=True, blank=True)
+    admin_review_notes = models.TextField(blank=True, default='')
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -759,6 +807,9 @@ class SupplierPayment(models.Model):
         blank=True,
         related_name='authorized_supplier_payments'
     )
+    receipt = models.FileField(upload_to='supplier_payment_receipts/', null=True, blank=True)
+    bank_name = models.CharField(max_length=120, blank=True, default='')
+    bank_account_number = models.CharField(max_length=50, blank=True, default='')
     notes = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

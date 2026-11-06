@@ -15,6 +15,7 @@ from .views import (
     PurchaseRequestDetailView, PurchaseRequestReceiveStockView, PurchaseRequestSendToSupplierView,
     ProductReorderSettingsUpdateView, AdminInventoryMonitoringView,
     SupplierInvoiceListCreateView, SupplierInvoiceDetailView, SupplierInvoiceReviewView,
+    SupplierInvoiceStoreVerifyView,
     SupplierPaymentListCreateView, SupplierPaymentDetailView,
     ProcurementReportsView
 )
@@ -45,6 +46,7 @@ urlpatterns = [
     # Supplier Invoices
     path('supplier-invoices/', SupplierInvoiceListCreateView.as_view(), name='supplier-invoice-list-create'),
     path('supplier-invoices/<int:pk>/', SupplierInvoiceDetailView.as_view(), name='supplier-invoice-detail'),
+    path('supplier-invoices/<int:pk>/store-verify/', SupplierInvoiceStoreVerifyView.as_view(), name='supplier-invoice-store-verify'),
     path('supplier-invoices/<int:pk>/review/', SupplierInvoiceReviewView.as_view(), name='supplier-invoice-review'),
 
     # Supplier Payments (Admin authorization & recording)

@@ -518,115 +518,13 @@ class SupplierPurchaseOrderDeliveryUpdateView(views.APIView):
 # ============================================================================
 # 5. SUPPLIER INVOICE MANAGEMENT
 # ============================================================================
-
-class SupplierPortalInvoiceListCreateView(views.APIView):
-    """
-    List and upload supplier invoices.
-    Suppliers can submit invoices with supporting attachments.
-    Admin review & approval remains mandatory before payment disbursement.
-    """
-    permission_classes = [IsAuthenticatedSupplier]
-    parser_classes = [MultiPartParser, FormParser, JSONParser]
-
-    def get(self, request):
-        supplier = request.user.supplier_profile
-        invoices = SupplierInvoice.objects.filter(supplier=supplier).select_related(
-            'purchase_order', 'submitted_by', 'reviewed_by'
-        ).order_by('-created_at')
-
-        from .serializers import SupplierInvoiceSerializer
-        return Response(SupplierInvoiceSerializer(invoices, many=True).data)
-
-    def post(self, request):
-        supplier = request.user.supplier_profile
-        data = request.data
-
-        invoice_number = (data.get('invoice_number') or '').strip()
-        if not invoice_number:
-            return Response({'error': 'Invoice number is required.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Check invoice uniqueness per supplier
-        if SupplierInvoice.objects.filter(supplier=supplier, invoice_number=invoice_number).exists():
-            return Response({'error': f"An invoice with number '{invoice_number}' already exists for your account."}, status=status.HTTP_400_BAD_REQUEST)
-
-        total_amount = data.get('total_amount') or data.get('amount')
-        if not total_amount:
-            return Response({'error': 'Invoice total amount is required.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            amt = Decimal(str(total_amount))
-            if amt <= Decimal('0.00'):
-                raise ValueError()
-        except Exception:
-            return Response({'error': 'Please enter a valid positive invoice amount in ETB.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        po = None
-        po_id = data.get('purchase_order') or data.get('purchase_order_id')
-        if po_id:
-            po = PurchaseRequest.objects.filter(id=po_id, supplier=supplier).first()
-            if not po:
-                return Response({'error': 'Referenced purchase order not found or does not belong to your account.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        invoice_date = data.get('invoice_date') or timezone.now().date()
-        due_date = data.get('due_date') or None
-        notes = (data.get('notes') or '').strip()
-        attachment = request.FILES.get('attachment')
-
-        # Validate file size (max 10MB) and format
-        if attachment:
-            if attachment.size > 10 * 1024 * 1024:
-                return Response({'error': 'Invoice attachment file size exceeds the 10MB limit.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        invoice = SupplierInvoice.objects.create(
-            supplier=supplier,
-            purchase_order=po,
-            invoice_number=invoice_number,
-            invoice_date=invoice_date,
-            due_date=due_date,
-            total_amount=amt,
-            status=SupplierInvoice.Status.PENDING_APPROVAL,
-            notes=notes,
-            attachment=attachment,
-            submitted_by=request.user
-        )
-
-        log_supplier_action(
-            request.user,
-            "INVOICE_SUBMITTED",
-            f"Supplier {supplier.name} submitted Invoice {invoice.invoice_number} for ETB {invoice.total_amount}.",
-            request
-        )
-
-        notify_store_and_admin(
-            title=f"New Supplier Invoice: {invoice.invoice_number}",
-            message=f"Supplier '{supplier.name}' uploaded Invoice #{invoice.invoice_number} for ETB {invoice.total_amount}. Awaiting Admin payment authorization.",
-            link="/admin/procurement/invoices"
-        )
-
-        from .serializers import SupplierInvoiceSerializer
-        return Response(SupplierInvoiceSerializer(invoice).data, status=status.HTTP_201_CREATED)
-
-
+# 5. SUPPLIER INVOICES & 6. PAYMENTS (DELEGATED TO MODULAR CONTROLLER)
 # ============================================================================
-# 6. SUPPLIER PAYMENT HISTORY (READ-ONLY)
-# ============================================================================
+from .supplier_portal_invoice_views import (
+    SupplierPortalInvoiceListCreateView,
+    SupplierPortalPaymentListView
+)
 
-class SupplierPortalPaymentListView(generics.ListAPIView):
-    """
-    Read-only list of payment transactions and settlements for the authenticated supplier.
-    Suppliers have strictly read-only visibility into approved & disbursed payments.
-    """
-    permission_classes = [IsAuthenticatedSupplier]
-
-    def get_serializer_class(self):
-        from .serializers import SupplierPaymentSerializer
-        return SupplierPaymentSerializer
-
-    def get_queryset(self):
-        supplier = self.request.user.supplier_profile
-        return SupplierPayment.objects.filter(supplier=supplier).select_related(
-            'supplier', 'purchase_order', 'invoice', 'authorized_by'
-        ).order_by('-payment_date')
 
 
 # ============================================================================

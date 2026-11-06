@@ -31,7 +31,8 @@ class SupplierSerializer(serializers.ModelSerializer):
         model = Supplier
         fields = [
             'id', 'name', 'company_name', 'contact_person', 'email', 'phone', 'phone_number',
-            'address', 'business_address', 'notes', 'status', 'supplied_categories',
+            'address', 'business_address', 'bank_name', 'bank_account_name', 'bank_account_number',
+            'notes', 'status', 'supplied_categories',
             'supplied_categories_details', 'is_active', 'product_count',
             'total_purchases_amount', 'total_paid_amount', 'outstanding_balance',
             'supplied_products', 'user', 'user_username', 'user_email', 'user_is_active',
@@ -499,9 +500,15 @@ class PurchaseRequestSerializer(serializers.ModelSerializer):
 class SupplierInvoiceSerializer(serializers.ModelSerializer):
     supplier_name = serializers.CharField(source='supplier.name', read_only=True, allow_null=True)
     supplier_email = serializers.CharField(source='supplier.email', read_only=True, allow_null=True)
+    supplier_bank_name = serializers.CharField(source='supplier.bank_name', read_only=True, default='')
+    supplier_bank_account_name = serializers.CharField(source='supplier.bank_account_name', read_only=True, default='')
+    supplier_bank_account_number = serializers.CharField(source='supplier.bank_account_number', read_only=True, default='')
     purchase_order_number = serializers.CharField(source='purchase_order.request_number', read_only=True, allow_null=True)
+    product_name = serializers.CharField(source='purchase_order.product.name', read_only=True, allow_null=True)
     submitted_by_username = serializers.CharField(source='submitted_by.username', read_only=True, allow_null=True)
+    verified_by_store_username = serializers.CharField(source='verified_by_store.username', read_only=True, allow_null=True)
     reviewed_by_username = serializers.CharField(source='reviewed_by.username', read_only=True, allow_null=True)
+    approved_by_admin_username = serializers.CharField(source='approved_by_admin.username', read_only=True, allow_null=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     outstanding_amount = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     attachment_url = serializers.SerializerMethodField()
@@ -510,16 +517,24 @@ class SupplierInvoiceSerializer(serializers.ModelSerializer):
         model = SupplierInvoice
         fields = [
             'id', 'invoice_number', 'supplier', 'supplier_name', 'supplier_email',
-            'purchase_order', 'purchase_order_number',
-            'invoice_date', 'due_date', 'total_amount', 'paid_amount', 'outstanding_amount',
-            'status', 'status_display', 'notes', 'attachment', 'attachment_url',
+            'supplier_bank_name', 'supplier_bank_account_name', 'supplier_bank_account_number',
+            'purchase_order', 'purchase_order_number', 'product_name',
+            'invoice_date', 'due_date',
+            'ordered_quantity', 'delivered_quantity', 'accepted_quantity', 'invoiced_quantity',
+            'unit_price', 'subtotal', 'tax_amount', 'total_amount', 'paid_amount', 'outstanding_amount',
+            'status', 'status_display', 'notes', 'attachment', 'attachment_url', 'rejection_reason',
             'submitted_by', 'submitted_by_username',
+            'verified_by_store', 'verified_by_store_username', 'store_verified_at', 'store_verification_notes',
             'reviewed_by', 'reviewed_by_username', 'reviewed_at', 'review_notes',
+            'approved_by_admin', 'approved_by_admin_username', 'admin_approved_at', 'admin_review_notes',
             'created_at', 'updated_at'
         ]
         read_only_fields = [
             'id', 'paid_amount', 'outstanding_amount', 'submitted_by',
-            'reviewed_by', 'reviewed_at', 'created_at', 'updated_at'
+            'verified_by_store', 'store_verified_at',
+            'reviewed_by', 'reviewed_at',
+            'approved_by_admin', 'admin_approved_at',
+            'created_at', 'updated_at'
         ]
 
     def get_attachment_url(self, obj):
@@ -530,25 +545,34 @@ class SupplierInvoiceSerializer(serializers.ModelSerializer):
 
 class SupplierPaymentSerializer(serializers.ModelSerializer):
     supplier_name = serializers.CharField(source='supplier.name', read_only=True, allow_null=True)
+    supplier_bank_name = serializers.CharField(source='supplier.bank_name', read_only=True, default='')
+    supplier_bank_account_number = serializers.CharField(source='supplier.bank_account_number', read_only=True, default='')
     authorized_by_username = serializers.CharField(source='authorized_by.username', read_only=True, allow_null=True)
     payment_status_display = serializers.CharField(source='get_payment_status_display', read_only=True)
     payment_method_display = serializers.CharField(source='get_payment_method_display', read_only=True)
     invoice_number = serializers.CharField(source='invoice.invoice_number', read_only=True, allow_null=True)
+    receipt_url = serializers.SerializerMethodField()
 
     class Meta:
         model = SupplierPayment
         fields = [
-            'id', 'supplier', 'supplier_name', 'purchase_order',
-            'invoice', 'invoice_number',
+            'id', 'supplier', 'supplier_name', 'supplier_bank_name', 'supplier_bank_account_number',
+            'purchase_order', 'invoice', 'invoice_number',
             'supplier_invoice', 'purchase_order_reference',
             'total_purchase_amount', 'amount_paid', 'outstanding_balance',
             'payment_method', 'payment_method_display',
             'transaction_reference', 'payment_date',
             'payment_status', 'payment_status_display',
             'authorized_by', 'authorized_by_username',
+            'receipt', 'receipt_url', 'bank_name', 'bank_account_number',
             'notes', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'authorized_by', 'created_at', 'updated_at']
+
+    def get_receipt_url(self, obj):
+        if obj.receipt:
+            return obj.receipt.url
+        return None
 
 
 
